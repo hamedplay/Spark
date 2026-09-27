@@ -10,10 +10,12 @@ HOST_RE = re.compile(r"^(?=.{1,253}$)(?!-)[A-Za-z0-9.-]+(?<!-)$")
 PROJECT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$")
 SCHEMA_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 REQUIRED_ROLES = {"reverse_proxy", "application", "database"}
-VALID_PROTOCOLS = {"tcp", "https", "http"}
+VALID_PROTOCOLS = {"tcp", "udp", "https", "http"}
 PINNED_RELEASE_RE = re.compile(r"^self-hosted/v\d+\.\d+\.\d+$")
 VALID_DOCKER_INSTALL_POLICIES = {"install-if-missing", "manual"}
 VALID_DOCKER_VERSION_POLICIES = {"compatible-stable", "exact"}
+VALID_FULL_MODES = {"AUTO", "GUIDED"}
+VALID_VERIFICATION = {"AUTO_VERIFY", "GUIDED", "MANUAL"}
 
 
 def _valid_host(value: str) -> bool:
@@ -25,6 +27,11 @@ def _valid_host(value: str) -> bool:
         return True
     except ValueError:
         return bool(HOST_RE.fullmatch(value)) and ".." not in value
+
+
+def _port(value: int, label: str) -> None:
+    if not (1 <= int(value) <= 65535):
+        raise ValueError(f"invalid port for {label}: {value}")
 
 
 def validate_environment(config: EnvironmentConfig) -> EnvironmentConfig:
@@ -62,12 +69,11 @@ def validate_environment(config: EnvironmentConfig) -> EnvironmentConfig:
     for key, service in config.external_services.items():
         if not key.strip() or not _valid_host(service.host):
             raise ValueError(f"invalid external service: {key!r}")
-        if not (1 <= service.port <= 65535):
-            raise ValueError(f"invalid external service port for {key}: {service.port}")
+        _port(service.port, f"external service {key}")
         if service.protocol not in VALID_PROTOCOLS:
             raise ValueError(f"unsupported external service protocol for {key}: {service.protocol}")
 
-    known_refs = set(config.nodes) | roles | set(config.external_services) | {"internet"}
+    known_refs = set(config.nodes) | roles | set(config.external_services) | {"internet", "clients"}
     seen_rule_ids: set[str] = set()
     seen_signatures: set[tuple[str, str, str, tuple[int, ...]]] = set()
     for rule in config.network.rules:
@@ -120,5 +126,51 @@ def validate_environment(config: EnvironmentConfig) -> EnvironmentConfig:
         raise ValueError("database.startup.service_retry values are invalid")
     if startup.supabase_timeout_seconds < 1 or startup.image_pull_timeout_seconds < 1:
         raise ValueError("database startup timeouts must be positive")
+
+    app = config.application
+    if not Path(app.secret_file).is_absolute() or not Path(app.runtime_env_file).is_absolute():
+        raise ValueError("application secret/runtime env paths must be absolute")
+    if app.edge.image != "supabase/edge-runtime:v1.76.2":
+        raise ValueError("application.edge.image must remain pinned to supabase/edge-runtime:v1.76.2 for self-hosted/v0.8.1")
+    _port(app.edge.port, "application edge")
+    _port(app.livekit.api_port, "LiveKit API")
+    _port(app.livekit.rtc_tcp_port, "LiveKit RTC TCP")
+    _port(app.livekit.rtc_udp_start, "LiveKit RTC UDP start")
+    _port(app.livekit.rtc_udp_end, "LiveKit RTC UDP end")
+    if app.livekit.rtc_udp_end < app.livekit.rtc_udp_start:
+        raise ValueError("application.livekit RTC UDP range is invalid")
+    if app.livekit.embedded_turn:
+        raise ValueError("application.livekit.embedded_turn must remain false when Coturn is canonical")
+    _port(app.coturn.listener_port, "Coturn listener")
+    _port(app.coturn.tls_port, "Coturn TLS")
+    _port(app.coturn.relay_min_port, "Coturn relay start")
+    _port(app.coturn.relay_max_port, "Coturn relay end")
+    if app.coturn.relay_max_port < app.coturn.relay_min_port:
+        raise ValueError("application.coturn relay range is invalid")
+
+    rp = config.reverse_proxy
+    if not Path(rp.config_path).is_absolute():
+        raise ValueError("reverse_proxy.config_path must be absolute")
+    if rp.tls.mode not in {"provided", "acme"}:
+        raise ValueError("reverse_proxy.tls.mode must be provided or acme")
+
+    full = config.full_environment
+    if full.mode not in VALID_FULL_MODES:
+        raise ValueError("full_environment.mode must be AUTO or GUIDED")
+    seen_full: set[str] = set()
+    for rule in full.network_rules:
+        if not rule.rule_id or rule.rule_id in seen_full:
+            raise ValueError(f"duplicate or empty full_environment network rule: {rule.rule_id!r}")
+        seen_full.add(rule.rule_id)
+        if rule.protocol not in {"tcp", "udp"}:
+            raise ValueError(f"unsupported full_environment protocol: {rule.protocol}")
+        if rule.verification not in VALID_VERIFICATION:
+            raise ValueError(f"unsupported verification mode: {rule.verification}")
+        if rule.verification == "AUTO_VERIFY" and rule.protocol != "tcp":
+            raise ValueError(f"UDP rule {rule.rule_id} cannot use AUTO_VERIFY")
+        if not rule.ports and not rule.port_ranges:
+            raise ValueError(f"full_environment rule {rule.rule_id} has no ports")
+        for port in rule.ports:
+            _port(port, rule.rule_id)
 
     return config
