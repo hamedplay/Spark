@@ -52,6 +52,20 @@ database:
       delay_seconds: 10
     supabase_timeout_seconds: 300
     image_pull_timeout_seconds: 900
+application:
+  source:
+    repository: https://github.com/hamedplay/Spark.git
+    revision: main
+    releases_root: /opt/spark/application/releases
+    current_link: /opt/spark/application/current
+    shared_root: /opt/spark/application/shared
+  secret_file: /etc/spark-manager/secrets/application.env
+  runtime_env_file: /opt/spark/application/shared/runtime.env
+  node_command: node
+  npm_command: npm
+  required_secret_keys:
+    - SUPABASE_ANON_KEY
+    - SUPABASE_SERVICE_ROLE_KEY
 jump_server:
   enabled: true
 external_services:
@@ -79,6 +93,12 @@ network:
       protocol: tcp
       ports:
         - 5432
+    - id: app-to-database-supabase
+      source: application
+      destination: database
+      protocol: tcp
+      ports:
+        - 8000
     - id: app-to-bale
       source: application
       destination: bale
