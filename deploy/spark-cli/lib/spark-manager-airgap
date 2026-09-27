@@ -53,7 +53,8 @@ spark_airgap_sync_source_main() {
   GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --prune origin main || { fail "Unable to fetch Spark main."; return 1; }
   remote_head="$(command git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)"
   [[ "$remote_head" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve fetched Spark main revision."; return 1; }
-  ok "Spark source revision: ${remote_head:0:12}"
+  printf 'Spark source revision: %s\n' "${remote_head:0:12}" >&2
+  printf '%s\n' "$remote_head"
 }
 
 dispatch_backend() {
