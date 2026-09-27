@@ -1,7 +1,26 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 IFS=$'\n\t'
-SPARK_ROOT=/opt/spark
+
+SPARK_MANAGER_VERSION="4.0.0"
+SPARK_ROOT="/opt/spark"
+CONFIG_DIR="/etc/spark"
+MANAGER_CONF="${CONFIG_DIR}/manager.conf"
+STATE_DIR="/var/lib/spark-manager"
+STEP_DIR="${STATE_DIR}/steps"
+LOG_DIR="/var/log/spark-manager"
+BACKUP_DIR="/var/backups/spark"
+CURRENT_LOG=""
+
+C_RESET=$'\033[0m'
+C_GREEN=$'\033[32m'
+C_RED=$'\033[31m'
+C_YELLOW=$'\033[33m'
+C_BLUE=$'\033[34m'
+C_CYAN=$'\033[36m'
+C_WHITE=$'\033[37m'
+C_BOLD=$'\033[1m'
+C_DIM=$'\033[2m'
 
 SOURCE="${BASH_SOURCE[0]}"
 while [[ -L "$SOURCE" ]]; do
