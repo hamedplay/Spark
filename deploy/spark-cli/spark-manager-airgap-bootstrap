@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+[[ ${EUID:-$(id -u)} -eq 0 ]] || { echo 'spark-manager-airgap-bootstrap must run as root.' >&2; exit 1; }
+archive="${1:-}"
+[[ -n "$archive" && -f "$archive" ]] || { echo 'Usage: spark-manager-airgap-bootstrap /path/to/spark-manager-airgap-*.tar.gz' >&2; exit 2; }
+archive="$(readlink -f "$archive")"
+case "$archive" in
+  /var/tmp/spark-manager-inbox/spark-manager-airgap-*.tar.gz) ;;
+  *) echo 'Manager archive must be under /var/tmp/spark-manager-inbox.' >&2; exit 1 ;;
+esac
+for cmd in tar find sha256sum; do command -v "$cmd" >/dev/null 2>&1 || { echo "Required command missing: $cmd" >&2; exit 1; }; done
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+while IFS= read -r entry; do
+  case "$entry" in /*|../*|*/../*|*'/..') echo "Unsafe archive path: $entry" >&2; exit 1 ;; esac
+done < <(tar -tzf "$archive")
+if tar -tvzf "$archive" | awk '$1 ~ /^[lh]/ {found=1} END{exit !found}'; then
+  echo 'Manager archive contains symlink/hardlink entries; refused.' >&2
+  exit 1
+fi
+tar -xzf "$archive" -C "$work"
+root="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'spark-manager-airgap-*' | head -n1)"
+[[ -n "$root" && -x "$root/install.sh" ]] || { echo 'Invalid Manager bundle root.' >&2; exit 1; }
+(cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
+"$root/install.sh"
+rm -f -- "$archive"
