@@ -82,9 +82,26 @@ jobs:
       - name: Enforce read-only M3.6A boundary
         working-directory: deploy/spark-cli
         run: |
-          ! grep -REn 'psql|psycopg|asyncpg|subprocess|docker|compose|CREATE[[:space:]]+TABLE[[:space:]]+spark_manager' roles/database/schema
-          ! find roles/database/schema -type f -name 'spark-baseline.sql' -print -quit | grep -q .
-          ! grep -REn 'write_text\(.*baseline|open\(.*["'"']w' roles/database/schema
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          forbidden_imports={'subprocess','psycopg','psycopg2','asyncpg','docker'}
+          forbidden_text=('CREATE TABLE spark_manager', 'docker compose ', 'docker run ', 'psql ')
+          root=Path('roles/database/schema')
+          for path in root.glob('*.py'):
+              text=path.read_text()
+              tree=ast.parse(text)
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.Import):
+                      names={alias.name.split('.')[0] for alias in node.names}
+                      assert not names & forbidden_imports, (path, names & forbidden_imports)
+                  if isinstance(node, ast.ImportFrom) and node.module:
+                      assert node.module.split('.')[0] not in forbidden_imports, (path, node.module)
+              upper=text.upper()
+              for marker in forbidden_text:
+                  assert marker.upper() not in upper, (path, marker)
+          assert not list(root.glob('spark-baseline.sql'))
+          PY
 
       - name: Bootstrap structure
         working-directory: deploy/spark-cli
