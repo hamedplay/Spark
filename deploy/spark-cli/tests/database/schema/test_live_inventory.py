@@ -111,13 +111,21 @@ class LiveInventoryTests(unittest.TestCase):
         self.assertFalse(payload["migration_history"]["imported_into_spark_manager"])
         self.assertEqual(payload["fingerprint"]["canonical_sha256"], canonical_fingerprint(payload))
 
-    def test_fingerprint_excludes_data_inventory_migration_history_and_grantor(self) -> None:
+    def test_fingerprint_excludes_data_history_grantor_and_function_owner(self) -> None:
         empty = {name: [] for name in QUERIES}
         first = LiveSchemaInventoryBuilder(FakeCatalog(empty), self.rules).build(self.profile)
         second = json.loads(json.dumps(first))
         second["data_inventory"]["x"] = {"row_count_estimate": 999, "contains_data_estimate": True, "values_included": False}
         second["migration_history"]["entries"].append({"version": "future"})
         self.assertEqual(canonical_fingerprint(first), canonical_fingerprint(second))
+
+        with_owner = json.loads(json.dumps(first))
+        with_owner["functions"] = {
+            "public.f()": {"owner": "old_postgres", "security": "INVOKER", "definition_sha256": "abc"}
+        }
+        other_owner = json.loads(json.dumps(with_owner))
+        other_owner["functions"]["public.f()"]["owner"] = "new_postgres"
+        self.assertEqual(canonical_fingerprint(with_owner), canonical_fingerprint(other_owner))
 
 
 if __name__ == "__main__":
