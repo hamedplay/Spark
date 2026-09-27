@@ -27,60 +27,34 @@ spark_manager_airgap_revision() {
 
 spark_manager_airgap_build() (
   set -Eeuo pipefail
-  local output_root="${1:-${PWD}}" target_release="${2:-}" loaded_revision revision root bundle_id archive partial source source_manager
-  local snapshot_root="${SPARK_MANAGER_BUILD_SNAPSHOT_ROOT:-}" snapshot_owned=0
-  loaded_revision="$(spark_manager_airgap_revision 2>/dev/null || true)"
+  local output_root="${1:-${PWD}}" target_release="${2:-}" revision root bundle_id archive partial source source_root
+  [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT}."; return 1; }
+  revision="$(spark_airgap_sync_source_main)" || return 1
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve Spark revision."; return 1; }
 
-  if [[ -n "$snapshot_root" ]]; then
-    [[ -d "$snapshot_root/deploy/spark-cli" ]] || { fail "Manager build snapshot is invalid: $snapshot_root"; return 1; }
-    revision="${SPARK_MANAGER_BUILD_REVISION:-}"
-    [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { fail "Manager build snapshot revision is invalid."; return 1; }
-    source="$snapshot_root/deploy/spark-cli"
-  else
-    [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT}."; return 1; }
-    spark_airgap_sync_source_main || return 1
-    revision="$(command git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)"
-    [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve fetched Spark revision."; return 1; }
-
-    snapshot_root="$(mktemp -d /tmp/spark-manager-build.XXXXXX)"
-    snapshot_owned=1
-    if ! command git -C "$SPARK_ROOT" archive --format=tar "$revision" | tar -xf - -C "$snapshot_root"; then
-      rm -rf "$snapshot_root"
-      fail "Unable to materialize clean Spark build snapshot."
-      return 1
-    fi
-    source="$snapshot_root/deploy/spark-cli"
-    source_manager="$source/lib/spark-manager-airgap"
-    [[ -f "$source_manager" ]] || { rm -rf "$snapshot_root"; fail "Manager Air-Gap entrypoint is missing from fetched revision."; return 1; }
-
-    if [[ "$loaded_revision" != "$revision" || "$(readlink -f "$SCRIPT_DIR")" != "$(readlink -f "$source")" ]]; then
-      exec env \
-        SPARK_MANAGER_BUILD_SNAPSHOT_ROOT="$snapshot_root" \
-        SPARK_MANAGER_BUILD_REVISION="$revision" \
-        bash "$source_manager" --build "$output_root" "$target_release"
-    fi
-  fi
-
-  if (( snapshot_owned )); then
-    trap 'rm -rf "$snapshot_root"' EXIT
-  elif [[ -n "${SPARK_MANAGER_BUILD_SNAPSHOT_ROOT:-}" ]]; then
-    trap 'rm -rf "$snapshot_root"' EXIT
-  fi
-
+  # Manager-only payload is Bash/Python and carries no release-specific APT
+  # packages. Default to any supported Ubuntu release; an explicit target keeps
+  # the old exact-release lock when an operator deliberately requests it.
   if [[ -z "$target_release" ]]; then
-    . /etc/os-release
-    target_release="$(airgap_normalize_ubuntu_release "${VERSION_ID:-}")" || return 1
+    target_release="any"
   else
     target_release="$(airgap_normalize_ubuntu_release "$target_release")" || return 1
   fi
+
   mkdir -p "$output_root"
   output_root="$(readlink -f "$output_root")"
   bundle_id="spark-manager-airgap-${revision:0:12}-ubuntu${target_release}-amd64"
   root="${output_root}/${bundle_id}"
   archive="${output_root}/${bundle_id}.tar.gz"
   [[ ! -e "$root" && ! -e "$archive" ]] || { fail "Manager bundle output already exists: ${bundle_id}"; return 1; }
-  mkdir -p "$root/metadata" "$root/manager"
 
+  source_root="$(mktemp -d)"
+  trap 'rm -rf "$root" "$source_root"; [[ -n "${partial:-}" ]] && rm -f "$partial"' EXIT
+  command git -C "$SPARK_ROOT" archive "$revision" | tar -x -C "$source_root"
+  source="${source_root}/deploy/spark-cli"
+  [[ -d "$source" ]] || { fail "Manager source snapshot is incomplete."; return 1; }
+
+  mkdir -p "$root/metadata" "$root/manager"
   for file in spark spark-airgap spark-architecture spark-database spark-ui.py spark-ui-base.py spark-ui-core.py spark-migrate database_cli.py spark-manager-airgap-bootstrap; do
     [[ -f "$source/$file" ]] || { fail "Manager source missing: $file"; return 1; }
     cp -a "$source/$file" "$root/manager/$file"
@@ -89,8 +63,8 @@ spark_manager_airgap_build() (
     [[ -d "$source/$dir" ]] || { fail "Manager source directory missing: $dir"; return 1; }
     cp -a "$source/$dir" "$root/manager/$dir"
   done
-  if [[ -d "$snapshot_root/deploy/livekit" ]]; then
-    cp -a "$snapshot_root/deploy/livekit" "$root/manager/livekit"
+  if [[ -d "${source_root}/deploy/livekit" ]]; then
+    cp -a "${source_root}/deploy/livekit" "$root/manager/livekit"
   fi
   cp -a "$source/bootstrap-manager-airgap.sh" "$root/install.sh"
   chmod 0755 "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-migrate" "$root/manager/spark-manager-airgap-bootstrap" "$root/manager/lib/spark-manager-airgap" "$root/manager/lib/build-manager-airgap"
@@ -117,12 +91,12 @@ PY
   SPARK_MANAGER_REVISION="$revision" "$root/manager/lib/spark-manager-airgap" --help >/dev/null
 
   partial="$(mktemp "${output_root}/.${bundle_id}.XXXXXX")"
-  trap 'rm -rf "$root"; rm -f "$partial"; rm -rf "$snapshot_root"' EXIT
   tar -C "$output_root" -czf "$partial" "$bundle_id"
   gzip -t "$partial"
   mv "$partial" "$archive"
+  partial=""
   sha256sum "$archive" >"${archive}.sha256"
-  rm -rf "$root" "$snapshot_root"
+  rm -rf "$root" "$source_root"
   trap - EXIT
   ok "Spark Manager Air-Gap bundle created: $archive"
   printf 'Revision: %s\nTarget: Ubuntu %s / amd64\n' "$revision" "$target_release"
