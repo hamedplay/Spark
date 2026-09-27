@@ -5,6 +5,8 @@ IFS=$'\n\t'
 TARGET=/usr/local/lib/spark-manager
 MIGRATE_TARGET=/usr/local/lib/spark-migrate
 BIN_DIR=/usr/local/bin
+SUDO_HELPER=/usr/local/sbin/spark-manager-airgap-bootstrap
+INBOX=/var/tmp/spark-manager-inbox
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exec sudo -E "$0" "$@"
@@ -52,7 +54,7 @@ python3 - <<'PY'
 import curses, pty, selectors
 PY
 
-required=(spark spark-airgap spark-architecture spark-database spark-ui.py spark-ui-base.py spark-ui-core.py core architecture config adapters secrets roles lib)
+required=(spark spark-airgap spark-architecture spark-database spark-ui.py spark-ui-base.py spark-ui-core.py spark-manager-airgap-bootstrap core architecture config adapters secrets roles lib)
 for item in "${required[@]}"; do
   [[ -e "$ROOT/manager/$item" ]] || { echo "Manager payload missing: $item" >&2; exit 1; }
 done
@@ -60,14 +62,14 @@ done
 python3 -m compileall -q \
   "$ROOT/manager/core" "$ROOT/manager/config" "$ROOT/manager/architecture" \
   "$ROOT/manager/adapters" "$ROOT/manager/secrets" "$ROOT/manager/roles"
-bash -n "$ROOT/manager/spark" "$ROOT/manager/spark-airgap" "$ROOT/manager/spark-architecture" "$ROOT/manager/spark-database"
+bash -n "$ROOT/manager/spark" "$ROOT/manager/spark-airgap" "$ROOT/manager/spark-architecture" "$ROOT/manager/spark-database" "$ROOT/manager/spark-manager-airgap-bootstrap"
 
 stage="$(mktemp -d /usr/local/lib/spark-manager.airgap.XXXXXX)"
 trap 'rm -rf "$stage"' EXIT
 cp -a "$ROOT/manager/." "$stage/"
 printf '%s\n' "$revision" >"$stage/.revision"
 chmod 0644 "$stage/.revision"
-chmod 0755 "$stage/spark" "$stage/spark-airgap" "$stage/spark-architecture" "$stage/spark-database"
+chmod 0755 "$stage/spark" "$stage/spark-airgap" "$stage/spark-architecture" "$stage/spark-database" "$stage/spark-manager-airgap-bootstrap"
 
 backup="${TARGET}.previous.$$"
 [[ ! -e "$TARGET" ]] || mv "$TARGET" "$backup"
@@ -79,6 +81,8 @@ ln -sfn "$TARGET/spark" "$BIN_DIR/spark"
 ln -sfn "$TARGET/spark-airgap" "$BIN_DIR/spark-airgap"
 ln -sfn "$TARGET/spark-architecture" "$BIN_DIR/spark-architecture"
 ln -sfn "$TARGET/spark-database" "$BIN_DIR/spark-database"
+install -m 0755 "$TARGET/spark-manager-airgap-bootstrap" "$SUDO_HELPER"
+install -d -m 1777 "$INBOX"
 if [[ -f "$TARGET/spark-migrate" ]]; then
   install -d -m 0755 "$MIGRATE_TARGET"
   install -m 0755 "$TARGET/spark-migrate" "$MIGRATE_TARGET/spark-migrate"
@@ -89,3 +93,4 @@ SPARK_MANAGER_REVISION="$revision" "$BIN_DIR/spark-architecture" revision | grep
 "$BIN_DIR/spark" --ui-self-test
 
 printf 'Spark Manager installed from offline bundle.\nRevision: %s\nRun: spark\n' "$revision"
+printf 'Restricted update helper: %s\n' "$SUDO_HELPER"
