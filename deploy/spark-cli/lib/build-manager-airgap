@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  TARGET="$(readlink -- "$SOURCE")"
+  if [[ "$TARGET" == /* ]]; then
+    SOURCE="$TARGET"
+  else
+    SOURCE="${SOURCE_DIR}/${TARGET}"
+  fi
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
+unset SOURCE SOURCE_DIR TARGET
+
 exec "$SCRIPT_DIR/lib/spark-manager-airgap" --build "$@"
