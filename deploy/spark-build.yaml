@@ -1,0 +1,35 @@
+schema_version: 1
+application:
+  type: static
+runtime:
+  node:
+    requirement: ">=24.18.1 <25"
+    package_manager: npm
+install:
+  command:
+    - npm
+    - ci
+build:
+  command:
+    - npm
+    - run
+    - build
+  environment:
+    allow: []
+artifacts:
+  root: dist
+  required:
+    - dist/index.html
+    - dist/assets
+deployment:
+  type: nginx_static
+  document_root: dist
+  current_link: /opt/spark/application/current
+health:
+  type: http
+  host: 127.0.0.1
+  path: /
+  port: 80
+  timeout_seconds: 120
+  interval_seconds: 3
+  marker: "<div id=\"root\"></div>"
