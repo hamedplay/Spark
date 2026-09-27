@@ -69,8 +69,8 @@ PROVISIONING_ACTIONS = [
 ]
 
 MANAGER_AIRGAP_ACTIONS = [
-    core.Action("manager-airgap-build", "Build Manager Air-Gap Bundle", "Build a checksum-verified Manager-only bundle pinned to one exact Spark commit.", "controlled"),
-    core.Action("manager-airgap-install-environment", "Install / Update Manager on Environment", "Distribute one verified Manager bundle to Database, Application and both Proxy nodes through strict SSH and the restricted bootstrap launcher.", "confirm"),
+    core.Action("manager-airgap-build", "Build Full Repository + Manager Bundle", "Build a checksum-verified offline bundle containing the complete hamedplay/Spark main repository and Manager, pinned to one exact commit.", "controlled"),
+    core.Action("manager-airgap-install-environment", "Install / Update Full Spark + Manager", "Distribute one verified bundle and install the complete Spark repository at /opt/spark plus Manager on Database, Application and both Proxy nodes through strict SSH and the restricted bootstrap launcher.", "confirm"),
     core.Action("manager-airgap-verify-revisions", "Verify Manager Revisions", "Compare the Jump Manager revision with all configured environment nodes and refuse mismatches."),
     core.Action("manager-airgap-status", "Manager Deployment Status", "Show per-node Manager revision readiness without provisioning."),
 ]
