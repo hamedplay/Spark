@@ -89,7 +89,7 @@ SPARK_MANAGER_REVISION="$MAIN_SHA" "$tmp/bootstrap-base.sh" "$@"
 printf 'Synchronizing final integration package from the same revision...\n'
 python3 - "$MAIN_SHA" "$TARGET" <<'PY'
 from __future__ import annotations
-import json, os, sys, tempfile, urllib.request
+import json, os, sys, tempfile, time, urllib.request
 from pathlib import Path
 sha, target_value = sys.argv[1:]
 target = Path(target_value)
@@ -106,9 +106,21 @@ explicit_files = {
 }
 headers = {"Accept": "application/vnd.github+json", "User-Agent": "spark-manager-bootstrap", "Cache-Control": "no-cache"}
 def read_url(url: str) -> bytes:
-    request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return response.read()
+    last_error: Exception | None = None
+    for attempt in range(1, 6):
+        try:
+            request = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return response.read()
+        except Exception as exc:
+            last_error = exc
+            if attempt == 5:
+                break
+            delay = min(2 ** (attempt - 1), 8)
+            print(f"Transient GitHub read failure (attempt {attempt}/5); retrying in {delay}s: {type(exc).__name__}", file=sys.stderr)
+            time.sleep(delay)
+    raise RuntimeError(f"Unable to download after 5 attempts: {url}") from last_error
+
 tree = json.loads(read_url(f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1").decode("utf-8"))
 if tree.get("truncated"):
     raise SystemExit("GitHub returned a truncated repository tree; refusing incomplete manager sync")
