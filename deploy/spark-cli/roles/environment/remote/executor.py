@@ -130,6 +130,12 @@ class CentralizedExecutor:
             return ProductionRunResult("FAILED", tuple(all_results), {}, ("Application health gate failed; proxies were not started.",))
         for index, node in enumerate(proxies, start=1):
             name = f"proxy_{index}"
+            if resume and stored.get(name) in {"COMPLETED", "PASS"}:
+                verification = self._execute_nodes((node,), RemoteOperation.ROLE_HEALTH)
+                all_results.extend(verification)
+                if verification and all(item.ok for item in verification):
+                    self.state.set_step(name, "PASS")
+                    continue
             result = self._execute_nodes((node,), RemoteOperation.INSTALL)
             all_results.extend(result)
             if not result or not all(item.ok for item in result):
