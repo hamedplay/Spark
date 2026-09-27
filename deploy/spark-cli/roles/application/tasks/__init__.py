@@ -85,3 +85,15 @@ class ApplicationConfigTask(OperationTask):
     def verify(self, ctx):
         env = _profile(ctx)
         return TaskResult.success("application configuration verified") if self._manager(ctx).verify(env) else TaskResult.failed("application configuration verification failed")
+
+
+from .build import ApplicationBuildTask
+from .deploy import ApplicationDeployTask
+
+__all__ = [
+    "ApplicationPreflightTask",
+    "ApplicationSourceTask",
+    "ApplicationConfigTask",
+    "ApplicationBuildTask",
+    "ApplicationDeployTask",
+]
