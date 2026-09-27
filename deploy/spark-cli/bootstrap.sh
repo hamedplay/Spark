@@ -20,7 +20,7 @@ command -v python3 >/dev/null 2>&1 || {
 
 resolve_main_sha() {
   local response sha
-  response="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+  response="$(curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors -H 'Accept: application/vnd.github+json' \
     -H 'Cache-Control: no-cache' \
     "${REPO_API}/commits/main?nocache=$(date +%s)")" || {
       echo "Unable to resolve current Spark main commit from GitHub API." >&2
@@ -43,7 +43,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 printf 'Running stable bootstrap base...\n'
-curl -fsSL -H 'Cache-Control: no-cache' "${RAW_BASE}/bootstrap-base.sh" -o "$tmp/bootstrap-base.sh"
+curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors -H 'Cache-Control: no-cache' "${RAW_BASE}/bootstrap-base.sh" -o "$tmp/bootstrap-base.sh"
 python3 - "$tmp/bootstrap-base.sh" <<'PY'
 from pathlib import Path
 import sys
@@ -89,8 +89,9 @@ SPARK_MANAGER_REVISION="$MAIN_SHA" "$tmp/bootstrap-base.sh" "$@"
 printf 'Synchronizing final integration package from the same revision...\n'
 python3 - "$MAIN_SHA" "$TARGET" <<'PY'
 from __future__ import annotations
-import json, os, sys, tempfile, time, urllib.request
+import json, os, subprocess, sys, tempfile
 from pathlib import Path
+
 sha, target_value = sys.argv[1:]
 target = Path(target_value)
 repo = "hamedplay/Spark"
@@ -104,24 +105,28 @@ explicit_files = {
     "deploy/spark-cli/spark-ui-base.py",
     "deploy/spark-cli/spark-manager-airgap-bootstrap",
 }
-headers = {"Accept": "application/vnd.github+json", "User-Agent": "spark-manager-bootstrap", "Cache-Control": "no-cache"}
-def read_url(url: str) -> bytes:
-    last_error: Exception | None = None
-    for attempt in range(1, 6):
-        try:
-            request = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return response.read()
-        except Exception as exc:
-            last_error = exc
-            if attempt == 5:
-                break
-            delay = min(2 ** (attempt - 1), 8)
-            print(f"Transient GitHub read failure (attempt {attempt}/5); retrying in {delay}s: {type(exc).__name__}", file=sys.stderr)
-            time.sleep(delay)
-    raise RuntimeError(f"Unable to download after 5 attempts: {url}") from last_error
 
-tree = json.loads(read_url(f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1").decode("utf-8"))
+def read_url(url: str, *, api: bool = False) -> bytes:
+    command = [
+        "curl", "-fsSL",
+        "--retry", "5",
+        "--retry-delay", "1",
+        "--retry-all-errors",
+        "--connect-timeout", "10",
+        "--max-time", "120",
+        "-H", "Cache-Control: no-cache",
+        "-H", "User-Agent: spark-manager-bootstrap",
+    ]
+    if api:
+        command += ["-H", "Accept: application/vnd.github+json"]
+    command.append(url)
+    try:
+        return subprocess.check_output(command, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"Unable to download {url}: {detail}") from exc
+
+tree = json.loads(read_url(f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1", api=True).decode("utf-8"))
 if tree.get("truncated"):
     raise SystemExit("GitHub returned a truncated repository tree; refusing incomplete manager sync")
 selected = []
@@ -154,12 +159,16 @@ for source_path in sorted(selected):
     fd, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", dir=str(destination.parent))
     try:
         with os.fdopen(fd, "wb") as handle:
-            handle.write(payload); handle.flush(); os.fsync(handle.fileno())
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.chmod(temporary_name, 0o644)
         os.replace(temporary_name, destination)
     except Exception:
-        try: os.unlink(temporary_name)
-        except FileNotFoundError: pass
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
         raise
 revision = target / ".revision"
 revision.write_text(sha + "\n", encoding="utf-8")
