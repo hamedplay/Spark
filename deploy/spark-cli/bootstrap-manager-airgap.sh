@@ -58,18 +58,22 @@ required=(spark spark-airgap spark-architecture spark-database spark-ui.py spark
 for item in "${required[@]}"; do
   [[ -e "$ROOT/manager/$item" ]] || { echo "Manager payload missing: $item" >&2; exit 1; }
 done
+[[ -f "$ROOT/manager/lib/spark-manager-airgap" && -f "$ROOT/manager/lib/build-manager-airgap" ]] || {
+  echo 'Manager Air-Gap control commands are missing.' >&2
+  exit 1
+}
 
 python3 -m compileall -q \
   "$ROOT/manager/core" "$ROOT/manager/config" "$ROOT/manager/architecture" \
   "$ROOT/manager/adapters" "$ROOT/manager/secrets" "$ROOT/manager/roles"
-bash -n "$ROOT/manager/spark" "$ROOT/manager/spark-airgap" "$ROOT/manager/spark-architecture" "$ROOT/manager/spark-database" "$ROOT/manager/spark-manager-airgap-bootstrap"
+bash -n "$ROOT/manager/spark" "$ROOT/manager/spark-airgap" "$ROOT/manager/spark-architecture" "$ROOT/manager/spark-database" "$ROOT/manager/spark-manager-airgap-bootstrap" "$ROOT/manager/lib/spark-manager-airgap" "$ROOT/manager/lib/build-manager-airgap"
 
 stage="$(mktemp -d /usr/local/lib/spark-manager.airgap.XXXXXX)"
 trap 'rm -rf "$stage"' EXIT
 cp -a "$ROOT/manager/." "$stage/"
 printf '%s\n' "$revision" >"$stage/.revision"
 chmod 0644 "$stage/.revision"
-chmod 0755 "$stage/spark" "$stage/spark-airgap" "$stage/spark-architecture" "$stage/spark-database" "$stage/spark-manager-airgap-bootstrap"
+chmod 0755 "$stage/spark" "$stage/spark-airgap" "$stage/spark-architecture" "$stage/spark-database" "$stage/spark-manager-airgap-bootstrap" "$stage/lib/spark-manager-airgap" "$stage/lib/build-manager-airgap"
 
 backup="${TARGET}.previous.$$"
 [[ ! -e "$TARGET" ]] || mv "$TARGET" "$backup"
@@ -81,6 +85,8 @@ ln -sfn "$TARGET/spark" "$BIN_DIR/spark"
 ln -sfn "$TARGET/spark-airgap" "$BIN_DIR/spark-airgap"
 ln -sfn "$TARGET/spark-architecture" "$BIN_DIR/spark-architecture"
 ln -sfn "$TARGET/spark-database" "$BIN_DIR/spark-database"
+ln -sfn "$TARGET/lib/spark-manager-airgap" "$BIN_DIR/spark-manager-airgap"
+ln -sfn "$TARGET/lib/build-manager-airgap" "$BIN_DIR/build-manager-airgap"
 install -m 0755 "$TARGET/spark-manager-airgap-bootstrap" "$SUDO_HELPER"
 install -d -m 1777 "$INBOX"
 if [[ -f "$TARGET/spark-migrate" ]]; then
