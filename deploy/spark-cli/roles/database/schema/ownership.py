@@ -29,10 +29,17 @@ def split_qualified_name(name: str | None) -> tuple[str | None, str | None]:
     return None, None
 
 
-def resolve_ownership(object_name: str | None, rules: OwnershipRules) -> Ownership:
-    schema, _ = split_qualified_name(object_name)
-    if schema and schema in rules.platform_schemas:
+def resolve_schema_ownership(schema: str | None, rules: OwnershipRules) -> Ownership:
+    normalized = (schema or "").strip().strip('"').lower()
+    if normalized in rules.platform_schemas:
         return Ownership.PLATFORM_OWNED
-    if schema and schema in rules.owned_schemas:
+    if normalized in rules.shared_schemas:
+        return Ownership.SHARED
+    if normalized in rules.owned_schemas:
         return Ownership.SPARK_OWNED
     return Ownership.UNCLASSIFIED
+
+
+def resolve_ownership(object_name: str | None, rules: OwnershipRules) -> Ownership:
+    schema, _ = split_qualified_name(object_name)
+    return resolve_schema_ownership(schema, rules)
