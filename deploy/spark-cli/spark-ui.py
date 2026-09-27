@@ -11,6 +11,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BASE_PATH = HERE / "spark-ui-base.py"
+SPARK_UI_VERSION = "3.1.0+20260910.1"
 
 
 def _resolve_base() -> Path:
@@ -38,7 +39,10 @@ base = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = base
 spec.loader.exec_module(base)
 core = base.core
-SPARK_UI_VERSION = base.SPARK_UI_VERSION
+if base.SPARK_UI_VERSION != SPARK_UI_VERSION:
+    raise RuntimeError(
+        f"Spark UI version mismatch: wrapper={SPARK_UI_VERSION} base={base.SPARK_UI_VERSION}"
+    )
 
 PROVISIONING_ACTIONS = [
     core.Action("architecture-overview", "Architecture Overview", "Render the active Spark environment topology from its profile."),
