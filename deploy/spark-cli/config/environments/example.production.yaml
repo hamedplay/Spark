@@ -40,6 +40,9 @@ database:
   secret_file: /etc/spark-manager/secrets/database.env
   compose:
     project_name: spark-supabase
+  schema:
+    owned_schemas:
+      - public
   startup:
     postgres:
       normal_timeout_seconds: 120
