@@ -92,6 +92,11 @@ class DatabaseComposeConfig:
 
 
 @dataclass(frozen=True)
+class DatabaseSchemaConfig:
+    owned_schemas: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class PostgresStartupConfig:
     normal_timeout_seconds: int = 120
     initialization_timeout_seconds: int = 600
@@ -116,6 +121,7 @@ class DatabaseConfig:
     supabase: SupabasePackageConfig = field(default_factory=SupabasePackageConfig)
     secret_file: str = "/etc/spark-manager/secrets/database.env"
     compose: DatabaseComposeConfig = field(default_factory=DatabaseComposeConfig)
+    schema: DatabaseSchemaConfig = field(default_factory=DatabaseSchemaConfig)
     startup: DatabaseStartupConfig = field(default_factory=DatabaseStartupConfig)
 
 
