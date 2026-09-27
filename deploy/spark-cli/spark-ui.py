@@ -88,6 +88,19 @@ def _extend_categories() -> None:
             existing = [action for action in actions if not action.action_id.startswith("manager-airgap-")]
             rebuilt.append((category, [*MANAGER_AIRGAP_ACTIONS, *existing]))
             airgap_found = True
+        elif category == "Cleanup / Remove":
+            fixed = []
+            for action in actions:
+                if action.action_id == "backup-restore-plain" and action.label == "cleanup-backups":
+                    fixed.append(core.Action(
+                        "cleanup-backups",
+                        "Backup cleanup / free space",
+                        "Safely prune old Spark backups with a configurable retention period, or explicitly delete all retained backups.",
+                        "confirm",
+                    ))
+                else:
+                    fixed.append(action)
+            rebuilt.append((category, fixed))
         else:
             rebuilt.append((category, actions))
     if not architecture_found:
@@ -126,6 +139,22 @@ def provisioning_self_test() -> int:
         raise RuntimeError("Architecture & Provisioning category is missing or duplicated")
     if len([category for category, _ in core.CATEGORIES if category == "Installation Air-Gapped"]) != 1:
         raise RuntimeError("Installation Air-Gapped category is missing or duplicated")
+
+    cleanup_actions = [a for category, actions in core.CATEGORIES if category == "Cleanup / Remove" for a in actions]
+    if any(a.action_id == "backup-restore-plain" for a in cleanup_actions):
+        raise RuntimeError("database restore action leaked into Cleanup / Remove")
+    if len([a for a in cleanup_actions if a.action_id == "cleanup-backups"]) != 1:
+        raise RuntimeError("Cleanup / Remove must contain exactly one cleanup-backups action")
+
+    spark_entry = HERE / "spark"
+    architecture_entry = HERE / "spark-architecture"
+    if spark_entry.is_file() and "install-22)" not in spark_entry.read_text(encoding="utf-8"):
+        raise RuntimeError("Spark backend does not expose install-22")
+    if architecture_entry.is_file():
+        architecture_source = architecture_entry.read_text(encoding="utf-8")
+        for action_id in ("architecture-central-install", "architecture-central-resume", "architecture-central-repair"):
+            if action_id not in architecture_source:
+                raise RuntimeError(f"architecture backend routing is missing: {action_id}")
     return result
 
 
