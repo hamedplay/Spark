@@ -1,0 +1,105 @@
+name: spark-cli-m36a-validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spark-cli-m36a-validate.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch bootstrap staging for M3.6A
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('deploy/spark-cli/bootstrap.sh')
+          text = path.read_text()
+          if '"$tmp/roles/database/schema"' not in text:
+              text = text.replace('"$tmp/roles/database/lifecycle"', '"$tmp/roles/database/lifecycle" "$tmp/roles/database/schema"', 1)
+          anchor = 'roles/database/lifecycle/diagnostics.py\n'
+          additions = (
+              anchor
+              + 'roles/database/schema/__init__.py\n'
+              + 'roles/database/schema/models.py\n'
+              + 'roles/database/schema/parser.py\n'
+              + 'roles/database/schema/rules.py\n'
+              + 'roles/database/schema/ownership.py\n'
+              + 'roles/database/schema/dump_analyzer.py\n'
+              + 'roles/database/schema/sanitizer.py\n'
+              + 'roles/database/schema/fingerprint.py\n'
+          )
+          if 'roles/database/schema/dump_analyzer.py\n' not in text:
+              text = text.replace(anchor, additions, 1)
+          if '"$stage/roles/database/schema"' not in text:
+              text = text.replace('"$stage/roles/database/lifecycle"', '"$stage/roles/database/lifecycle" "$stage/roles/database/schema"', 1)
+          anchor = 'for file in "$tmp"/roles/database/lifecycle/*.py; do install -m 0644 "$file" "$stage/roles/database/lifecycle/$(basename "$file")"; done\n'
+          if 'stage/roles/database/schema/$(basename "$file")' not in text:
+              text = text.replace(anchor, anchor + 'for file in "$tmp"/roles/database/schema/*.py; do install -m 0644 "$file" "$stage/roles/database/schema/$(basename "$file")"; done\n', 1)
+          path.write_text(text)
+          PY
+          bash -n deploy/spark-cli/bootstrap.sh
+          git diff --check
+
+      - name: Syntax and full regression
+        working-directory: deploy/spark-cli
+        run: |
+          python3 -m py_compile core/*.py adapters/*.py config/*.py secrets/*.py roles/database/*.py roles/database/package/*.py roles/database/runtime/*.py roles/database/lifecycle/*.py roles/database/schema/*.py roles/database/tasks/*.py database_cli.py spark-database
+          python3 -m unittest tests.smoke.test_manager_baseline -v
+          python3 -m unittest tests.test_workflow_core -v
+          python3 -m unittest discover -s tests/architecture -v
+          python3 -m unittest discover -s tests/roles -v
+          python3 -m unittest discover -s tests/secrets -v
+          python3 -m unittest discover -s tests/database -v
+          python3 spark-ui.py --self-test
+
+      - name: Validate profiles and analyzer CLI
+        working-directory: deploy/spark-cli
+        run: |
+          SPARK_ENV_PROFILE=config/environments/example.production.yaml python3 spark-architecture validate >/dev/null
+          SPARK_ENV_PROFILE=config/environments/example.staging.yaml python3 spark-architecture validate >/dev/null
+          SPARK_ENV_PROFILE=config/environments/example.airgap.yaml python3 spark-architecture validate >/dev/null
+          python3 spark-database baseline-analyze tests/database/schema/fixtures/mixed_supabase_spark.sql --profile config/environments/example.production.yaml --json > /tmp/m36a-report.json
+          python3 - <<'PY'
+          import json
+          payload=json.load(open('/tmp/m36a-report.json'))
+          assert payload['format_version'] == 1
+          assert payload['source']['type'] == 'legacy-sql-backup'
+          assert payload['categories']['supabase_internal'] == 1
+          assert payload['categories']['spark_schema'] >= 4
+          assert 'timestamp' not in payload
+          PY
+
+      - name: Enforce read-only M3.6A boundary
+        working-directory: deploy/spark-cli
+        run: |
+          ! grep -REn 'psql|psycopg|asyncpg|subprocess|docker|compose|CREATE[[:space:]]+TABLE[[:space:]]+spark_manager' roles/database/schema
+          ! find roles/database/schema -type f -name 'spark-baseline.sql' -print -quit | grep -q .
+          ! grep -REn 'write_text\(.*baseline|open\(.*["'"']w' roles/database/schema
+
+      - name: Bootstrap structure
+        working-directory: deploy/spark-cli
+        run: |
+          bash -n bootstrap.sh
+          grep -Fq 'roles/database/schema/dump_analyzer.py' bootstrap.sh
+          grep -Fq 'roles/database/schema/parser.py' bootstrap.sh
+          grep -Fq 'roles/database/schema/$(basename "$file")' bootstrap.sh
+
+      - name: Commit bootstrap integration after validation
+        run: |
+          if ! git diff --quiet -- deploy/spark-cli/bootstrap.sh; then
+            git config user.name "spark-m36a-bot"
+            git config user.email "spark-m36a-bot@users.noreply.github.com"
+            git add deploy/spark-cli/bootstrap.sh
+            git commit -m "feat: install M3.6A schema analyzer with spark manager"
+            git push origin HEAD:main
+          fi
