@@ -103,6 +103,13 @@ reverse_proxy:
     key_file: ""
 jump_server:
   enabled: true
+  ssh_user: ""
+  remote:
+    known_hosts_file: /etc/ssh/ssh_known_hosts
+    connect_timeout_seconds: 5
+    command_timeout_seconds: 1800
+    remote_profile_path: /tmp/spark-production.yaml
+    state_file: /var/lib/spark-manager/environment/production.json
 external_services:
   bale:
     host: api.bale.ai
@@ -122,6 +129,12 @@ network:
       protocol: tcp
       ports:
         - 80
+    - id: proxy-to-database-supabase
+      source: reverse_proxy
+      destination: database
+      protocol: tcp
+      ports:
+        - 8000
     - id: app-to-database-postgres
       source: application
       destination: database
