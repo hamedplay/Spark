@@ -38,7 +38,9 @@ unset SOURCE SOURCE_DIR TARGET
 mkdir -p "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
 chmod 700 "$STATE_DIR" "$STEP_DIR" "$LOG_DIR" "$BACKUP_DIR" "$CONFIG_DIR"
 
-for module in core airgap-build airgap-manager; do
+# airgap-full-source is intentionally sourced last. It overrides the legacy
+# Git-bundle builder with the exact-revision Spark-main.zip implementation.
+for module in core airgap-build airgap-manager airgap-full-source; do
   path="$SCRIPT_DIR/lib/$module.sh"
   [[ -r "$path" ]] || { echo "Spark Manager Air-Gap module missing: $path" >&2; exit 1; }
   source "$path"
@@ -47,7 +49,7 @@ unset module path
 
 spark_airgap_sync_source_main() {
   local remote_head origin_url
-  [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT}."; return 1; }
+  [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT} on the connected builder."; return 1; }
   origin_url="$(command git -C "$SPARK_ROOT" remote get-url origin 2>/dev/null || true)"
   [[ "$origin_url" == "https://github.com/hamedplay/Spark.git" || "$origin_url" == "git@github.com:hamedplay/Spark.git" ]] || { fail "Unexpected Spark origin remote: ${origin_url:-missing}"; return 1; }
   GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --prune origin main || { fail "Unable to fetch Spark main."; return 1; }
@@ -75,8 +77,8 @@ case "${1:-}" in
   --version|-V) printf 'Spark Manager Air-Gap Control 1\n' ;;
   --help|-h|"") cat <<'EOF'
 Usage: spark-manager-airgap [option]
-  --build [output-dir] [ubuntu]       Build exact-revision full Spark repository + Manager offline bundle
-  --install-environment [bundle]      Install/update /opt/spark and Manager on configured environment nodes
+  --build [output-dir] [ubuntu]       Build exact-revision Spark-main.zip + Manager offline bundle
+  --install-environment [bundle]      Install/update complete /opt/spark snapshot + Manager without target network access
   --verify-revisions [profile]        Verify all node Manager revisions against Jump
   --status [profile]                  Alias for revision/status verification
 EOF
