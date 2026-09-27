@@ -60,38 +60,69 @@ PROVISIONING_ACTIONS = [
     core.Action("architecture-central-repair", "Centralized Repair", "Repair only unhealthy roles while preserving healthy nodes and upstream services.", "controlled"),
 ]
 
+MANAGER_AIRGAP_ACTIONS = [
+    core.Action("manager-airgap-build", "Build Manager Air-Gap Bundle", "Build a checksum-verified Manager-only bundle pinned to one exact Spark commit.", "controlled"),
+    core.Action("manager-airgap-install-environment", "Install / Update Manager on Environment", "Distribute one verified Manager bundle to Database, Application and both Proxy nodes through strict SSH and the restricted bootstrap launcher.", "confirm"),
+    core.Action("manager-airgap-verify-revisions", "Verify Manager Revisions", "Compare the Jump Manager revision with all configured environment nodes and refuse mismatches."),
+    core.Action("manager-airgap-status", "Manager Deployment Status", "Show per-node Manager revision readiness without provisioning."),
+]
 
-def _extend_architecture_category() -> None:
+
+def _extend_categories() -> None:
     rebuilt = []
-    found = False
+    architecture_found = False
+    airgap_found = False
     for category, actions in core.CATEGORIES:
         if category == "Architecture & Provisioning":
             rebuilt.append((category, list(PROVISIONING_ACTIONS)))
-            found = True
+            architecture_found = True
+        elif category == "Installation Air-Gapped":
+            existing = [action for action in actions if not action.action_id.startswith("manager-airgap-")]
+            rebuilt.append((category, [*MANAGER_AIRGAP_ACTIONS, *existing]))
+            airgap_found = True
         else:
             rebuilt.append((category, actions))
-    if not found:
+    if not architecture_found:
         rebuilt.append(("Architecture & Provisioning", list(PROVISIONING_ACTIONS)))
+    if not airgap_found:
+        rebuilt.append(("Installation Air-Gapped", list(MANAGER_AIRGAP_ACTIONS)))
     core.CATEGORIES[:] = rebuilt
 
 
 _original_self_test = core.self_test
+_original_task_init = core.TaskProcess.__init__
+
+
+def manager_routed_task_init(self, spark_path, action_id, args, rows, cols):
+    if action_id.startswith("manager-airgap-"):
+        candidates = [
+            Path("/usr/local/bin/spark-manager-airgap"),
+            HERE / "lib/spark-manager-airgap",
+            core.SPARK_ROOT / "deploy/spark-cli/lib/spark-manager-airgap",
+        ]
+        manager_path = next((path for path in candidates if path.is_file() and os.access(path, os.X_OK)), None)
+        if manager_path is None:
+            raise FileNotFoundError("spark-manager-airgap is not installed; update Spark Manager first")
+        spark_path = str(manager_path)
+    return _original_task_init(self, spark_path, action_id, args, rows, cols)
 
 
 def provisioning_self_test() -> int:
     result = _original_self_test()
     ids = {a.action_id for _, actions in core.CATEGORIES for a in actions if not a.special}
-    required = {action.action_id for action in PROVISIONING_ACTIONS}
+    required = {action.action_id for action in PROVISIONING_ACTIONS} | {action.action_id for action in MANAGER_AIRGAP_ACTIONS}
     missing = sorted(required - ids)
     if missing:
         raise RuntimeError("provisioning UI registry is incomplete: " + ", ".join(missing))
-    sections = [category for category, _ in core.CATEGORIES if category == "Architecture & Provisioning"]
-    if len(sections) != 1:
+    if len([category for category, _ in core.CATEGORIES if category == "Architecture & Provisioning"]) != 1:
         raise RuntimeError("Architecture & Provisioning category is missing or duplicated")
+    if len([category for category, _ in core.CATEGORIES if category == "Installation Air-Gapped"]) != 1:
+        raise RuntimeError("Installation Air-Gapped category is missing or duplicated")
     return result
 
 
-_extend_architecture_category()
+_extend_categories()
+core.TaskProcess.__init__ = manager_routed_task_init
 core.self_test = provisioning_self_test
 
 
