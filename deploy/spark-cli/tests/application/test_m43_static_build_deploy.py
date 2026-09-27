@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 from adapters.command import CommandResult
 from roles.application.build.builder import StaticApplicationBuilder
-from roles.application.build.identity import build_identity
 from roles.application.build.manifest import load_build_manifest
 from roles.application.deployment.activator import StaticApplicationActivator
+from roles.application.deployment.lock import DeploymentLock
 
 
 MANIFEST = '''schema_version: 1
@@ -86,6 +84,14 @@ class M43Tests(unittest.TestCase):
         manifest.write_text(MANIFEST.replace("CURRENT", str(root / "current")))
         return release, manifest
 
+    @staticmethod
+    def mark_verified(candidate: Path):
+        (candidate / "dist/assets").mkdir(parents=True)
+        (candidate / "dist/index.html").write_text("Spark/assets/")
+        (candidate / "dist/assets/a").write_text("x")
+        (candidate / ".spark").mkdir()
+        (candidate / ".spark/build-metadata.json").write_text(json.dumps({"status":"VERIFIED"}))
+
     def test_manifest_requires_npm_ci(self):
         with tempfile.TemporaryDirectory() as td:
             p = Path(td) / "m.yaml"; p.write_text(MANIFEST.replace("CURRENT", "/tmp/current").replace("[npm, ci]", "[npm, install]"))
@@ -116,15 +122,28 @@ class M43Tests(unittest.TestCase):
                 StaticApplicationBuilder(FakeBuildRunner(fail_build=True)).build(release, release.name, manifest)
             self.assertEqual(current.resolve(), previous.resolve())
 
+    def test_dry_run_performs_zero_activation_mutation(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td); candidate, manifest_path=self.make_release(root); self.mark_verified(candidate)
+            state=root/"state"; current=root/"current"
+            result=StaticApplicationActivator(health=FakeHealth([]), nginx=FakeNginx(), state_path=state, lock_path=root/"lock").deploy(candidate, load_build_manifest(manifest_path), dry_run=True)
+            self.assertEqual(result.status, "PLANNED")
+            self.assertFalse(current.exists()); self.assertFalse(current.is_symlink()); self.assertFalse(state.exists())
+
+    def test_deploy_lock_rejects_concurrent_holder(self):
+        with tempfile.TemporaryDirectory() as td:
+            lock=Path(td)/"deploy.lock"
+            with DeploymentLock(lock):
+                with self.assertRaisesRegex(RuntimeError, "DEPLOYMENT_IN_PROGRESS"):
+                    with DeploymentLock(lock):
+                        pass
+
     def test_atomic_deploy_and_rollback(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td); candidate, manifest_path=self.make_release(root); previous=root/"previous"; (previous/"dist").mkdir(parents=True); (previous/"dist/index.html").write_text("Spark")
-            current=root/"current"; current.symlink_to(previous)
-            (candidate/"dist/assets").mkdir(parents=True); (candidate/"dist/index.html").write_text("Spark/assets/"); (candidate/"dist/assets/a").write_text("x")
-            (candidate/".spark").mkdir(); (candidate/".spark/build-metadata.json").write_text(json.dumps({"status":"VERIFIED"}))
+            current=root/"current"; current.symlink_to(previous); self.mark_verified(candidate)
             manifest=load_build_manifest(manifest_path)
-            state=root/"state.json"; lock=root/"lock"
-            activator=StaticApplicationActivator(health=FakeHealth([False, True]), nginx=FakeNginx(), state_path=state, lock_path=lock)
+            activator=StaticApplicationActivator(health=FakeHealth([False, True]), nginx=FakeNginx(), state_path=root/"state.json", lock_path=root/"lock")
             result=activator.deploy(candidate, manifest)
             self.assertEqual(result.status, "DEPLOYMENT_FAILED")
             self.assertTrue(result.production_restored)
@@ -132,9 +151,7 @@ class M43Tests(unittest.TestCase):
 
     def test_first_deploy_failure_removes_current_only(self):
         with tempfile.TemporaryDirectory() as td:
-            root=Path(td); candidate, manifest_path=self.make_release(root)
-            (candidate/"dist/assets").mkdir(parents=True); (candidate/"dist/index.html").write_text("Spark/assets/"); (candidate/"dist/assets/a").write_text("x")
-            (candidate/".spark").mkdir(); (candidate/".spark/build-metadata.json").write_text(json.dumps({"status":"VERIFIED"}))
+            root=Path(td); candidate, manifest_path=self.make_release(root); self.mark_verified(candidate)
             result=StaticApplicationActivator(health=FakeHealth([False]), nginx=FakeNginx(), state_path=root/"state", lock_path=root/"lock").deploy(candidate, load_build_manifest(manifest_path))
             self.assertEqual(result.status, "FIRST_DEPLOYMENT_FAILED")
             self.assertFalse((root/"current").exists()); self.assertTrue(candidate.exists())
