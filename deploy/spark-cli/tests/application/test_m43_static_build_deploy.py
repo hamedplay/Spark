@@ -149,6 +149,16 @@ class M43Tests(unittest.TestCase):
             self.assertTrue(result.production_restored)
             self.assertEqual(current.resolve(), previous.resolve())
 
+    def test_rollback_failure_is_critical(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td); candidate, manifest_path=self.make_release(root); previous=root/"previous"; (previous/"dist").mkdir(parents=True); (previous/"dist/index.html").write_text("Spark")
+            current=root/"current"; current.symlink_to(previous); self.mark_verified(candidate)
+            result=StaticApplicationActivator(health=FakeHealth([False, False]), nginx=FakeNginx(), state_path=root/"state.json", lock_path=root/"lock").deploy(candidate, load_build_manifest(manifest_path))
+            self.assertEqual(result.status, "CRITICAL_DEPLOYMENT_FAILURE")
+            self.assertEqual(result.rollback_status, "FAILED")
+            self.assertFalse(result.production_restored)
+            self.assertEqual(current.resolve(), previous.resolve())
+
     def test_first_deploy_failure_removes_current_only(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td); candidate, manifest_path=self.make_release(root); self.mark_verified(candidate)
