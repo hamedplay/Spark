@@ -2,12 +2,24 @@ from __future__ import annotations
 
 from core.registry import OperationRegistry
 from core.workflow import Workflow
-from .tasks import ApplicationConfigTask, ApplicationPreflightTask, ApplicationSourceTask
+from .tasks import (
+    ApplicationBuildTask,
+    ApplicationConfigTask,
+    ApplicationDeployTask,
+    ApplicationPreflightTask,
+    ApplicationSourceTask,
+)
 
 
 def _registry() -> OperationRegistry:
     registry = OperationRegistry()
-    registry.extend((ApplicationPreflightTask(), ApplicationSourceTask(), ApplicationConfigTask()))
+    registry.extend((
+        ApplicationPreflightTask(),
+        ApplicationSourceTask(),
+        ApplicationConfigTask(),
+        ApplicationBuildTask(),
+        ApplicationDeployTask(),
+    ))
     return registry
 
 
@@ -21,3 +33,11 @@ def build_application_source_workflow() -> Workflow:
 
 def build_application_foundation_workflow() -> Workflow:
     return Workflow("application.foundation", _registry(), targets=["application.config"])
+
+
+def build_application_build_workflow() -> Workflow:
+    return Workflow("application.build", _registry(), targets=["application.build"])
+
+
+def build_application_deploy_workflow() -> Workflow:
+    return Workflow("application.deploy", _registry(), targets=["application.deploy"])
