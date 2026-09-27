@@ -1,4 +1,4 @@
-# Spark Manager-only Air-Gap bundle build/distribution helpers.
+# Spark full-repository + Manager Air-Gap bundle build/distribution helpers.
 
 spark_manager_airgap_profile_path() {
   local explicit="${SPARK_ENV_PROFILE:-}"
@@ -27,14 +27,14 @@ spark_manager_airgap_revision() {
 
 spark_manager_airgap_build() (
   set -Eeuo pipefail
-  local output_root="${1:-${PWD}}" target_release="${2:-}" revision root bundle_id archive partial source source_root
+  local output_root="${1:-${PWD}}" target_release="${2:-}" revision root bundle_id archive partial source source_root bundle_repo bundle_head
   [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT}."; return 1; }
   revision="$(spark_airgap_sync_source_main)" || return 1
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve Spark revision."; return 1; }
 
-  # Manager-only payload is Bash/Python and carries no release-specific APT
-  # packages. Default to any supported Ubuntu release; an explicit target keeps
-  # the old exact-release lock when an operator deliberately requests it.
+  # This bundle carries the complete Spark Git repository plus the Manager
+  # control plane. The Manager payload itself has no release-specific APT
+  # packages, so the default remains any Ubuntu release on amd64.
   if [[ -z "$target_release" ]]; then
     target_release="any"
   else
@@ -49,12 +49,34 @@ spark_manager_airgap_build() (
   [[ ! -e "$root" && ! -e "$archive" ]] || { fail "Manager bundle output already exists: ${bundle_id}"; return 1; }
 
   source_root="$(mktemp -d)"
-  trap 'rm -rf "$root" "$source_root"; [[ -n "${partial:-}" ]] && rm -f "$partial"' EXIT
+  bundle_repo="$(mktemp -d)"
+  trap 'rm -rf "$root" "$source_root" "$bundle_repo"; [[ -n "${partial:-}" ]] && rm -f "$partial"' EXIT
+
+  # Build Manager files from an immutable exact-revision snapshot. Local
+  # uncommitted files under /opt/spark are never included or modified.
   command git -C "$SPARK_ROOT" archive "$revision" | tar -x -C "$source_root"
   source="${source_root}/deploy/spark-cli"
   [[ -d "$source" ]] || { fail "Manager source snapshot is incomplete."; return 1; }
 
-  mkdir -p "$root/metadata" "$root/manager"
+  mkdir -p "$root/metadata" "$root/manager" "$root/sources"
+
+  # Create a real Git bundle containing the complete hamedplay/Spark main
+  # history reachable from the exact fetched revision. The temporary bare repo
+  # gives the bundle a canonical refs/heads/main without mutating /opt/spark.
+  command git init --bare -q "$bundle_repo" || return 1
+  command git -C "$bundle_repo" fetch -q "$SPARK_ROOT" "$revision" || return 1
+  command git -C "$bundle_repo" update-ref refs/heads/main "$revision" || return 1
+  command git -C "$bundle_repo" bundle create "$root/sources/spark.git.bundle" main || return 1
+  command git -C "$bundle_repo" bundle verify "$root/sources/spark.git.bundle" >/dev/null 2>&1 || {
+    fail "Generated Spark repository bundle failed verification."
+    return 1
+  }
+  bundle_head="$(command git bundle list-heads "$root/sources/spark.git.bundle" refs/heads/main)"
+  [[ "$bundle_head" == "$revision refs/heads/main" ]] || {
+    fail "Generated Spark repository bundle does not contain the exact main revision."
+    return 1
+  }
+
   for file in spark spark-airgap spark-architecture spark-database spark-ui.py spark-ui-base.py spark-ui-core.py spark-migrate database_cli.py spark-manager-airgap-bootstrap; do
     [[ -f "$source/$file" ]] || { fail "Manager source missing: $file"; return 1; }
     cp -a "$source/$file" "$root/manager/$file"
@@ -74,11 +96,13 @@ import json, sys
 path, revision, ubuntu = sys.argv[1:]
 with open(path, 'w', encoding='utf-8') as f:
     json.dump({
-        'format_version': 1,
+        'format_version': 2,
         'spark_revision': revision,
+        'spark_repository': 'https://github.com/hamedplay/Spark.git',
+        'spark_branch': 'main',
         'ubuntu': ubuntu,
         'architecture': 'amd64',
-        'payload': 'spark-manager',
+        'payload': 'spark-full-repository-and-manager',
     }, f, indent=2, sort_keys=True)
     f.write('\n')
 PY
@@ -96,10 +120,10 @@ PY
   mv "$partial" "$archive"
   partial=""
   sha256sum "$archive" >"${archive}.sha256"
-  rm -rf "$root" "$source_root"
+  rm -rf "$root" "$source_root" "$bundle_repo"
   trap - EXIT
-  ok "Spark Manager Air-Gap bundle created: $archive"
-  printf 'Revision: %s\nTarget: Ubuntu %s / amd64\n' "$revision" "$target_release"
+  ok "Spark full-repository + Manager Air-Gap bundle created: $archive"
+  printf 'Revision: %s\nRepository: https://github.com/hamedplay/Spark.git (main)\nTarget: Ubuntu %s / amd64\n' "$revision" "$target_release"
 )
 
 spark_manager_airgap_inventory() {
@@ -161,7 +185,7 @@ spark_manager_airgap_install_environment() {
       fail "Restricted Manager bootstrap launcher is missing on $id. Perform the first local Manager bootstrap on that node or have the OS/security baseline provision /usr/local/sbin/spark-manager-airgap-bootstrap."
       return 1
     }
-    info "Distributing Manager ${revision:0:12} to ${id} (${host})."
+    info "Distributing full Spark repository + Manager ${revision:0:12} to ${id} (${host})."
     scp -q -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -o "ConnectTimeout=$connect" \
       "$bundle" "$user@$host:$remote_archive" || { fail "Manager transfer failed: $id"; return 1; }
     ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -o "ConnectTimeout=$connect" \
