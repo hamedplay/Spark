@@ -41,6 +41,14 @@ jobs:
           assert not missing, f'bootstrap integration contract missing: {missing}'
           print('bootstrap integration contract OK')
           PY
+      - name: Provisioning UI self-test
+        working-directory: deploy/spark-cli
+        run: python3 spark-ui.py --self-test
+      - name: Architecture backend contract
+        working-directory: deploy/spark-cli
+        env:
+          SPARK_ENV_PROFILE: config/environments/example.production.yaml
+        run: python3 spark-architecture --backend-action architecture-profile
       - name: Production profile load
         working-directory: deploy/spark-cli
         run: |
