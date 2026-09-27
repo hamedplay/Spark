@@ -25,6 +25,7 @@ class Disposition(str, Enum):
 class Ownership(str, Enum):
     SPARK_OWNED = "spark_owned"
     PLATFORM_OWNED = "platform_owned"
+    SHARED = "shared"
     UNCLASSIFIED = "unclassified"
 
 
