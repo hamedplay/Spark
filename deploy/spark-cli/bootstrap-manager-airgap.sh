@@ -125,7 +125,8 @@ if ! {
   SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" "$BIN_DIR/spark-architecture" validate >/dev/null &&
   "$BIN_DIR/spark-database" --help >/dev/null &&
   "$BIN_DIR/spark-manager-airgap" --help >/dev/null &&
-  "$BIN_DIR/spark" --ui-self-test >/dev/null
+  "$BIN_DIR/spark" --ui-self-test >/dev/null &&
+  python3 "$TARGET/spark-ui.py" --self-test >/dev/null
 }; then
   echo 'Spark Manager offline post-install validation failed; rolling back.' >&2
   rollback_install
