@@ -3,11 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'deploy/spark-cli/config/**'
-      - 'deploy/spark-cli/roles/application/**'
-      - 'deploy/spark-cli/roles/reverse_proxy/**'
-      - 'deploy/spark-cli/roles/environment/**'
-      - 'deploy/spark-cli/architecture/**'
+      - 'deploy/spark-cli/**'
       - '.github/workflows/spark-final-integration-validate.yml'
 permissions:
   contents: read
@@ -16,9 +12,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Syntax
+      - name: Python syntax
         working-directory: deploy/spark-cli
         run: python3 -m compileall -q config roles architecture adapters core secrets
+      - name: Bootstrap syntax
+        working-directory: deploy/spark-cli
+        run: bash -n bootstrap.sh bootstrap-base.sh
+      - name: Bootstrap integration contract
+        working-directory: deploy/spark-cli
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('bootstrap.sh').read_text()
+          required = {
+              'deploy/spark-cli/core/',
+              'deploy/spark-cli/config/',
+              'deploy/spark-cli/architecture/',
+              'deploy/spark-cli/adapters/',
+              'deploy/spark-cli/secrets/',
+              'deploy/spark-cli/roles/',
+              'roles/environment/orchestrator.py',
+              'roles/reverse_proxy/workflow.py',
+              'roles/application/edge/runtime.py',
+              'roles/application/livekit/runtime.py',
+              'roles/application/coturn/runtime.py',
+          }
+          missing = sorted(value for value in required if value not in text)
+          assert not missing, f'bootstrap integration contract missing: {missing}'
+          print('bootstrap integration contract OK')
+          PY
       - name: Production profile load
         working-directory: deploy/spark-cli
         run: |
