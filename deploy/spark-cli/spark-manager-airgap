@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+SPARK_ROOT=/opt/spark
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+  LINK="$(readlink -- "$SOURCE")"
+  [[ "$LINK" == /* ]] && SOURCE="$LINK" || SOURCE="$DIR/$LINK"
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+unset SOURCE DIR LINK
+
+for module in core airgap-build airgap-manager; do
+  path="$SCRIPT_DIR/lib/$module.sh"
+  [[ -r "$path" ]] || { echo "Spark Manager Air-Gap module missing: $path" >&2; exit 1; }
+  source "$path"
+done
+unset module path
+
+case "${1:-}" in
+  --build)
+    shift
+    spark_manager_airgap_build "${1:-$PWD}" "${2:-}"
+    ;;
+  --install-environment)
+    shift
+    spark_manager_airgap_install_environment "${1:-}" "${2:-$(spark_manager_airgap_profile_path)}"
+    ;;
+  --verify-revisions|--status)
+    shift
+    spark_manager_airgap_verify_revisions "${1:-$(spark_manager_airgap_profile_path)}" "${2:-$(spark_manager_airgap_revision)}"
+    ;;
+  --version|-V)
+    printf 'Spark Manager Air-Gap Control 1\n'
+    ;;
+  --help|-h|"")
+    cat <<'EOF'
+Usage: spark-manager-airgap [option]
+
+  --build [output-dir] [ubuntu]       Build exact-revision Manager-only offline bundle
+  --install-environment [bundle]      Install/update Manager on configured environment nodes
+  --verify-revisions [profile]        Verify all node Manager revisions against Jump
+  --status [profile]                  Alias for revision/status verification
+EOF
+    ;;
+  *) echo "Unknown option: $1" >&2; exit 2 ;;
+esac
