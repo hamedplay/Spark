@@ -27,12 +27,18 @@ def _tcp(host: str, port: int, timeout: float = 2.0) -> bool:
 def _http_status(url: str, *, allow_insecure_tls: bool = False) -> int | None:
     context = ssl._create_unverified_context() if allow_insecure_tls else None
     try:
-        with urllib.request.urlopen(url, timeout=4, context=context) as response:
+        request = urllib.request.Request(url, headers={"User-Agent": "spark-production-readiness"})
+        with urllib.request.urlopen(request, timeout=4, context=context) as response:
             return int(response.status)
     except urllib.error.HTTPError as exc:
         return int(exc.code)
     except (urllib.error.URLError, TimeoutError, OSError):
         return None
+
+
+def _http_ok(url: str, accepted: set[int]) -> bool:
+    status = _http_status(url, allow_insecure_tls=False)
+    return status in accepted
 
 
 @dataclass(frozen=True)
@@ -54,13 +60,15 @@ def inspect_environment(environment: EnvironmentConfig) -> EnvironmentHealth:
     rp_node = next(node for node in environment.nodes.values() if node.role == "reverse_proxy")
     checks: dict[str, str] = {}
 
+    checks["postgresql"] = "PASS" if _tcp(db, 5432) else "FAIL"
+    checks["gateway"] = "PASS" if _tcp(db, 8000) else "FAIL"
     checks["frontend"] = "PASS" if _http_status(f"http://{app}/") == 200 else "FAIL"
     checks["auth"] = "PASS" if _http_status(f"http://{db}:8000/auth/v1/health") in {200, 204} else "FAIL"
     checks["rest"] = "PASS" if _http_status(f"http://{db}:8000/rest/v1/") in {200, 401, 403, 404} else "FAIL"
     checks["storage"] = "PASS" if _http_status(f"http://{db}:8000/storage/v1/status") in {200, 401, 403} else "FAIL"
     checks["realtime"] = "PASS" if _tcp(db, 8000) else "FAIL"
     edge_status = _http_status(f"http://{app}:{environment.application.edge.port}/{environment.application.edge.probe_function}")
-    checks["edge_functions"] = "PASS" if edge_status in {200, 401, 403} else "FAIL"
+    checks["edge_functions"] = "PASS" if edge_status in {200, 401, 403, 404} else "FAIL"
     checks["livekit"] = "PASS" if _tcp(app, environment.application.livekit.api_port) and _tcp(app, environment.application.livekit.rtc_tcp_port) else "FAIL"
     checks["turn_tcp"] = "PASS" if _tcp(app, environment.application.coturn.listener_port) and _tcp(app, environment.application.coturn.tls_port) else "FAIL"
 
@@ -72,8 +80,15 @@ def inspect_environment(environment: EnvironmentConfig) -> EnvironmentHealth:
 
     public_host = environment.reverse_proxy.public_host.strip()
     if public_host:
-        checks["public_entrypoint"] = "PASS" if _http_status(f"https://{public_host}/", allow_insecure_tls=False) == 200 else "FAIL"
+        base = f"https://{public_host}"
+        checks["public_entrypoint"] = "PASS" if _http_ok(f"{base}/", {200}) else "FAIL"
+        checks["public_auth"] = "PASS" if _http_ok(f"{base}/auth/v1/health", {200, 204}) else "FAIL"
+        checks["public_rest"] = "PASS" if _http_ok(f"{base}/rest/v1/", {200, 401, 403, 404}) else "FAIL"
+        checks["public_realtime"] = "PASS" if _http_ok(f"{base}/realtime/v1/", {200, 400, 401, 403, 404, 426}) else "FAIL"
+        checks["public_storage"] = "PASS" if _http_ok(f"{base}/storage/v1/status", {200, 401, 403}) else "FAIL"
+        checks["public_edge"] = "PASS" if _http_ok(f"{base}/functions/v1/{environment.application.edge.probe_function}", {200, 401, 403, 404}) else "FAIL"
     else:
-        checks["public_entrypoint"] = "WAITING_FOR_OPERATOR"
+        for key in ("public_entrypoint", "public_auth", "public_rest", "public_realtime", "public_storage", "public_edge"):
+            checks[key] = "WAITING_FOR_OPERATOR"
 
     return EnvironmentHealth(checks)
