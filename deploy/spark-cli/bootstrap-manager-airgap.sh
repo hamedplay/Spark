@@ -61,7 +61,13 @@ arch_actual="$(dpkg --print-architecture 2>/dev/null || uname -m)"
 }
 
 source_bundle="$ROOT/sources/spark.git.bundle"
-git bundle verify "$source_bundle" >/dev/null 2>&1 || {
+verify_repo="$(mktemp -d)"
+trap 'rm -rf "$verify_repo"' EXIT
+git init --bare -q "$verify_repo" || {
+  echo 'Unable to initialize temporary Git verifier.' >&2
+  exit 1
+}
+git -C "$verify_repo" bundle verify "$source_bundle" >/dev/null 2>&1 || {
   echo 'Spark Git bundle verification failed.' >&2
   exit 1
 }
@@ -70,6 +76,8 @@ bundle_head="$(git bundle list-heads "$source_bundle" refs/heads/main)"
   echo 'Spark Git bundle main ref does not match manifest revision.' >&2
   exit 1
 }
+rm -rf "$verify_repo"
+trap - EXIT
 
 python3 - <<'PY'
 import curses, pty, selectors
