@@ -80,6 +80,15 @@ config/environments/example.production.yaml
 config/environments/example.staging.yaml
 config/environments/example.airgap.yaml
 roles/__init__.py
+roles/application/__init__.py
+roles/application/context.py
+roles/application/detector.py
+roles/application/preflight.py
+roles/application/source.py
+roles/application/configuration.py
+roles/application/workflow.py
+roles/application/manifest.yaml
+roles/application/tasks/__init__.py
 roles/database/__init__.py
 roles/database/context.py
 roles/database/detector.py
