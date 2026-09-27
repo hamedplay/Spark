@@ -57,7 +57,7 @@ printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks" "$tmp/secrets" "$tmp/roles/database/package" "$tmp/adapters" "$tmp/roles/database/runtime" "$tmp/roles/database/lifecycle" "$tmp/roles/database/schema"
+mkdir -p "$tmp/lib" "$tmp/livekit" "$tmp/architecture" "$tmp/config/environments" "$tmp/roles/database/tasks" "$tmp/secrets" "$tmp/roles/database/package" "$tmp/adapters" "$tmp/roles/database/runtime" "$tmp/roles/database/lifecycle" "$tmp/roles/database/schema" "$tmp/roles/application/tasks" "$tmp/roles/application/build" "$tmp/roles/application/deployment"
 
 files=(
   spark
@@ -389,7 +389,7 @@ migrate_stage="$(mktemp -d /usr/local/lib/spark-migrate.new.XXXXXX)"
 chmod 0755 "$stage" "$migrate_stage"
 backup="/usr/local/lib/spark-manager.previous.$$"
 migrate_backup="/usr/local/lib/spark-migrate.previous.$$"
-install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks" "$stage/secrets" "$stage/roles/database/package" "$stage/adapters" "$stage/roles/database/runtime" "$stage/roles/database/lifecycle" "$stage/roles/database/schema"
+install -d -m 0755 "$stage/lib" "$stage/livekit" "$stage/architecture" "$stage/config/environments" "$stage/roles/database/tasks" "$stage/secrets" "$stage/roles/database/package" "$stage/adapters" "$stage/roles/database/runtime" "$stage/roles/database/lifecycle" "$stage/roles/database/schema" "$stage/roles/application/tasks" "$stage/roles/application/build" "$stage/roles/application/deployment"
 install -m 0755 "$tmp/spark" "$stage/spark"
 install -m 0755 "$tmp/spark-airgap" "$stage/spark-airgap"
 install -m 0755 "$tmp/spark-architecture" "$stage/spark-architecture"
@@ -402,6 +402,11 @@ for file in "$tmp"/architecture/*.py; do install -m 0644 "$file" "$stage/archite
 for file in "$tmp"/config/*.py; do install -m 0644 "$file" "$stage/config/$(basename "$file")"; done
 for file in "$tmp"/config/environments/*.yaml; do install -m 0644 "$file" "$stage/config/environments/$(basename "$file")"; done
 for file in "$tmp"/roles/*.py; do install -m 0644 "$file" "$stage/roles/$(basename "$file")"; done
+for file in "$tmp"/roles/application/*.py; do install -m 0644 "$file" "$stage/roles/application/$(basename "$file")"; done
+install -m 0644 "$tmp/roles/application/manifest.yaml" "$stage/roles/application/manifest.yaml"
+for file in "$tmp"/roles/application/tasks/*.py; do install -m 0644 "$file" "$stage/roles/application/tasks/$(basename "$file")"; done
+for file in "$tmp"/roles/application/build/*.py; do install -m 0644 "$file" "$stage/roles/application/build/$(basename "$file")"; done
+for file in "$tmp"/roles/application/deployment/*.py; do install -m 0644 "$file" "$stage/roles/application/deployment/$(basename "$file")"; done
 for file in "$tmp"/roles/database/*.py; do install -m 0644 "$file" "$stage/roles/database/$(basename "$file")"; done
 install -m 0644 "$tmp/roles/database/manifest.yaml" "$stage/roles/database/manifest.yaml"
 for file in "$tmp"/roles/database/tasks/*.py; do install -m 0644 "$file" "$stage/roles/database/tasks/$(basename "$file")"; done
