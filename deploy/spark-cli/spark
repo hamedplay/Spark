@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-SPARK_MANAGER_VERSION="3.1.0+20260910.1"
+SPARK_MANAGER_VERSION="4.0.0"
+SPARK_UI_VERSION="3.1.0+20260910.1"
 REPO_URL="https://github.com/hamedplay/Spark.git"
 RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli"
 SPARK_ROOT="/opt/spark"
@@ -380,7 +381,7 @@ for value in sys.argv[1:]:
     compile(path.read_text(encoding="utf-8"), str(path), "exec")
 import curses, pty, selectors
 PY
-  grep -Fq "SPARK_UI_VERSION = \"${SPARK_MANAGER_VERSION}\"" "$UI_PATH"
+  grep -Fq "SPARK_UI_VERSION = \"${SPARK_UI_VERSION}\"" "$UI_PATH"
   grep -q 'curses.doupdate()' "$UI_PATH"
   grep -q 'pty.openpty()' "$UI_PATH"
 }
