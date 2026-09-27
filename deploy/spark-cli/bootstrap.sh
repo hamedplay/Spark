@@ -51,14 +51,26 @@ import sys
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 
+revision_resolution = 'MAIN_SHA="$(resolve_main_sha)"\n'
+revision_pinned = '''if [[ -n "${SPARK_MANAGER_REVISION:-}" ]]; then
+  MAIN_SHA="$SPARK_MANAGER_REVISION"
+else
+  MAIN_SHA="$(resolve_main_sha)"
+fi
+[[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "Invalid pinned Spark Manager revision." >&2
+  exit 1
+}
+'''
+if revision_resolution not in text:
+    raise SystemExit("bootstrap-base revision resolution contract changed; refusing unsafe patch")
+text = text.replace(revision_resolution, revision_pinned, 1)
+
 architecture_check = 'SPARK_ENV_PROFILE="$tmp/config/environments/example.production.yaml" python3 "$tmp/spark-architecture" validate >/dev/null\n'
 if architecture_check not in text:
     raise SystemExit("bootstrap-base architecture validation contract changed; refusing unsafe patch")
 text = text.replace(architecture_check, '', 1)
 
-# spark-ui.py is now a thin extension wrapper and intentionally inherits its
-# runtime implementation from spark-ui-base.py. The final wrapper/base package
-# is validated after the recursive integration sync below.
 ui_wrapper_check = '''grep -Fq "SPARK_UI_VERSION = \\\"${EXPECTED_UI_VERSION}\\\"" "$tmp/spark-ui.py" || {
   echo "Spark UI version validation failed." >&2
   exit 1
@@ -68,9 +80,6 @@ if ui_wrapper_check not in text:
     raise SystemExit("bootstrap-base UI wrapper validation contract changed; refusing unsafe patch")
 text = text.replace(ui_wrapper_check, '', 1)
 
-# The legacy stage does not materialize core/, but the current spark-database
-# imports core.context/core.state at process startup. Defer this smoke test until
-# after the recursive integration package sync has installed the complete tree.
 database_smoke_check = '''if ! "$DATABASE_CLI_PATH" --help >/dev/null 2>&1; then
   echo "Spark database lifecycle CLI smoke test failed; rolling back." >&2
   rollback_install
@@ -184,7 +193,9 @@ install -d -m 1777 /var/tmp/spark-manager-inbox
 
 python3 -m compileall -q "$TARGET/core" "$TARGET/config" "$TARGET/architecture" "$TARGET/adapters" "$TARGET/secrets" "$TARGET/roles"
 bash -n "$TARGET/lib/spark-manager-airgap" "$TARGET/lib/build-manager-airgap" "$TARGET/spark-manager-airgap-bootstrap"
+/usr/local/bin/spark --ui-self-test >/dev/null
 /usr/local/bin/spark-database --help >/dev/null
+/usr/local/bin/spark-manager-airgap --help >/dev/null
 SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" /usr/local/bin/spark-architecture validate >/dev/null
 SPARK_MANAGER_REVISION="$MAIN_SHA" /usr/local/bin/spark-architecture revision | grep -Fq "Revision: $MAIN_SHA"
 printf 'Spark Manager final integration package validation: OK\n'
