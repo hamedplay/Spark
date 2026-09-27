@@ -2,7 +2,20 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 SPARK_ROOT=/opt/spark
-SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  SOURCE_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  TARGET="$(readlink -- "$SOURCE")"
+  if [[ "$TARGET" == /* ]]; then
+    SOURCE="$TARGET"
+  else
+    SOURCE="${SOURCE_DIR}/${TARGET}"
+  fi
+done
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
+unset SOURCE SOURCE_DIR TARGET
+
 for module in core airgap-build airgap-manager; do
   path="$SCRIPT_DIR/lib/$module.sh"
   [[ -r "$path" ]] || { echo "Spark Manager Air-Gap module missing: $path" >&2; exit 1; }
