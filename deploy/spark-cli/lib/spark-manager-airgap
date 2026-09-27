@@ -74,8 +74,8 @@ case "${1:-}" in
   --version|-V) printf 'Spark Manager Air-Gap Control 1\n' ;;
   --help|-h|"") cat <<'EOF'
 Usage: spark-manager-airgap [option]
-  --build [output-dir] [ubuntu]       Build exact-revision Manager-only offline bundle
-  --install-environment [bundle]      Install/update Manager on configured environment nodes
+  --build [output-dir] [ubuntu]       Build exact-revision full Spark repository + Manager offline bundle
+  --install-environment [bundle]      Install/update /opt/spark and Manager on configured environment nodes
   --verify-revisions [profile]        Verify all node Manager revisions against Jump
   --status [profile]                  Alias for revision/status verification
 EOF
