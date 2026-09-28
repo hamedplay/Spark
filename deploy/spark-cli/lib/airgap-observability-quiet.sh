@@ -2,6 +2,63 @@
 # Keep observability readiness-noise behavior, then load the format-v2 Edge
 # Runtime source/cache implementation and its final mount/cache hardening.
 
+# Air-Gap backend actions can execute preflight validation before an individual
+# install step creates its own log. Guard the shared logging helpers so an empty
+# CURRENT_LOG never becomes an invalid shell redirection target.
+airgap_ensure_log() {
+  if [[ -z "${CURRENT_LOG:-}" || ! -f "${CURRENT_LOG}" ]]; then
+    new_log "airgap-backend"
+  fi
+}
+
+run_logged() {
+  local label="$1"
+  shift
+  airgap_ensure_log
+  info "$label"
+  if "$@" >>"$CURRENT_LOG" 2>&1; then
+    ok "$label"
+    return 0
+  fi
+  fail "$label"
+  show_failure_log "$CURRENT_LOG"
+  return 1
+}
+
+run_visible() {
+  local label="$1"
+  shift
+  airgap_ensure_log
+  info "$label"
+  set +e
+  "$@" 2>&1 | tee -a "$CURRENT_LOG"
+  local rc=${PIPESTATUS[0]}
+  set -e
+  if (( rc == 0 )); then
+    ok "$label"
+  else
+    fail "$label"
+  fi
+  return "$rc"
+}
+
+run_report() {
+  local label="$1"
+  shift
+  airgap_ensure_log
+  info "$label"
+  set +e
+  "$@" 2>&1 | tee -a "$CURRENT_LOG"
+  local rc=${PIPESTATUS[0]}
+  set -e
+  if (( rc == 0 )); then
+    ok "$label"
+  else
+    warn "$label completed with findings (exit=$rc)"
+  fi
+  return 0
+}
+
 source "${SCRIPT_DIR}/lib/airgap-observability-quiet-base.sh"
 source "${SCRIPT_DIR}/lib/airgap-edge-functions.sh"
 source "${SCRIPT_DIR}/lib/airgap-edge-functions-runtime-fix.sh"
@@ -129,7 +186,6 @@ airgap_build_bundle() (
     airgap_export_linux_amd64_images "${bundle}/docker/images.txt" "${bundle}/docker/docker-images.tar.gz" || return 1
   local AIRGAP_REAL_DOCKER=docker
   airgap_verify_images "$bundle" || { fail "Docker image identities changed during export."; return 1; }
-
 
   cat >"${bundle}/metadata/manifest.env" <<EOF_META
 FORMAT_VERSION=${AIRGAP_FORMAT_VERSION}
