@@ -4,6 +4,7 @@
 set -Eeuo pipefail
 payload="$(readlink -f "${1:?APT payload directory is required}")"
 [[ -d "$payload" ]] || exit 2
+
 if [[ -f "$payload/platform.env" ]]; then
   . /etc/os-release
   expected="$(sed -n 's/^UBUNTU_VERSION=//p' "$payload/platform.env")"
@@ -12,39 +13,59 @@ if [[ -f "$payload/platform.env" ]]; then
     exit 1
   }
 fi
+
+[[ -s "$payload/requested-packages.txt" ]] || {
+  echo 'requested-packages.txt is missing or empty.' >&2
+  exit 1
+}
+
 mapfile -t archives < <(find "$payload" -maxdepth 1 -type f -name '*.deb' -print | sort)
 ((${#archives[@]})) || { echo 'Local APT payload is empty.' >&2; exit 1; }
-selected=()
+
+# Build a transient local APT repository from every shipped .deb. The complete
+# payload is dependency inventory only; it must NOT be passed to apt-get as a
+# list of packages to force-install. Only requested-packages.txt is requested.
+repo="$(mktemp -d /var/tmp/spark-airgap-aptrepo.XXXXXX)"
+guard="$(mktemp -d /var/tmp/spark-airgap-aptcfg.XXXXXX)"
+trap 'rm -rf -- "$repo" "$guard"' EXIT
+
+: >"$repo/Packages"
 for archive in "${archives[@]}"; do
   package="$(dpkg-deb -f "$archive" Package)"
-  version="$(dpkg-deb -f "$archive" Version)"
   arch="$(dpkg-deb -f "$archive" Architecture)"
   [[ "$arch" == all || "$arch" == "$(dpkg --print-architecture)" ]] || {
-    printf 'Wrong architecture: %s (%s).\n' "$package" "$arch" >&2; exit 1;
+    printf 'Wrong architecture: %s (%s).\n' "$package" "$arch" >&2
+    exit 1
   }
-  query="$package"
-  [[ "$arch" == all ]] || query="${package}:${arch}"
-  installed="$(dpkg-query -W -f='${Status}\t${Version}' "$query" 2>/dev/null || true)"
-  if [[ "$installed" == $'install ok installed\t'* ]]; then
-    installed="${installed#*$'\t'}"
-    if dpkg --compare-versions "$installed" gt "$version"; then
-      printf 'Preserving newer installed %s: %s (bundle: %s).\n' "$package" "$installed" "$version"
-      continue
-    fi
-  fi
-  selected+=("$archive")
+  name="$(basename "$archive")"
+  ln "$archive" "$repo/$name" 2>/dev/null || cp -a "$archive" "$repo/$name"
+  dpkg-deb -f "$archive" >>"$repo/Packages"
+  printf 'Filename: ./%s\n' "$name" >>"$repo/Packages"
+  printf 'Size: %s\n' "$(stat -c '%s' "$archive")" >>"$repo/Packages"
+  printf 'SHA256: %s\n\n' "$(sha256sum "$archive" | awk '{print $1}')" >>"$repo/Packages"
 done
-((${#selected[@]})) || { echo 'All bundled packages are older than installed packages; nothing to install.'; exit 0; }
-guard="$(mktemp -d)"
-trap 'rm -rf -- "$guard"' EXIT
-mkdir "$guard/sources.list.d"
-: >"$guard/sources.list"
-options=(-o "Dir::Etc::sourcelist=$guard/sources.list" -o "Dir::Etc::sourceparts=$guard/sources.list.d" -o APT::Get::List-Cleanup=0)
+
+gzip -c "$repo/Packages" >"$repo/Packages.gz"
+mkdir -p "$guard/sources.list.d" "$guard/lists/partial" "$guard/archives/partial"
+printf 'deb [trusted=yes] file:%s ./\n' "$repo" >"$guard/sources.list"
+
+mapfile -t requested < <(sed -e 's/#.*$//' -e '/^[[:space:]]*$/d' "$payload/requested-packages.txt")
+((${#requested[@]})) || { echo 'No requested packages were found.' >&2; exit 1; }
+
+options=(
+  -o "Dir::Etc::sourcelist=$guard/sources.list"
+  -o "Dir::Etc::sourceparts=$guard/sources.list.d"
+  -o "Dir::State::lists=$guard/lists"
+  -o "Dir::Cache::archives=$guard/archives"
+  -o APT::Get::List-Cleanup=0
+  -o Acquire::Languages=none
+)
+
 export DEBIAN_FRONTEND=noninteractive
-# Resolve the complete transaction before any package is changed. Never remove
-# host packages or force older versions to satisfy the transferred snapshot.
-if ! apt-get "${options[@]}" --simulate install -y --no-remove "${selected[@]}"; then
-  echo 'Local dependency resolution failed. Rebuild/refresh the bundle for this Ubuntu release; no packages were changed.' >&2
-  exit 1
-fi
-apt-get "${options[@]}" install -y --no-remove "${selected[@]}"
+apt-get "${options[@]}" update >/dev/null
+
+# Simulate the transaction first. Refuse removals, but do not force every .deb
+# version in the bundle onto the host. Installed compatible/newer packages are
+# preserved naturally by APT.
+apt-get "${options[@]}" --simulate install -y --no-remove "${requested[@]}"
+apt-get "${options[@]}" install -y --no-remove "${requested[@]}"
