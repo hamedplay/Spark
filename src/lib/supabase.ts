@@ -1,8 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/supabaseExtensions';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const configuredSupabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+
+// Production must be DNS-agnostic: the browser always talks to the same origin
+// that served the Spark frontend. This keeps REST/Auth/Storage/Realtime/Functions
+// behind the current reverse-proxy hostname without baking an internal IP or a
+// public DNS name into the frontend bundle. Development keeps the configured URL.
+const supabaseUrl =
+  import.meta.env.PROD && typeof window !== 'undefined'
+    ? window.location.origin
+    : configuredSupabaseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+if (!supabaseUrl) {
+  throw new Error('Supabase URL is not available');
+}
 
 function getSafeStorage(): Storage | undefined {
   try {
