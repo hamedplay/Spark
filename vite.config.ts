@@ -54,7 +54,7 @@ function copyDirSafe(src: string, dest: string) {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react(), safeCopyPublicDir()],
   build: {
     // Disable Vite's built-in public dir copy; safeCopyPublicDir handles it
@@ -78,5 +78,14 @@ export default defineConfig({
   },
   define: {
     global: 'window',
+    ...(command === 'build'
+      ? {
+          // Never bake an internal IP or a specific DNS name into production.
+          // Every legacy VITE_SUPABASE_URL reference is compiled to the current
+          // browser origin, so all Supabase HTTP/WebSocket traffic follows the
+          // same reverse-proxy hostname that served Spark.
+          'import.meta.env.VITE_SUPABASE_URL': 'window.location.origin',
+        }
+      : {}),
   }
-});
+}));
