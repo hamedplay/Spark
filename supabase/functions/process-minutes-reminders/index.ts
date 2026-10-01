@@ -52,8 +52,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Reuse this existing worker as the periodic scheduler. Materialization is
-    // idempotent in Postgres (one row per decision + recurrence cycle).
     const { data: materialized, error: materializeError } = await supabase
       .rpc("materialize_due_minutes_periodic_reminders", { p_limit: 100 });
 
@@ -138,12 +136,17 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
+        let outboxId: string | null = queueResult?.outbox_id || null;
+
         if (queueResult?.ok && queueResult?.queued === false && queueResult?.reason === "DUPLICATE") {
           const { data: existingOutbox } = await supabase
             .from("notification_outbox")
             .select("id")
             .eq("idempotency_key", idempotencyKey)
             .maybeSingle();
+          outboxId = existingOutbox?.id || null;
+
+          await deferPeriodicOutbox(supabase, outboxId, isPeriodic, reminder.remind_at);
 
           await supabase
             .from("minutes_decision_reminders")
@@ -151,7 +154,7 @@ Deno.serve(async (req: Request) => {
               status: "queued",
               notification_sent_at: null,
               sms_sent_at: null,
-              outbox_id: existingOutbox?.id || null,
+              outbox_id: outboxId,
               updated_at: new Date().toISOString(),
             })
             .eq("id", reminder.id);
@@ -161,13 +164,15 @@ Deno.serve(async (req: Request) => {
         }
 
         if (queueResult?.ok) {
+          await deferPeriodicOutbox(supabase, outboxId, isPeriodic, reminder.remind_at);
+
           await supabase
             .from("minutes_decision_reminders")
             .update({
               status: "queued",
               notification_sent_at: null,
               sms_sent_at: null,
-              outbox_id: queueResult.outbox_id || null,
+              outbox_id: outboxId,
               updated_at: new Date().toISOString(),
             })
             .eq("id", reminder.id);
@@ -208,3 +213,20 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+async function deferPeriodicOutbox(
+  supabase: ReturnType<typeof createClient>,
+  outboxId: string | null,
+  isPeriodic: boolean,
+  remindAt: string | null | undefined,
+): Promise<void> {
+  if (!isPeriodic || !outboxId || !remindAt) return;
+  const deliveryMs = Date.parse(remindAt);
+  if (!Number.isFinite(deliveryMs) || deliveryMs <= Date.now()) return;
+  await supabase
+    .from("notification_outbox")
+    .update({ available_at: remindAt, next_attempt_at: remindAt })
+    .eq("id", outboxId)
+    .eq("status", "pending")
+    .is("processed_at", null);
+}
