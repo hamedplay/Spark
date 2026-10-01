@@ -68,26 +68,68 @@ PROVISIONING_ACTIONS = [
     core.Action("architecture-central-repair", "Centralized Repair", "Repair only unhealthy roles while preserving healthy nodes and upstream services.", "controlled"),
 ]
 
-MANAGER_AIRGAP_ACTIONS = [
-    core.Action("manager-airgap-build", "Build Full Repository + Manager Bundle", "Build a checksum-verified offline bundle containing the complete hamedplay/Spark main repository and Manager, pinned to one exact commit.", "controlled"),
-    core.Action("manager-airgap-install-environment", "Install / Update Full Spark + Manager", "Distribute one verified bundle and install the complete Spark repository at /opt/spark plus Manager on Database, Application and both Proxy nodes through strict SSH and the restricted bootstrap launcher.", "confirm"),
-    core.Action("manager-airgap-verify-revisions", "Verify Manager Revisions", "Compare the Jump Manager revision with all configured environment nodes and refuse mismatches."),
-    core.Action("manager-airgap-status", "Manager Deployment Status", "Show per-node Manager revision readiness without provisioning."),
+MANAGER_OFFLINE_ACTIONS = [
+    core.Action(
+        "manager-airgap-build",
+        "Build Manager Offline Update",
+        "Build a checksum-verified offline bundle containing the complete Spark repository and Manager, pinned to one exact commit.",
+        "controlled",
+    ),
+    core.Action(
+        "manager-airgap-install-environment",
+        "Update Manager — Offline",
+        "Install or update Spark and Spark Manager from one verified offline bundle across the configured environment.",
+        "confirm",
+    ),
 ]
+
+
+def _manager_actions(actions):
+    rebuilt = []
+    for action in actions:
+        if action.action_id.startswith("manager-airgap-"):
+            continue
+        if action.action_id == "manager-update":
+            rebuilt.append(core.Action(
+                action.action_id,
+                "Update Manager — Internet",
+                action.description,
+                action.risk,
+                action.special,
+            ))
+        elif action.action_id == "@recent-logs":
+            rebuilt.append(core.Action(
+                action.action_id,
+                "Recent Manager Logs",
+                action.description,
+                action.risk,
+                action.special,
+            ))
+        else:
+            rebuilt.append(action)
+    return [*MANAGER_OFFLINE_ACTIONS, *rebuilt]
 
 
 def _extend_categories() -> None:
     rebuilt = []
     architecture_found = False
     airgap_found = False
+    manager_found = False
     for category, actions in core.CATEGORIES:
         if category == "Architecture & Provisioning":
             rebuilt.append((category, list(PROVISIONING_ACTIONS)))
             architecture_found = True
-        elif category == "Installation Air-Gapped":
+        elif category == "Installation":
+            rebuilt.append(("Installation Internet", actions))
+        elif category in ("Installation Air-Gapped", "Installation Air-Gap"):
             existing = [action for action in actions if not action.action_id.startswith("manager-airgap-")]
-            rebuilt.append((category, [*MANAGER_AIRGAP_ACTIONS, *existing]))
+            rebuilt.append(("Installation Air-Gap", existing))
             airgap_found = True
+        elif category == "System":
+            rebuilt.append(("Linux System", actions))
+        elif category == "Manager":
+            rebuilt.append(("Manager", _manager_actions(actions)))
+            manager_found = True
         elif category == "Cleanup / Remove":
             fixed = []
             for action in actions:
@@ -106,7 +148,9 @@ def _extend_categories() -> None:
     if not architecture_found:
         rebuilt.append(("Architecture & Provisioning", list(PROVISIONING_ACTIONS)))
     if not airgap_found:
-        rebuilt.append(("Installation Air-Gapped", list(MANAGER_AIRGAP_ACTIONS)))
+        rebuilt.append(("Installation Air-Gap", []))
+    if not manager_found:
+        rebuilt.append(("Manager", list(MANAGER_OFFLINE_ACTIONS)))
     core.CATEGORIES[:] = rebuilt
 
 
@@ -131,14 +175,43 @@ def manager_routed_task_init(self, spark_path, action_id, args, rows, cols):
 def provisioning_self_test() -> int:
     result = _original_self_test()
     ids = {a.action_id for _, actions in core.CATEGORIES for a in actions if not a.special}
-    required = {action.action_id for action in PROVISIONING_ACTIONS} | {action.action_id for action in MANAGER_AIRGAP_ACTIONS}
+    required = {action.action_id for action in PROVISIONING_ACTIONS} | {action.action_id for action in MANAGER_OFFLINE_ACTIONS}
     missing = sorted(required - ids)
     if missing:
         raise RuntimeError("provisioning UI registry is incomplete: " + ", ".join(missing))
     if len([category for category, _ in core.CATEGORIES if category == "Architecture & Provisioning"]) != 1:
         raise RuntimeError("Architecture & Provisioning category is missing or duplicated")
-    if len([category for category, _ in core.CATEGORIES if category == "Installation Air-Gapped"]) != 1:
-        raise RuntimeError("Installation Air-Gapped category is missing or duplicated")
+    if len([category for category, _ in core.CATEGORIES if category == "Installation Air-Gap"]) != 1:
+        raise RuntimeError("Installation Air-Gap category is missing or duplicated")
+    if len([category for category, _ in core.CATEGORIES if category == "Installation Internet"]) != 1:
+        raise RuntimeError("Installation Internet category is missing or duplicated")
+    if len([category for category, _ in core.CATEGORIES if category == "Diagnostics"]) != 1:
+        raise RuntimeError("Diagnostics category is missing or duplicated")
+    if len([category for category, _ in core.CATEGORIES if category == "Linux System"]) != 1:
+        raise RuntimeError("Linux System category is missing or duplicated")
+    if len([category for category, _ in core.CATEGORIES if category == "Manager"]) != 1:
+        raise RuntimeError("Manager category is missing or duplicated")
+
+    manager_actions = [a for category, actions in core.CATEGORIES if category == "Manager" for a in actions]
+    manager_labels = {a.action_id: a.label for a in manager_actions}
+    expected_manager_labels = {
+        "manager-airgap-build": "Build Manager Offline Update",
+        "manager-airgap-install-environment": "Update Manager — Offline",
+        "manager-update": "Update Manager — Internet",
+        "@recent-logs": "Recent Manager Logs",
+    }
+    for action_id, label in expected_manager_labels.items():
+        if manager_labels.get(action_id) != label:
+            raise RuntimeError(f"Manager UI action mismatch for {action_id}: {manager_labels.get(action_id)!r}")
+
+    airgap_ids = {
+        a.action_id
+        for category, actions in core.CATEGORIES
+        if category == "Installation Air-Gap"
+        for a in actions
+    }
+    if any(action_id.startswith("manager-airgap-") for action_id in airgap_ids):
+        raise RuntimeError("Manager offline actions leaked into Installation Air-Gap")
 
     cleanup_actions = [a for category, actions in core.CATEGORIES if category == "Cleanup / Remove" for a in actions]
     if any(a.action_id == "backup-restore-plain" for a in cleanup_actions):
