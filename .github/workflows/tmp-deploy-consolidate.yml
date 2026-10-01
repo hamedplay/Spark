@@ -50,6 +50,8 @@ jobs:
               new = text
               for old, value in replacements.items():
                   new = new.replace(old, value)
+              if path == Path('deploy/spark-cli/tests/application/test_m43_static_build_deploy.py'):
+                  new = new.replace('manifest.parent.mkdir()', 'manifest.parent.mkdir(parents=True)')
               if new != text:
                   path.write_text(new, encoding='utf-8')
                   changed.append(str(path))
