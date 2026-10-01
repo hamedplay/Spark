@@ -31,7 +31,7 @@ jobs:
           grep -Fq 'NOTIFY pgrst' deploy/spark-cli/lib/database.sh
           grep -Fq 'supabase_migrations.schema_migrations' deploy/spark-cli/lib/database.sh
 
-      - name: Validate pending migration detection and transaction payload
+      - name: Validate forward-only detection and transaction payload
         shell: bash
         run: |
           set -euo pipefail
@@ -41,12 +41,13 @@ jobs:
           export CURRENT_LOG="$tmp/test.log"
           mkdir -p "$SPARK_ROOT/supabase/migrations" "$SUPABASE_ROOT"
           touch "$SUPABASE_ROOT/docker-compose.yml" "$CURRENT_LOG"
-          printf '%s\n' 'select 1;' > "$SPARK_ROOT/supabase/migrations/20261001000000_first.sql"
-          printf '%s\n' 'create table if not exists public.test_second(id bigint);' > "$SPARK_ROOT/supabase/migrations/20261002000000_second.sql"
+          printf '%s\n' 'select 1;' > "$SPARK_ROOT/supabase/migrations/20260901000000_historical_gap.sql"
+          printf '%s\n' 'select 1;' > "$SPARK_ROOT/supabase/migrations/20261001000000_current.sql"
+          printf '%s\n' 'create table if not exists public.test_next(id bigint);' > "$SPARK_ROOT/supabase/migrations/20261002000000_next.sql"
 
           fail() { printf 'FAIL: %s\n' "$*" >&2; }
           compose() {
-            if [[ "$*" == *'select version from supabase_migrations.schema_migrations'* ]]; then
+            if [[ "$*" == *'coalesce(max(version)'* ]]; then
               printf '%s\n' '20261001000000'
               return 0
             fi
@@ -56,12 +57,13 @@ jobs:
           source deploy/spark-cli/lib/database.sh
 
           pending="$(spark_database_pending_migrations)"
-          [[ "$pending" == *'20261002000000_second.sql' ]]
-          [[ "$pending" != *'20261001000000_first.sql' ]]
+          [[ "$pending" == *'20261002000000_next.sql' ]]
+          [[ "$pending" != *'20261001000000_current.sql' ]]
+          [[ "$pending" != *'20260901000000_historical_gap.sql' ]]
 
-          spark_database_apply_migration_file "$SPARK_ROOT/supabase/migrations/20261002000000_second.sql"
+          spark_database_apply_migration_file "$SPARK_ROOT/supabase/migrations/20261002000000_next.sql"
           grep -Fq 'BEGIN;' "$tmp/psql-input.sql"
-          grep -Fq "VALUES ('20261002000000', 'second')" "$tmp/psql-input.sql"
+          grep -Fq "VALUES ('20261002000000', 'next')" "$tmp/psql-input.sql"
           grep -Fq "NOTIFY pgrst, 'reload schema';" "$tmp/psql-input.sql"
           grep -Fq 'COMMIT;' "$tmp/psql-input.sql"
 
@@ -71,4 +73,4 @@ jobs:
             exit 1
           fi
 
-          echo DATABASE_UPDATE_CONTRACT_PASS
+          echo DATABASE_UPDATE_FORWARD_ONLY_PASS
