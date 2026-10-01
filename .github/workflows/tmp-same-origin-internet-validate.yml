@@ -1,0 +1,79 @@
+name: Temporary same-origin Internet validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-same-origin-internet-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate scripts and frontend build
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/spark-cli/lib/same-origin.sh
+          bash -n deploy/spark-cli/lib/runtime-fixes.sh
+          grep -Fq 'source "${SCRIPT_DIR}/lib/same-origin.sh"' deploy/spark-cli/lib/runtime-fixes.sh
+          ! grep -Fq '%VITE_SUPABASE_URL%' index.html
+          npm ci
+          VITE_SUPABASE_URL='https://api.shahrmeeting.ir' VITE_SUPABASE_ANON_KEY='test-anon-key' npm run build
+          test -f dist/index.html
+          ! grep -R -F -q 'https://api.shahrmeeting.ir' dist
+          ! grep -R -F -q '%VITE_SUPABASE_URL%' dist
+          grep -Fq "'import.meta.env.VITE_SUPABASE_URL': 'window.location.origin'" vite.config.ts
+
+      - name: Validate Nginx same-origin transformation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/spark-nginx.conf <<'EOF'
+          limit_req_zone $binary_remote_addr zone=spark_auth_limit:10m rate=10r/s;
+          map $http_upgrade $spark_connection_upgrade {
+              default upgrade;
+              '' close;
+          }
+          server {
+              listen 443 ssl http2;
+              server_name shahrmeeting.ir www.shahrmeeting.ir;
+              root /var/www/spark;
+              location /assets/ { try_files $uri =404; }
+              location / {
+                  try_files $uri $uri/ /index.html;
+              }
+          }
+          server {
+              listen 443 ssl http2;
+              server_name api.shahrmeeting.ir;
+              location / { return 404; }
+          }
+          EOF
+          cat >/tmp/test-same-origin.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          APP_DOMAIN=shahrmeeting.ir
+          fail() { printf '%s\n' "$*" >&2; }
+          source deploy/spark-cli/lib/same-origin.sh
+          spark_same_origin_patch_nginx_file /tmp/spark-nginx.conf
+          EOF
+          bash /tmp/test-same-origin.sh
+          grep -Fq '# SPARK_SAME_ORIGIN_API_ROUTES' /tmp/spark-nginx.conf
+          grep -Fq 'location ^~ /realtime/v1/' /tmp/spark-nginx.conf
+          grep -Fq 'location ^~ /functions/v1/' /tmp/spark-nginx.conf
+          grep -Fq 'location ^~ /auth/v1/' /tmp/spark-nginx.conf
+          grep -Fq 'location ^~ /rest/v1/' /tmp/spark-nginx.conf
+          grep -Fq 'location ^~ /storage/v1/' /tmp/spark-nginx.conf
+          grep -Fq 'location ^~ /graphql/v1' /tmp/spark-nginx.conf
+          grep -Fq 'try_files $uri $uri/ /index.html;' /tmp/spark-nginx.conf
+          before=$(grep -c '# SPARK_SAME_ORIGIN_API_ROUTES' /tmp/spark-nginx.conf)
+          bash /tmp/test-same-origin.sh
+          after=$(grep -c '# SPARK_SAME_ORIGIN_API_ROUTES' /tmp/spark-nginx.conf)
+          test "$before" = 1
+          test "$after" = 1
+          echo SAME_ORIGIN_MIGRATION_PASS
