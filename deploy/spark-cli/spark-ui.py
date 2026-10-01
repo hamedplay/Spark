@@ -85,6 +85,7 @@ DATABASE_ACTION_IDS = {
     "security-studio-open",
     "security-studio-close",
 }
+DATABASE_UPDATE_ACTION_ID = "database-update-supabase"
 
 
 def _manager_actions(actions):
@@ -129,6 +130,17 @@ def _application_actions(actions):
     return rebuilt
 
 
+def _database_actions(security_actions):
+    existing = [action for action in security_actions if action.action_id in DATABASE_ACTION_IDS]
+    update = core.Action(
+        DATABASE_UPDATE_ACTION_ID,
+        "Update Supabase",
+        "Apply pending Spark SQL migrations to PostgreSQL in order, record migration history, and reload the PostgREST schema cache. Application files and Supabase Docker/runtime versions are not modified.",
+        "confirm",
+    )
+    return [update, *existing]
+
+
 def _fix_cleanup_actions(actions):
     fixed = []
     for action in actions:
@@ -169,7 +181,7 @@ def _extend_categories() -> None:
     manager = _manager_actions(by_name.get("Manager", []))
 
     original_security = by_name.get("Security", [])
-    database = [action for action in original_security if action.action_id in DATABASE_ACTION_IDS]
+    database = _database_actions(original_security)
     security = [action for action in original_security if action.action_id not in DATABASE_ACTION_IDS]
 
     core.CATEGORIES[:] = [
@@ -269,9 +281,14 @@ def provisioning_self_test() -> int:
     }
     if security_ids & DATABASE_ACTION_IDS:
         raise RuntimeError("Database actions leaked into Security")
-    missing_database = DATABASE_ACTION_IDS - database_ids
+    missing_database = (DATABASE_ACTION_IDS | {DATABASE_UPDATE_ACTION_ID}) - database_ids
     if missing_database:
         raise RuntimeError("Database category is incomplete: " + ", ".join(sorted(missing_database)))
+    if not any(
+        a.action_id == DATABASE_UPDATE_ACTION_ID and a.label == "Update Supabase"
+        for category, actions in core.CATEGORIES if category == "Database" for a in actions
+    ):
+        raise RuntimeError("Database Update Supabase action is missing or mislabeled")
 
     cleanup_actions = [a for category, actions in core.CATEGORIES if category == "Cleanup / Remove" for a in actions]
     if any(a.action_id == "backup-restore-plain" for a in cleanup_actions):
@@ -293,6 +310,8 @@ def provisioning_self_test() -> int:
     spark_entry = HERE / "spark"
     if spark_entry.is_file() and "install-22)" not in spark_entry.read_text(encoding="utf-8"):
         raise RuntimeError("Spark backend does not expose install-22")
+    if spark_entry.is_file() and "database-update-supabase)" not in spark_entry.read_text(encoding="utf-8"):
+        raise RuntimeError("Spark backend does not expose database-update-supabase")
     return 0
 
 
