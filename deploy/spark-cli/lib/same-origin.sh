@@ -204,6 +204,21 @@ validate_frontend_production_build() {
   }
 }
 
+spark_same_origin_auth_health() {
+  local anon
+  anon="$(supabase_anon_key)"
+  [[ -n "$anon" ]] || {
+    fail "ANON_KEY is missing from ${SUPABASE_ROOT}/.env"
+    return 1
+  }
+
+  curl --noproxy '*' -fsS --connect-timeout 5 --max-time 10 \
+    --resolve "${APP_DOMAIN}:443:127.0.0.1" \
+    -H "apikey: ${anon}" \
+    -H "Authorization: Bearer ${anon}" \
+    "https://${APP_DOMAIN}/auth/v1/health"
+}
+
 test_update_spark_validation() {
   require_manager_values || return 1
   echo "== Supabase local =="
@@ -214,9 +229,8 @@ test_update_spark_validation() {
     --resolve "${APP_DOMAIN}:443:127.0.0.1" "https://${APP_DOMAIN}/" || return 1
 
   echo "== Same-origin API =="
-  test_auth_health_url_resolved="$(curl --noproxy '*' -fsS --connect-timeout 5 --max-time 10 \
-    --resolve "${APP_DOMAIN}:443:127.0.0.1" "https://${APP_DOMAIN}/auth/v1/health" 2>/dev/null || true)"
-  [[ -n "$test_auth_health_url_resolved" ]] || return 1
+  spark_same_origin_auth_health || return 1
+  printf '\n'
 
   echo "== Docker =="
   compose ps || return 1
