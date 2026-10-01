@@ -52,19 +52,19 @@ from __future__ import annotations
 
 import os
 import re
+import select
 import subprocess
 import sys
+import time
 
 repo_url = os.environ["REPO_URL"]
 clone_path = os.environ["CLONE_PATH"]
 width = 40
-last_reported = -1
 milestones: set[int] = set()
 
 # bootstrap.sh is commonly executed through a pipe:
 #   curl .../bootstrap.sh | sudo bash
-# In that mode stdout/stderr may not reliably look interactive. Prefer the
-# controlling terminal directly so the progress bar remains live for the user.
+# Write directly to the controlling terminal so progress remains interactive.
 tty_stream = None
 try:
     tty_stream = open("/dev/tty", "w", buffering=1, encoding="utf-8", errors="replace")
@@ -75,27 +75,21 @@ interactive = tty_stream is not None
 progress_stream = tty_stream if tty_stream is not None else sys.stderr
 
 
-def render(percent: int, final: bool = False) -> None:
-    global last_reported
-    percent = max(0, min(100, percent))
-    if percent == last_reported and not final:
-        return
-    last_reported = percent
-
+def draw(percent: int, *, final: bool = False) -> None:
+    percent = max(0, min(100, int(percent)))
     filled = int(width * percent / 100)
     bar = "█" * filled + "░" * (width - filled)
     text = f"  [{bar}]  {percent:3d}%"
 
     if interactive:
-        # Rewrite the same terminal line on every real percentage update.
-        progress_stream.write("\r\033[36m" + text + "\033[0m")
+        # Clear and repaint one terminal line only. This avoids blank lines on
+        # SSH terminals while keeping the percentage visibly live.
+        progress_stream.write("\r\033[2K\033[36m" + text + "\033[0m")
         progress_stream.flush()
         if final:
             progress_stream.write("\n")
             progress_stream.flush()
     else:
-        # Redirected logs stay compact, but still preserve representative
-        # percentages and the guaranteed final 100% value.
         bucket = (percent // 25) * 25
         if percent == 100:
             bucket = 100
@@ -105,7 +99,6 @@ def render(percent: int, final: bool = False) -> None:
             progress_stream.flush()
 
 
-render(0)
 cmd = [
     "git",
     "-c", "advice.detachedHead=false",
@@ -127,38 +120,80 @@ proc = subprocess.Popen(
     env=env,
 )
 
-buffer = b""
-errors: list[str] = []
 pattern = re.compile(r"Receiving objects:\s+(\d+)%")
+errors: list[str] = []
+buffer = b""
+observed_percent = 0
+displayed_percent = 0
+last_drawn = -1
+last_tick = 0.0
+refresh_interval = 0.035
 
-# Use unbuffered os.read() instead of BufferedReader.read(4096). The latter may
-# wait for a large buffer and make many Git percentage updates appear at once.
+
+def consume(data: bytes) -> None:
+    global buffer, observed_percent
+    if not data:
+        return
+    buffer += data
+    parts = re.split(br"[\r\n]", buffer)
+    buffer = parts.pop() if parts else b""
+    for raw in parts:
+        if not raw:
+            continue
+        line = raw.decode("utf-8", errors="replace").strip()
+        match = pattern.search(line)
+        if match:
+            observed_percent = max(observed_percent, int(match.group(1)))
+        elif any(token in line.lower() for token in ("fatal:", "error:", "failed")):
+            errors.append(line)
+
+
+def repaint(force: bool = False) -> None:
+    global displayed_percent, last_drawn, last_tick
+    now = time.monotonic()
+    if not force and now - last_tick < refresh_interval:
+        return
+    last_tick = now
+
+    # Smoothly approach Git's latest real checkpoint, but never display a
+    # percentage ahead of what Git has actually reported.
+    if displayed_percent < observed_percent:
+        displayed_percent += 1
+
+    if displayed_percent != last_drawn or force:
+        draw(displayed_percent)
+        last_drawn = displayed_percent
+
+
+draw(0)
+last_drawn = 0
+
 if proc.stderr is not None:
     fd = proc.stderr.fileno()
+    os.set_blocking(fd, False)
+
+    while proc.poll() is None:
+        readable, _, _ = select.select([fd], [], [], refresh_interval)
+        if readable:
+            try:
+                chunk = os.read(fd, 2048)
+            except BlockingIOError:
+                chunk = b""
+            consume(chunk)
+        repaint()
+
+    # Drain any final Git progress emitted immediately before process exit.
     while True:
-        chunk = os.read(fd, 512)
+        try:
+            chunk = os.read(fd, 2048)
+        except BlockingIOError:
+            break
         if not chunk:
             break
-        buffer += chunk
-        parts = re.split(br"[\r\n]", buffer)
-        buffer = parts.pop() if parts else b""
-        for raw in parts:
-            if not raw:
-                continue
-            line = raw.decode("utf-8", errors="replace").strip()
-            match = pattern.search(line)
-            if match:
-                render(int(match.group(1)))
-            elif any(token in line.lower() for token in ("fatal:", "error:", "failed")):
-                errors.append(line)
+        consume(chunk)
 
 if buffer:
-    line = buffer.decode("utf-8", errors="replace").strip()
-    match = pattern.search(line)
-    if match:
-        render(int(match.group(1)))
-    elif any(token in line.lower() for token in ("fatal:", "error:", "failed")):
-        errors.append(line)
+    consume(b"\n")
 
 return_code = proc.wait()
 if return_code != 0:
@@ -168,7 +203,16 @@ if return_code != 0:
     message = errors[-1] if errors else f"git clone exited with code {return_code}"
     raise SystemExit(f"Download failed: {message}")
 
-render(100, final=True)
+# Git completed successfully. Finish any remaining visual gap quickly and then
+# print a single final 100% line. This never advances beyond a completed clone.
+observed_percent = 100
+while displayed_percent < 100:
+    displayed_percent += 1
+    draw(displayed_percent)
+    if interactive:
+        time.sleep(0.008)
+
+draw(100, final=True)
 if tty_stream is not None:
     tty_stream.close()
 PYDOWNLOAD
