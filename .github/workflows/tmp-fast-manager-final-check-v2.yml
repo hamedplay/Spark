@@ -1,0 +1,44 @@
+name: Temporary fast Manager final check v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-fast-manager-final-check-v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate active Manager paths
+        run: |
+          set -euo pipefail
+          bash -n deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/spark
+          python3 -m py_compile deploy/spark-cli/spark-ui.py deploy/spark-cli/spark-ui-core.py deploy/spark-cli/spark-architecture deploy/spark-cli/spark-database
+          ! grep -nE 'SHA256SUMS|sha256sum|VERSION_MISMATCH|Synchronizing final integration package|commits/main' \
+            deploy/spark-cli/bootstrap.sh \
+            deploy/spark-cli/lib/airgap-manager.sh \
+            deploy/spark-cli/lib/airgap-full-source.sh \
+            deploy/spark-cli/lib/spark-manager-airgap \
+            deploy/spark-cli/spark-manager-airgap-bootstrap \
+            deploy/spark-cli/bootstrap-full-source-airgap.sh
+      - name: Run real one-command Manager install
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          curl -fsSL https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli/bootstrap.sh | sudo bash
+          elapsed=$(( $(date +%s) - start ))
+          echo "MANAGER_INSTALL_SECONDS=$elapsed"
+          test -x /usr/local/bin/spark
+          /usr/local/bin/spark --version
+          test -L /usr/local/bin/spark-airgap
+          test -L /usr/local/bin/spark-architecture
+          test -L /usr/local/bin/spark-database
+          test -L /usr/local/bin/spark-manager-airgap
+          test -L /usr/local/bin/build-manager-airgap
+          echo FAST_MANAGER_INSTALL_PASS
