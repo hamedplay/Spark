@@ -58,7 +58,12 @@ export function useCalendarDataActions(scope: Record<string, any>) {
       const queryTo   = fmt(dayAfter);
       console.log('[CalendarPage] fetchMeetings query range:', queryFrom, '→', queryTo, '(jy/jm:', baseJy, baseJm + ')');
 
-      const [{ data, error }, { data: inboxRows }, { data: ownerDelegateRows, error: ownerDelegateError }] = await Promise.all([
+      const [
+        { data, error },
+        { data: inboxRows },
+        { data: ownerDelegateRows, error: ownerDelegateError },
+        { data: exclusionRows, error: exclusionError },
+      ] = await Promise.all([
         supabase.from('meetings')
           .select('id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
           .neq('status', 'closed')
@@ -69,9 +74,13 @@ export function useCalendarDataActions(scope: Record<string, any>) {
           .select('meeting_id, status')
           .eq('user_id', userId),
         supabase.rpc('get_my_meeting_delegations_v1'),
+        supabase.from('meeting_calendar_exclusions')
+          .select('meeting_id')
+          .eq('user_id', userId),
       ]);
 
       if (error) throw error;
+      if (exclusionError) throw exclusionError;
       if (ownerDelegateError) {
         console.warn('[CalendarPage] meeting delegation status enrichment unavailable:', ownerDelegateError);
       }
@@ -79,14 +88,19 @@ export function useCalendarDataActions(scope: Record<string, any>) {
       const inboxStatus = new Map<string, string>(
         (inboxRows || []).map((r: any) => [r.meeting_id, r.status])
       );
+      const excludedMeetingIds = new Set<string>(
+        (exclusionRows || []).map((r: any) => r.meeting_id)
+      );
 
       // Visibility rules (mirrors the required calendar query):
-      //   Creator      → always visible (they own the meeting)
+      //   Personal exclusion → never visible in this user's calendar
+      //   Creator      → visible unless personally excluded
       //   Participant  → visible unless inbox is explicitly 'pending' or 'declined'
       //                  (accepted ✓, no-entry = directly added/delegated ✓, delegated ✓)
       //   Observer /
       //   Subscribed   → visible unless explicitly pending or declined
       const filtered = (data || []).filter((m: any) => {
+        if (excludedMeetingIds.has(m.id)) return false;
         if (m.user_id === userId) return true; // creator
 
         const isParticipant = (m.participant_user_ids || []).includes(userId);
@@ -298,6 +312,34 @@ export function useCalendarDataActions(scope: Record<string, any>) {
     setDeleteMeetingDialog({ id, deleteRepeating });
   };
 
+  const removeMeetingFromMyCalendar = useCallback(async (id: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('لطفا وارد شوید');
+
+    const { error } = await supabase.rpc('remove_self_from_meeting', { p_meeting_id: id });
+    if (error) throw error;
+
+    // Immediate local removal after confirmed backend success; subsequent fetches
+    // remain consistent because the exclusion is persisted in the database.
+    setMeetings((prev: MeetingData[]) => prev.filter((meeting) => meeting.id !== id));
+    setDetailMeeting(null);
+    setDeleteMeetingDialog(null);
+    fetchMeetingsRef.current();
+  }, [setMeetings, setDetailMeeting, setDeleteMeetingDialog]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const meetingId = (event as CustomEvent<{ meetingId?: string }>).detail?.meetingId;
+      if (!meetingId) return;
+      void removeMeetingFromMyCalendar(meetingId)
+        .then(() => toast.success('جلسه از تقویم شما حذف شد'))
+        .catch((err: any) => toast.error(err?.message || 'خطا در حذف جلسه از تقویم'));
+    };
+
+    window.addEventListener('spark:remove-meeting-from-my-calendar', handler);
+    return () => window.removeEventListener('spark:remove-meeting-from-my-calendar', handler);
+  }, [removeMeetingFromMyCalendar]);
+
   const handleDeleteMeetingConfirm = async (mode: 'revert' | 'full') => {
     if (!deleteMeetingDialog) return;
     const { id, deleteRepeating } = deleteMeetingDialog;
@@ -467,8 +509,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
 
         toast.success('جلسه حذف شد');
       } else {
-        const { error } = await supabase.rpc('remove_self_from_meeting', { p_meeting_id: id });
-        if (error) throw error;
+        await removeMeetingFromMyCalendar(id);
         toast.success('جلسه از تقویم شما حذف شد');
       }
       setDetailMeeting(null);
