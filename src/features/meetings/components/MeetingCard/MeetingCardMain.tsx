@@ -109,7 +109,10 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
   const handleAddToGoogleCalendar = () => {
     try {
       const calendarUrl = buildGoogleCalendarEventUrl({ meeting, agendaItems });
-      window.open(calendarUrl, '_blank');
+      const openedWindow = window.open(calendarUrl, '_blank');
+      if (!openedWindow) {
+        window.location.assign(calendarUrl);
+      }
     } catch {
       toast.error('خطا در ایجاد رویداد تقویم');
     }
