@@ -12,7 +12,7 @@ interface SectionApproversProps {
 export function SectionApprovers({ approvalMode, internalParticipants, profiles, readOnly }: SectionApproversProps) {
   const profileLabel = (p: ProfileOption) => p.full_name || p.username || p.user_id;
 
-  const eligibleApprovers = internalParticipants.filter(p => !!p.userId);
+  const eligibleApprovers = internalParticipants.filter(p => p.isSignatory && !!p.userId);
 
   return (
     <div className="space-y-5" dir="rtl">
@@ -34,7 +34,7 @@ export function SectionApprovers({ approvalMode, internalParticipants, profiles,
               <span className="font-medium">تأیید سیستمی</span>
             </div>
             <p className="leading-relaxed">
-              صورت‌جلسه برای تمام شرکت‌کنندگان داخلی دارای حساب سامانه به‌صورت خودکار ارسال می‌شود. حضور در جلسه شرط افزودن به تأییدکنندگان نیست. پس از تأیید همه، تأیید دبیر و سپس رئیس جلسه برای انتشار لازم است.
+              صورت‌جلسه فقط برای امضاکنندگانی که در بخش «شرکت‌کنندگان» انتخاب شده‌اند و حساب سامانه دارند ارسال می‌شود. پس از تأیید همه امضاکنندگان سیستمی، تأیید دبیر و سپس رئیس جلسه برای انتشار لازم است.
             </p>
           </div>
 
@@ -42,12 +42,12 @@ export function SectionApprovers({ approvalMode, internalParticipants, profiles,
             <div className="flex items-center gap-2 mb-3">
               <Users className="w-4 h-4 text-gray-500" />
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                تأییدکنندگان خودکار ({eligibleApprovers.length} نفر)
+                امضاکنندگان سیستمی ({eligibleApprovers.length} نفر)
               </h3>
             </div>
             {eligibleApprovers.length === 0 ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                هیچ شرکت‌کننده داخلی با حساب کاربری وجود ندارد. ابتدا در بخش «شرکت‌کنندگان» افراد را اضافه کنید.
+                هیچ امضاکننده داخلی دارای حساب سامانه انتخاب نشده است. در بخش «شرکت‌کنندگان» افراد موردنظر را به‌عنوان امضاکننده مشخص کنید.
               </p>
             ) : (
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -69,7 +69,7 @@ export function SectionApprovers({ approvalMode, internalParticipants, profiles,
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{sublabelParts.join(' — ')}</p>
                           )}
                         </div>
-                        <span className="text-xs text-gray-400">تأیید سیستمی</span>
+                        <span className="text-xs text-gray-400">امضاکننده سیستمی</span>
                       </li>
                     );
                   })}
@@ -88,11 +88,11 @@ export function SectionApprovers({ approvalMode, internalParticipants, profiles,
               <span className="font-medium">تأیید حضوری</span>
             </div>
             <p className="leading-relaxed">
-              در تأیید حضوری، تأیید شرکت‌کنندگان سیستمی وجود ندارد و رکورد تأییدی ساخته نمی‌شود. دبیر تأیید می‌کند که صورت‌جلسه در جلسه حضوری تأیید شده، سپس رئیس جلسه آن را منتشر می‌کند.
+              در تأیید حضوری رکورد تأیید سیستمی ساخته نمی‌شود. فقط افرادی که در بخش «شرکت‌کنندگان» به‌عنوان امضاکننده انتخاب شده‌اند در محل امضای نسخه نهایی نمایش داده می‌شوند؛ سپس دبیر و رئیس جلسه مراحل نهایی انتشار را انجام می‌دهند.
             </p>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            لیست تأییدکنندگان در این روش نمایش داده نمی‌شود.
+            لیست تأییدکنندگان سیستمی در این روش نمایش داده نمی‌شود.
           </p>
         </div>
       )}
