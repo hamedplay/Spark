@@ -13,14 +13,21 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Benchmark shallow git download
+      - uses: actions/checkout@v4
+      - name: Validate bootstrap syntax
         shell: bash
         run: |
           set -euo pipefail
-          start=$(date +%s%3N)
-          GIT_PROGRESS_DELAY=0 git clone --depth 1 --single-branch --branch main --progress https://github.com/hamedplay/Spark.git /tmp/spark-clone 2>&1 | tee /tmp/git-progress.log
-          end=$(date +%s%3N)
-          echo "CLONE_MS=$((end-start))"
-          du -sh /tmp/spark-clone
-          grep -E 'Receiving objects:.*%|Resolving deltas:.*%' /tmp/git-progress.log | tail -20 || true
-          test -f /tmp/spark-clone/deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/bootstrap.sh
+          grep -Fq 'Receiving objects:' deploy/spark-cli/bootstrap.sh
+          grep -Fq '"█" * filled + "░" *' deploy/spark-cli/bootstrap.sh
+          grep -Fq 'percent:3d}%' deploy/spark-cli/bootstrap.sh
+      - name: Real install and percentage check
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli/bootstrap.sh | sudo bash 2>&1 | tee /tmp/manager-install.log
+          for p in 0 25 50 75 100; do
+            grep -Eq "[[:space:]]${p}%([[:space:]]|$)" /tmp/manager-install.log
+          done
+          /usr/local/bin/spark --version
