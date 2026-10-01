@@ -6,6 +6,7 @@ import { SelectField, TextareaField } from './fields';
 import { PRIORITY_OPTIONS } from './options';
 import { SearchableSelect } from './SearchableSelect';
 import { JalaliDatePicker } from './JalaliDatePicker';
+import { DecisionPeriodicFollowupFields } from './DecisionPeriodicFollowupFields';
 import { isDueBeforeStart } from '../../../lib/minutesDate';
 import { formatClauseLabel, getDraftDecisionClauses, getParentDraftDecisions } from '../decisionHierarchy';
 
@@ -33,6 +34,9 @@ function copyExecutionFields(source: DraftDecision) {
     startDate: source.startDate,
     dueDate: source.dueDate,
     requiresFollowup: source.requiresFollowup,
+    followupRecurrence: source.followupRecurrence,
+    followupRecipientType: source.followupRecipientType,
+    nextPeriodicFollowupAt: source.nextPeriodicFollowupAt,
     latestUpdate: source.latestUpdate,
     responsiblePartyType: source.responsiblePartyType,
     externalResponsibleParticipantId: source.externalResponsibleParticipantId,
@@ -160,6 +164,7 @@ export function SectionDecisions({
               update(item.id, 'externalResponsiblePositionSnapshot', '');
             } else {
               update(item.id, 'primaryOwnerUserId', '');
+              update(item.id, 'followupRecipientType', 'secretary');
             }
           }}
           disabled={!!readOnly}
@@ -294,12 +299,13 @@ export function SectionDecisions({
             type="checkbox"
             checked={item.requiresFollowup}
             onChange={event => update(item.id, 'requiresFollowup', event.target.checked)}
-            disabled={!!readOnly}
+            disabled={!!readOnly || (item.followupRecurrence !== undefined && item.followupRecurrence !== 'none')}
             className="w-4 h-4 rounded accent-blue-600 disabled:opacity-60"
           />
           <span className="text-sm text-gray-700 dark:text-gray-300">نیازمند پیگیری</span>
         </label>
       </div>
+      <DecisionPeriodicFollowupFields item={item} readOnly={readOnly} update={update} />
     </>
   );
 
