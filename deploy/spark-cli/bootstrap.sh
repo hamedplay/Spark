@@ -34,11 +34,9 @@ source_dir="$(find "$tmp" -type d -path '*/deploy/spark-cli' -print -quit)"
 # Fast local syntax checks only; no revision/version/checksum matching.
 bash -n "$source_dir/spark"
 [[ ! -f "$source_dir/spark-airgap" ]] || bash -n "$source_dir/spark-airgap"
-[[ ! -f "$source_dir/spark-architecture" ]] || bash -n "$source_dir/spark-architecture"
-[[ ! -f "$source_dir/spark-database" ]] || bash -n "$source_dir/spark-database"
 [[ ! -f "$source_dir/spark-migrate" ]] || bash -n "$source_dir/spark-migrate"
 for file in "$source_dir"/lib/*.sh; do bash -n "$file"; done
-python3 - "$source_dir/spark-ui.py" "$source_dir/spark-ui-core.py" <<'PYCODE'
+python3 - "$source_dir/spark-ui.py" "$source_dir/spark-ui-core.py" "$source_dir/spark-architecture" "$source_dir/spark-database" <<'PYCODE'
 from pathlib import Path
 import sys
 for value in sys.argv[1:]:

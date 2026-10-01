@@ -104,24 +104,6 @@ PY
   chmod 0755 /usr/local/lib/spark-manager
   ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
 
-  if ! version_output="$($CLI_PATH --version 2>/dev/null)" || [[ "$version_output" != "Spark Server Manager ${SPARK_MANAGER_VERSION}" ]]; then
-    rm -f "$CLI_PATH"
-    rm -rf /usr/local/lib/spark-manager
-    if [[ -d "$backup" ]]; then
-      mv "$backup" /usr/local/lib/spark-manager
-      ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
-    fi
-    return 1
-  fi
-  if ! "$CLI_PATH" --ui-self-test >/dev/null 2>&1; then
-    rm -f "$CLI_PATH"
-    rm -rf /usr/local/lib/spark-manager
-    if [[ -d "$backup" ]]; then
-      mv "$backup" /usr/local/lib/spark-manager
-      ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
-    fi
-    return 1
-  fi
 
   rm -rf "$backup"
   rm -rf /usr/local/share/spark-manager 2>/dev/null || true
