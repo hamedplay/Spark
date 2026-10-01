@@ -122,6 +122,10 @@ function serializeDecision(
     start_date: executionSource.startDate || null,
     due_date: executionSource.dueDate || null,
     requires_followup: executionSource.requiresFollowup,
+    ...(executionSource.followupRecurrence !== undefined ? {
+      followup_recurrence: executionSource.followupRecurrence,
+      followup_recipient_type: executionSource.followupRecipientType || 'secretary',
+    } : {}),
     latest_update: executionSource.latestUpdate || null,
     discussion_result: decision.discussionResult || null,
     result_type: decision.resultType || null,
@@ -162,6 +166,11 @@ function validateExecutionOwner(decision: DraftDecision, noun: 'مصوبه' | '�
   }
   if (decision.startDate && decision.dueDate && decision.dueDate < decision.startDate) {
     return `مهلت ${noun} نمی‌تواند قبل از تاریخ شروع باشد`;
+  }
+  if (decision.followupRecurrence && decision.followupRecurrence !== 'none'
+      && decision.followupRecipientType === 'owner'
+      && decision.responsiblePartyType !== 'internal') {
+    return `برای یادآوری دوره‌ای ${noun} با مسئول خارج سازمان، گیرنده باید دبیر جلسه باشد`;
   }
   return null;
 }
