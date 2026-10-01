@@ -358,6 +358,7 @@ export function MinutesFormView({
               <SectionApprovers
                 approvalMode={info.approvalMode}
                 internalParticipants={internalParticipants}
+                externalParticipants={externalParticipants}
                 profiles={profiles}
                 readOnly={isNonEditable}
               />
