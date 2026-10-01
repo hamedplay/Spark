@@ -89,6 +89,7 @@ export function buildDocumentDataFromDraft(
         org_unit_name_snapshot: p.orgUnitNameSnapshot || null,
         attendance_status: p.attendanceStatus ?? null,
         delegate_name: p.delegateName || null,
+        is_signatory: !!p.isSignatory,
       })),
     externalParts: externalParticipants
       .filter(p => p.fullName)
@@ -98,6 +99,7 @@ export function buildDocumentDataFromDraft(
         organization: p.organization || null,
         position: p.position || null,
         attendance_status: p.attendanceStatus ?? null,
+        is_signatory: !!p.isSignatory,
       })),
     agendaItems: agendaItems
       .filter(a => a.title)
