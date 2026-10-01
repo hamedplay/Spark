@@ -156,12 +156,12 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         const [internalResult, externalResult, agendaResult] = await Promise.all([
           supabase
             .from('minutes_participants')
-            .select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, delegate_name, notes')
+            .select('id, user_id, name_snapshot, position_snapshot, org_unit_id, org_unit_name_snapshot, invitation_status, attendance_status, delegate_name, notes, is_signatory')
             .eq('minute_id', targetId)
             .order('created_at', { ascending: true }),
           supabase
             .from('minutes_external_participants')
-            .select('id, full_name, organization, position, mobile, email, invitation_status, attendance_status, notes')
+            .select('id, full_name, organization, position, mobile, email, invitation_status, attendance_status, notes, is_signatory')
             .eq('minute_id', targetId)
             .order('created_at', { ascending: true }),
           supabase
@@ -193,6 +193,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             delegateUserId: null,
             delegateName: (row.delegate_name as string) || '',
             notes: (row.notes as string) || '',
+            isSignatory: (row.is_signatory as boolean) ?? false,
             source: 'saved' as const,
           })) : [defaultInternalParticipant()]);
         }
@@ -216,6 +217,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             invitationStatus: (row.invitation_status as InvitationStatus) || 'invited',
             attendanceStatus: (row.attendance_status as AttendanceStatus | null) ?? null,
             notes: (row.notes as string) || '',
+            isSignatory: (row.is_signatory as boolean) ?? false,
             source: 'saved' as const,
           })) : [defaultExternalParticipant()]);
         }
@@ -470,6 +472,47 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
   const makeDecisionsPayload = () => buildDecisionsPayload(decisions);
   const validate = () => validateMinutesForm({ info, decisions, prefillLoading, prefillError });
 
+  const syncSignatories = async (targetMinuteId: string): Promise<boolean> => {
+    const internalUserIds = Array.from(new Set(
+      internalParticipants
+        .filter(participant => participant.isSignatory && !!participant.userId)
+        .map(participant => participant.userId),
+    ));
+    const externalParticipantIds = Array.from(new Set(
+      externalParticipants
+        .filter(participant => participant.isSignatory && !!participant.participantId)
+        .map(participant => participant.participantId as string),
+    ));
+
+    const { data, error } = await supabase.rpc('sync_minutes_signatories', {
+      p_minute_id: targetMinuteId,
+      p_internal_user_ids: internalUserIds,
+      p_external_participant_ids: externalParticipantIds,
+    });
+
+    if (error) {
+      console.error('[MinutesSignatories] sync failed', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
+      toast.error('ذخیره امضاکنندگان صورت‌جلسه ناموفق بود.');
+      return false;
+    }
+    if (data && data.success === false) {
+      const code: string = data.error_code || 'INTERNAL_ERROR';
+      if (code === 'SYSTEM_EXTERNAL_SIGNATORY_NOT_ALLOWED') {
+        toast.error('در مدل تأیید سیستمی، فرد خارج از سازمان نمی‌تواند امضاکننده باشد.');
+      } else if (code === 'SIGNATORY_NOT_PARTICIPANT') {
+        toast.error('یکی از امضاکنندگان انتخاب‌شده دیگر در فهرست شرکت‌کنندگان وجود ندارد.');
+      } else {
+        toast.error('ذخیره امضاکنندگان صورت‌جلسه ناموفق بود.');
+      }
+      return false;
+    }
+    return true;
+  };
+
   const persistMinuteRef = useRef<Promise<WorkingMinuteResult | null> | null>(null);
   const minutesActionRef = useRef<Promise<void> | null>(null);
 
@@ -556,6 +599,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
               toast.error('ذخیره پیش‌نویس صورت‌جلسه ناموفق بود.');
               return null;
             }
+            if (!(await syncSignatories(newId))) return null;
             setEditUpdatedAt(realUpdatedAt);
             setWorkingMinuteId(newId);
             setMinuteIdInUrl(newId);
@@ -636,6 +680,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
             return null;
           }
+          if (!(await syncSignatories(existingMinuteId))) return null;
           if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, returnedUpdatedAt);
           setEditUpdatedAt(returnedUpdatedAt);
           setWorkingMinuteId(existingMinuteId);
@@ -720,9 +765,17 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         return;
       }
       if (info.approvalMode === 'system') {
+        if (externalParticipants.some(participant => participant.isSignatory)) {
+          toast.error('در مدل تأیید سیستمی، امضاکننده خارج از سازمان مجاز نیست. برای این حالت از تأیید حضوری استفاده کنید.');
+          return;
+        }
+        if (internalParticipants.some(participant => participant.isSignatory && !participant.userId)) {
+          toast.error('در مدل تأیید سیستمی، همه امضاکنندگان داخلی باید حساب کاربری سامانه داشته باشند.');
+          return;
+        }
         const eligibility = checkSystemApproverEligibility(info.approvalMode, internalParticipants);
         if (!eligibility.canSubmit) {
-          toast.error(eligibility.errorMessage || 'در مدل سیستمی حداقل یک شرکت‌کننده داخلی با حساب کاربری لازم است.');
+          toast.error(eligibility.errorMessage || 'در مدل سیستمی حداقل یک امضاکننده داخلی با حساب کاربری لازم است.');
           return;
         }
       }
