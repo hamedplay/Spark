@@ -23,8 +23,8 @@ jobs:
           bash -n deploy/spark-cli/lib/airgap-observability-quiet-base.sh
           grep -Fq 'source "${SCRIPT_DIR}/lib/progress-ui.sh"' deploy/spark-cli/lib/runtime-fixes.sh
           grep -Fq 'source "${SCRIPT_DIR}/lib/progress-ui.sh"' deploy/spark-cli/lib/airgap-observability-quiet-base.sh
-          bash deploy/spark-cli/spark --version
-          bash deploy/spark-cli/spark-airgap --version
+          sudo bash deploy/spark-cli/spark --version
+          sudo bash deploy/spark-cli/spark-airgap --version
       - name: PTY activity progress
         shell: bash
         run: |
