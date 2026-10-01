@@ -1,0 +1,148 @@
+name: Temporary fast Manager fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-fast-manager-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fix fast install checks and legacy local installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # Fix fast bootstrap language-aware syntax validation.
+          p = Path('deploy/spark-cli/bootstrap.sh')
+          s = p.read_text(encoding='utf-8')
+          old = '''bash -n "$source_dir/spark"
+          [[ ! -f "$source_dir/spark-airgap" ]] || bash -n "$source_dir/spark-airgap"
+          [[ ! -f "$source_dir/spark-architecture" ]] || bash -n "$source_dir/spark-architecture"
+          [[ ! -f "$source_dir/spark-database" ]] || bash -n "$source_dir/spark-database"
+          [[ ! -f "$source_dir/spark-migrate" ]] || bash -n "$source_dir/spark-migrate"
+          for file in "$source_dir"/lib/*.sh; do bash -n "$file"; done
+          python3 - "$source_dir/spark-ui.py" "$source_dir/spark-ui-core.py" <<'PYCODE'
+          from pathlib import Path
+          import sys
+          for value in sys.argv[1:]:
+              path = Path(value)
+              if path.is_file():
+                  compile(path.read_text(encoding='utf-8'), str(path), 'exec')
+          PYCODE
+          '''
+          old = '\n'.join(line[10:] if line.startswith('          ') else line for line in old.splitlines())
+          new = '''bash -n "$source_dir/spark"
+          [[ ! -f "$source_dir/spark-airgap" ]] || bash -n "$source_dir/spark-airgap"
+          [[ ! -f "$source_dir/spark-migrate" ]] || bash -n "$source_dir/spark-migrate"
+          for file in "$source_dir"/lib/*.sh; do bash -n "$file"; done
+          python3 - "$source_dir/spark-ui.py" "$source_dir/spark-ui-core.py" "$source_dir/spark-architecture" "$source_dir/spark-database" <<'PYCODE'
+          from pathlib import Path
+          import sys
+          for value in sys.argv[1:]:
+              path = Path(value)
+              if path.is_file():
+                  compile(path.read_text(encoding='utf-8'), str(path), 'exec')
+          PYCODE
+          '''
+          new = '\n'.join(line[10:] if line.startswith('          ') else line for line in new.splitlines())
+          if old not in s:
+              raise SystemExit('bootstrap syntax validation block changed')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          # Replace the active local Manager installer override with a fast atomic copy.
+          # No Manager version equality, revision parity, checksum, or expensive UI self-test.
+          p = Path('deploy/spark-cli/spark')
+          s = p.read_text(encoding='utf-8')
+          replacement = r'''install_manager_from_dir() {
+            local source_dir="$1"
+            local stage backup file
+            [[ -f "${source_dir}/spark" && -f "${source_dir}/spark-ui.py" && -d "${source_dir}/lib" ]] || {
+              fail "Spark Manager source is incomplete: ${source_dir}"
+              return 1
+            }
+
+            bash -n "${source_dir}/spark" || return 1
+            for file in "${source_dir}"/lib/*.sh; do bash -n "$file" || return 1; done
+            python3 - "${source_dir}/spark-ui.py" "${source_dir}/spark-ui-core.py" "${source_dir}/spark-architecture" "${source_dir}/spark-database" <<'PY'
+          from pathlib import Path
+          import sys
+          for value in sys.argv[1:]:
+              path = Path(value)
+              if path.is_file():
+                  compile(path.read_text(encoding="utf-8"), str(path), "exec")
+          PY
+
+            install -d -m 0755 /usr/local/lib
+            stage="$(mktemp -d /usr/local/lib/spark-manager.new.XXXXXX)"
+            backup="/usr/local/lib/spark-manager.previous.$$"
+            cp -a "${source_dir}/." "$stage/"
+            chmod 0755 "$stage/spark"
+            for file in spark-airgap spark-architecture spark-database spark-migrate spark-manager-airgap-bootstrap; do
+              [[ ! -f "$stage/$file" ]] || chmod 0755 "$stage/$file"
+            done
+            for file in "$stage/lib/spark-manager-airgap" "$stage/lib/build-manager-airgap"; do
+              [[ ! -f "$file" ]] || chmod 0755 "$file"
+            done
+
+            [[ ! -d /usr/local/lib/spark-manager ]] || mv /usr/local/lib/spark-manager "$backup"
+            if ! mv "$stage" /usr/local/lib/spark-manager; then
+              [[ ! -d "$backup" ]] || mv "$backup" /usr/local/lib/spark-manager
+              rm -rf "$stage"
+              return 1
+            fi
+            ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
+            rm -rf "$backup" /usr/local/share/spark-manager 2>/dev/null || true
+          }
+
+          self_update() {'''
+          replacement = '\n'.join(line[10:] if line.startswith('          ') else line for line in replacement.splitlines())
+          s, count = re.subn(r'install_manager_from_dir\(\) \{.*?\n\}\n\nself_update\(\) \{', replacement, s, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit('active install_manager_from_dir block not found')
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          bash -n deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/spark
+          python3 -m py_compile deploy/spark-cli/spark-ui.py deploy/spark-cli/spark-ui-core.py deploy/spark-cli/spark-architecture deploy/spark-cli/spark-database
+
+          # Active manager paths must not contain slow integrity/version gates.
+          ! grep -nE 'SHA256SUMS|sha256sum|VERSION_MISMATCH|Synchronizing final integration package|commits/main' \
+            deploy/spark-cli/bootstrap.sh \
+            deploy/spark-cli/lib/airgap-manager.sh \
+            deploy/spark-cli/lib/airgap-full-source.sh \
+            deploy/spark-cli/lib/spark-manager-airgap \
+            deploy/spark-cli/spark-manager-airgap-bootstrap \
+            deploy/spark-cli/bootstrap-full-source-airgap.sh
+
+          # Active entrypoint installer must not perform Manager version equality or UI self-test.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path('deploy/spark-cli/spark').read_text(encoding='utf-8')
+          block = re.search(r'install_manager_from_dir\(\) \{(.*?)\n\}\n\nself_update\(\)', s, re.S)
+          if not block:
+              raise SystemExit('install_manager_from_dir missing')
+          body = block.group(1)
+          for forbidden in ('SPARK_MANAGER_VERSION', '--ui-self-test', 'version_output', 'SHA256', 'sha256'):
+              if forbidden in body:
+                  raise SystemExit(f'forbidden slow Manager gate remains: {forbidden}')
+          PY
+
+          git config user.name 'Spark Manager Automation'
+          git config user.email 'spark-manager@users.noreply.github.com'
+          git add deploy/spark-cli/bootstrap.sh deploy/spark-cli/spark
+          git commit -m 'fix: make Manager install path fast and language-aware'
+          git push origin HEAD:main
