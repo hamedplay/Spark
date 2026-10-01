@@ -5,7 +5,7 @@
 
 spark_database_pending_migrations() {
   local migrations_dir="${SPARK_ROOT}/supabase/migrations"
-  local applied_file file base version
+  local latest_applied file base version
 
   [[ -d "$migrations_dir" ]] || {
     fail "Migration directory not found: ${migrations_dir}"
@@ -16,25 +16,26 @@ spark_database_pending_migrations() {
     return 1
   }
 
-  applied_file="$(mktemp)"
-  if ! compose exec -T db psql -X -U postgres -d postgres -Atqc \
-    "select version from supabase_migrations.schema_migrations order by version" \
-    >"$applied_file" 2>>"${CURRENT_LOG}"; then
-    rm -f "$applied_file"
+  if ! latest_applied="$(compose exec -T db psql -X -U postgres -d postgres -Atqc \
+    "select coalesce(max(version), '00000000000000') from supabase_migrations.schema_migrations where version ~ '^[0-9]{14}$'" \
+    2>>"${CURRENT_LOG}")"; then
     fail "Unable to read Supabase migration history."
     return 1
   fi
+  latest_applied="${latest_applied//$'\r'/}"
+  [[ "$latest_applied" =~ ^[0-9]{14}$ ]] || {
+    fail "Invalid latest migration version returned by database: ${latest_applied}"
+    return 1
+  }
 
   while IFS= read -r file; do
     base="$(basename "$file")"
     version="${base%%_*}"
     [[ "$version" =~ ^[0-9]{14}$ ]] || continue
-    if ! grep -Fxq "$version" "$applied_file"; then
+    if [[ "$version" > "$latest_applied" ]]; then
       printf '%s\n' "$file"
     fi
   done < <(find "$migrations_dir" -maxdepth 1 -type f -name '*.sql' -print | sort)
-
-  rm -f "$applied_file"
 }
 
 spark_database_apply_migration_file() {
@@ -100,7 +101,7 @@ spark_database_update_supabase() {
     return 0
   fi
 
-  info "Pending migrations: ${total}"
+  info "Pending forward migrations: ${total}"
   for file in "${pending[@]}"; do
     current=$((current + 1))
     base="$(basename "$file")"
@@ -117,10 +118,20 @@ spark_database_update_supabase() {
     return 1
   fi
 
-  if ! installation_migrations_current >>"${CURRENT_LOG}" 2>&1; then
-    fail "Migration validation failed: database history is still behind the repository."
+  local remaining_file
+  remaining_file="$(mktemp)"
+  if ! spark_database_pending_migrations >"$remaining_file"; then
+    rm -f "$remaining_file"
+    fail "Post-update migration validation could not read migration history."
     return 1
   fi
+  if [[ -s "$remaining_file" ]]; then
+    cat "$remaining_file" >>"${CURRENT_LOG}"
+    rm -f "$remaining_file"
+    fail "Migration validation failed: forward migrations are still pending."
+    return 1
+  fi
+  rm -f "$remaining_file"
 
   ok "Supabase database schema updated successfully."
   printf 'Applied migrations: %d\n' "$total"
