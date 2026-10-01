@@ -113,6 +113,22 @@ def _manager_actions(actions):
     return [*MANAGER_OFFLINE_ACTIONS, *rebuilt]
 
 
+def _application_actions(actions):
+    rebuilt = []
+    for action in actions:
+        if action.action_id == "app-update":
+            rebuilt.append(core.Action(
+                action.action_id,
+                "Update Internet App",
+                "Fetch latest application source, run npm ci/build, and atomically deploy frontend only. Database, Supabase runtime, Edge Functions, workers, schedulers and Manager are not modified.",
+                action.risk,
+                action.special,
+            ))
+        else:
+            rebuilt.append(action)
+    return rebuilt
+
+
 def _fix_cleanup_actions(actions):
     fixed = []
     for action in actions:
@@ -129,10 +145,6 @@ def _fix_cleanup_actions(actions):
 
 
 def _extend_categories() -> None:
-    # Normalize the stable/base registry first. Only the ten approved top-level
-    # categories are exposed by the final Manager UI. Removed categories keep
-    # their backend actions for compatibility, but they are no longer reachable
-    # from the main menu.
     by_name = {}
     for category, actions in core.CATEGORIES:
         normalized = category
@@ -152,7 +164,7 @@ def _extend_categories() -> None:
     diagnostics = by_name.get("Diagnostics", [])
     backups = by_name.get("Backups", [])
     cleanup = _fix_cleanup_actions(by_name.get("Cleanup / Remove", []))
-    application = by_name.get("Application", [])
+    application = _application_actions(by_name.get("Application", []))
     linux_system = by_name.get("Linux System", [])
     manager = _manager_actions(by_name.get("Manager", []))
 
@@ -192,9 +204,6 @@ def manager_routed_task_init(self, spark_path, action_id, args, rows, cols):
 
 
 def provisioning_self_test() -> int:
-    # The wrapper owns the final menu contract. Do not call the legacy base
-    # self-test here because it intentionally requires retired top-level
-    # categories such as Architecture & Provisioning and the old Air-Gapped name.
     if core.SPARK_UI_VERSION != SPARK_UI_VERSION:
         raise RuntimeError(
             f"Spark UI core version mismatch: wrapper={SPARK_UI_VERSION} core={core.SPARK_UI_VERSION}"
@@ -208,6 +217,11 @@ def provisioning_self_test() -> int:
         )
     if len(categories) != len(set(categories)):
         raise RuntimeError("Spark Manager main menu contains duplicate categories")
+
+    application_actions = [a for category, actions in core.CATEGORIES if category == "Application" for a in actions]
+    application_labels = {a.action_id: a.label for a in application_actions}
+    if application_labels.get("app-update") != "Update Internet App":
+        raise RuntimeError(f"Application UI action mismatch for app-update: {application_labels.get('app-update')!r}")
 
     manager_actions = [a for category, actions in core.CATEGORIES if category == "Manager" for a in actions]
     manager_labels = {a.action_id: a.label for a in manager_actions}
@@ -270,8 +284,6 @@ def provisioning_self_test() -> int:
     if leaked:
         raise RuntimeError("Removed main-menu categories still visible: " + ", ".join(sorted(leaked)))
 
-    # Preserve the base English-only UI guard without inheriting its retired
-    # menu-shape assertions.
     base.assert_english_ui_registry()
     sample = "\u062a\u0633\u062a Docker\n"
     sanitized = base.sanitize_backend_text(sample, "diagnostic-docker")
