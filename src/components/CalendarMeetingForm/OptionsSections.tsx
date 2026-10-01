@@ -4,28 +4,39 @@ export function OnlineMeetingSection(props: {
   isOnline: boolean;
   setIsOnline: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
-  const { isOnline, setIsOnline } = props;
+  const { isOnline } = props;
   return (
-    <div className={`flex items-center justify-between gap-3 p-3.5 rounded-xl border transition-colors ${isOnline ? 'bg-sky-50 dark:bg-sky-900/20 border-sky-200 dark:border-sky-700' : 'bg-gray-50 dark:bg-gray-700/30 border-gray-200 dark:border-gray-600'}`}>
+    <div
+      className="flex items-center justify-between gap-3 p-3.5 rounded-xl border bg-gray-50 dark:bg-gray-700/30 border-gray-200 dark:border-gray-600 opacity-75"
+      aria-disabled="true"
+    >
       <div className="flex items-center gap-3">
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isOnline ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-300 dark:bg-gray-600">
           <Video className="w-4 h-4 text-white" />
         </div>
         <div>
-          <p className={`text-sm font-medium ${isOnline ? 'text-sky-800 dark:text-sky-200' : 'text-gray-700 dark:text-gray-300'}`}>
-            این جلسه به صورت آنلاین برگزار می‌گردد
-          </p>
-          <p className={`text-xs mt-0.5 ${isOnline ? 'text-sky-600 dark:text-sky-400' : 'text-gray-400 dark:text-gray-500'}`}>
-            {isOnline ? 'اتاق ویدیو کنفرانس اتوماتیک ایجاد می‌شود' : 'غیرفعال — جلسه حضوری'}
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              این جلسه به صورت آنلاین برگزار می‌گردد
+            </p>
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+              به‌زودی
+            </span>
+          </div>
+          <p className="text-xs mt-0.5 text-gray-400 dark:text-gray-500">
+            {isOnline
+              ? 'ویدئوکنفرانس این جلسه قبلاً فعال شده و فعلاً قابل تغییر نیست'
+              : 'قابلیت ویدئوکنفرانس موقتاً غیرفعال است'}
           </p>
         </div>
       </div>
       <button
         type="button"
-        onClick={() => setIsOnline(v => !v)}
-        className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${isOnline ? 'bg-sky-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+        disabled
+        aria-label="ویدئوکنفرانس — به‌زودی"
+        className={`relative w-12 h-6 rounded-full flex-shrink-0 cursor-not-allowed ${isOnline ? 'bg-sky-400' : 'bg-gray-300 dark:bg-gray-600'}`}
       >
-        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${isOnline ? 'translate-x-6' : 'translate-x-0.5'}`} />
+        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow ${isOnline ? 'translate-x-6' : 'translate-x-0.5'}`} />
       </button>
     </div>
   );
