@@ -13,7 +13,7 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   exit 1
 fi
 
-for cmd in curl tar find install ln mv rm mktemp cp bash python3; do
+for cmd in tar find install ln mv rm mktemp cp bash python3; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Required command missing: $cmd" >&2; exit 1; }
 done
 
@@ -23,11 +23,13 @@ if [[ -t 1 ]]; then
   C_CYAN=$'\033[36m'
   C_GREEN=$'\033[32m'
   C_DIM=$'\033[2m'
+  C_BOLD=$'\033[1m'
   C_RESET=$'\033[0m'
 else
   C_CYAN=''
   C_GREEN=''
   C_DIM=''
+  C_BOLD=''
   C_RESET=''
 fi
 
@@ -43,15 +45,108 @@ tmp="$(mktemp -d)"
 stage=""
 trap 'rm -rf "$tmp" "${stage:-}"' EXIT
 
-printf '\n%sSpark Manager installer%s\n' "$C_CYAN" "$C_RESET"
+printf '\n%s%sSpark Manager installer%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
 printf '%sFast install from GitHub main%s\n\n' "$C_DIM" "$C_RESET"
 
 step '1/3' 'Downloading latest Spark Manager...'
-# --progress-bar keeps the download visible while preserving the fast single-
-# archive path. It writes the live meter to stderr, so it remains visible even
-# when bootstrap.sh itself is piped into sudo bash.
-curl -fL --progress-bar --retry 3 --retry-delay 1 --connect-timeout 10 --max-time 300 \
-  "$ARCHIVE_URL" -o "$tmp/spark-main.tar.gz"
+ARCHIVE_URL="$ARCHIVE_URL" ARCHIVE_PATH="$tmp/spark-main.tar.gz" python3 <<'PYDOWNLOAD'
+from __future__ import annotations
+
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+
+url = os.environ["ARCHIVE_URL"]
+destination = os.environ["ARCHIVE_PATH"]
+width = 36
+attempts = 3
+chunk_size = 256 * 1024
+is_tty = sys.stderr.isatty()
+
+
+def human_size(value: float) -> str:
+    units = ("B", "KB", "MB", "GB")
+    size = float(value)
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
+def render(downloaded: int, total: int, started: float, final: bool = False) -> None:
+    elapsed = max(time.monotonic() - started, 0.001)
+    speed = downloaded / elapsed
+    if total > 0:
+        percent = min(100, int(downloaded * 100 / total))
+        filled = min(width, int(width * percent / 100))
+        bar = "█" * filled + "░" * (width - filled)
+        text = (
+            f"  [{bar}] {percent:3d}%  "
+            f"{human_size(downloaded)} / {human_size(total)}  "
+            f"{human_size(speed)}/s"
+        )
+    else:
+        # Rare fallback when the server does not expose Content-Length.
+        pulse = int(elapsed * 8) % width
+        chars = ["░"] * width
+        chars[pulse] = "█"
+        bar = "".join(chars)
+        text = f"  [{bar}]  --%  {human_size(downloaded)}  {human_size(speed)}/s"
+
+    if is_tty:
+        sys.stderr.write("\r" + text)
+        sys.stderr.flush()
+        if final:
+            sys.stderr.write("\n")
+    elif final:
+        # Keep CI/redirected logs compact while still reporting an explicit percentage.
+        sys.stderr.write(text + "\n")
+        sys.stderr.flush()
+
+
+last_error: Exception | None = None
+for attempt in range(1, attempts + 1):
+    try:
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Spark-Manager-Installer/4.0"},
+        )
+        started = time.monotonic()
+        downloaded = 0
+        with urllib.request.urlopen(request, timeout=30) as response, open(destination, "wb") as output:
+            total_header = response.headers.get("Content-Length", "")
+            total = int(total_header) if total_header.isdigit() else 0
+            render(0, total, started)
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                output.write(chunk)
+                downloaded += len(chunk)
+                render(downloaded, total, started)
+            render(downloaded, total, started, final=True)
+        if downloaded <= 0:
+            raise RuntimeError("downloaded archive is empty")
+        break
+    except Exception as exc:
+        last_error = exc
+        try:
+            os.remove(destination)
+        except FileNotFoundError:
+            pass
+        if is_tty:
+            sys.stderr.write("\n")
+        if attempt == attempts:
+            raise SystemExit(f"Download failed after {attempts} attempts: {exc}")
+        sys.stderr.write(f"  Retry {attempt}/{attempts} after download error: {exc}\n")
+        sys.stderr.flush()
+        time.sleep(1)
+else:
+    raise SystemExit(f"Download failed: {last_error}")
+PYDOWNLOAD
 done_step 'Download complete.'
 
 step '2/3' 'Extracting and validating...'
