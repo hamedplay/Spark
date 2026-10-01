@@ -203,6 +203,28 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (prefillData.participantUserIds && prefillData.participantUserIds.length > 0) {
       setSelectedParticipants(prefillData.participantUserIds.map((id: string) => ({ id, name: '' })));
     }
+    if (prefillData.notifyUserIds && prefillData.notifyUserIds.length > 0) {
+      setSelectedNotifyUsers(prefillData.notifyUserIds.map((id: string) => ({ id, name: '' })));
+    }
+    if (prefillData.externalParticipants && prefillData.externalParticipants.length > 0) {
+      setSelectedExternal(prefillData.externalParticipants);
+    }
+    if (prefillData.meetingManager !== undefined) setMeetingManager(prefillData.meetingManager);
+    if (prefillData.reminderMinutes !== undefined) setReminderMinutes(prefillData.reminderMinutes);
+    if (prefillData.isOnline !== undefined) setIsOnline(prefillData.isOnline);
+    if (prefillData.agendaItems && prefillData.agendaItems.length > 0) {
+      setAgendaEnabled(true);
+      setAgendaItems(prefillData.agendaItems.map((item, idx) => ({
+        id: `prefill-${idx}`,
+        meeting_id: '',
+        title: item.title,
+        presenter: item.presenter ?? null,
+        duration_minutes: item.duration_minutes ?? null,
+        description: item.description ?? null,
+        sort_order: idx,
+        created_at: '',
+      })) as unknown as AgendaItem[]);
+    }
   }, [prefillData]);
 
   const loadMeetingParticipants = async (meetingId: string) => {

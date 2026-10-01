@@ -91,6 +91,38 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
           onDelete={handleDeleteMeeting}
           onShare={handleShareFromDetail}
           onGoogleCalendar={handleSendToGoogleCalendar}
+          onCreateSimilar={(meeting, sourceAgendaItems) => {
+            const eligibleCalendarId = [...calendars, ...subscribedCalendars].some(
+              (calendar) => calendar.id === meeting.calendar_id && !calendar.is_occasions && calendar.type !== 'private'
+            ) ? meeting.calendar_id : undefined;
+            setPrefillData({
+              subject: meeting.subject || '',
+              location: meeting.location || '',
+              representative: meeting.representative || '',
+              phone: meeting.phone || '',
+              notes: meeting.notes || '',
+              priority: meeting.priority || 'medium',
+              calendarId: eligibleCalendarId,
+              membersOnly: meeting.members_only ?? undefined,
+              participantUserIds: [...(meeting.participant_user_ids || [])],
+              notifyUserIds: (meeting.notify_users || []).filter((id) => id !== meeting.user_id),
+              externalParticipants: [...(meeting.external_participants || [])],
+              meetingManager: meeting.meeting_manager && meeting.meeting_manager !== meeting.user_id
+                ? meeting.meeting_manager
+                : '',
+              reminderMinutes: meeting.reminder_minutes ?? 15,
+              isOnline: Boolean(meeting.is_online),
+              agendaItems: sourceAgendaItems.map((item) => ({
+                title: item.title,
+                presenter: item.presenter ?? null,
+                duration_minutes: item.duration_minutes ?? null,
+                description: item.description ?? null,
+              })),
+            });
+            setActivePendingSchedule(null);
+            setDetailMeeting(null);
+            setShowMeetingForm(true);
+          }}
           onRegisterMinutes={onRegisterMinutes}
         />
       )}

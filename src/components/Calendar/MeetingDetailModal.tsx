@@ -14,6 +14,7 @@ interface AgendaItem {
   title: string;
   presenter: string | null;
   duration_minutes: number | null;
+  description: string | null;
   sort_order: number;
 }
 
@@ -29,12 +30,13 @@ interface Props {
   onDelete: (id: string, deleteRepeating?: boolean) => void;
   onShare: (m: MeetingData) => void;
   onGoogleCalendar: (m: MeetingData) => void;
+  onCreateSimilar?: (m: MeetingData, agendaItems: AgendaItem[]) => void;
   onRegisterMinutes?: (meetingId: string, existingMinuteId: string | null) => void;
 }
 
 export function MeetingDetailModal({
   meeting: m, currentUserId, resolveName, calendars, subscribedCalendars,
-  getMeetingColor, onClose, onEdit, onDelete, onGoogleCalendar, onRegisterMinutes,
+  getMeetingColor, onClose, onEdit, onDelete, onGoogleCalendar, onCreateSimilar, onRegisterMinutes,
 }: Props) {
   const isOwner = m.user_id === currentUserId;
   const isManager = m.meeting_manager === currentUserId;
@@ -140,7 +142,7 @@ export function MeetingDetailModal({
   useEffect(() => {
     supabase
       .from('meeting_agenda_items')
-      .select('id, title, presenter, duration_minutes, sort_order')
+      .select('id, title, presenter, duration_minutes, description, sort_order')
       .eq('meeting_id', m.id)
       .order('sort_order')
       .then(({ data }) => { if (data) setAgendaItems(data as AgendaItem[]); });
@@ -778,6 +780,11 @@ const getJalaliDate = (): string => {
           {canEdit && (
             <button onClick={() => onEdit(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
               <Edit2 className="w-4 h-4" />ویرایش
+            </button>
+          )}
+          {onCreateSimilar && (
+            <button onClick={() => onCreateSimilar(m, agendaItems)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors">
+              <Copy className="w-4 h-4" />ایجاد جلسه مشابه
             </button>
           )}
           <button onClick={handleNativeShare} disabled={shareLoading} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm font-medium hover:bg-green-100 transition-colors disabled:opacity-60 disabled:cursor-wait">

@@ -62,6 +62,17 @@ export interface CalendarMeetingFormProps {
     calendarId?: string;
     membersOnly?: boolean;
     participantUserIds?: string[];
+    notifyUserIds?: string[];
+    externalParticipants?: string[];
+    meetingManager?: string;
+    reminderMinutes?: number;
+    isOnline?: boolean;
+    agendaItems?: Array<{
+      title: string;
+      presenter?: string | null;
+      duration_minutes?: number | null;
+      description?: string | null;
+    }>;
     repeatEnabled?: boolean;
     repeatType?: 'weekly' | 'monthly';
     repeatInterval?: number;
