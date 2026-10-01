@@ -13,15 +13,14 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect archive headers
+      - name: Benchmark shallow git download
         shell: bash
         run: |
           set -euo pipefail
-          echo '== HEAD codeload =='
-          curl -sSIL https://codeload.github.com/hamedplay/Spark/tar.gz/refs/heads/main | sed -n '1,80p'
-          echo '== Range codeload =='
-          curl -sSL -r 0-0 -D /tmp/range.headers -o /tmp/range.byte https://codeload.github.com/hamedplay/Spark/tar.gz/refs/heads/main
-          cat /tmp/range.headers
-          wc -c /tmp/range.byte
-          echo '== HEAD github archive URL =='
-          curl -sSIL https://github.com/hamedplay/Spark/archive/refs/heads/main.tar.gz | sed -n '1,100p'
+          start=$(date +%s%3N)
+          GIT_PROGRESS_DELAY=0 git clone --depth 1 --single-branch --branch main --progress https://github.com/hamedplay/Spark.git /tmp/spark-clone 2>&1 | tee /tmp/git-progress.log
+          end=$(date +%s%3N)
+          echo "CLONE_MS=$((end-start))"
+          du -sh /tmp/spark-clone
+          grep -E 'Receiving objects:.*%|Resolving deltas:.*%' /tmp/git-progress.log | tail -20 || true
+          test -f /tmp/spark-clone/deploy/spark-cli/bootstrap.sh
