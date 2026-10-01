@@ -177,3 +177,7 @@ install_step_7() {
     return 1
   fi
 }
+
+# Load the shared Spark CLI progress renderer late so all normal runtime paths
+# use the same activity/progress UI without duplicating logic in each module.
+source "${SCRIPT_DIR}/lib/progress-ui.sh"
