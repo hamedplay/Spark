@@ -3,6 +3,7 @@ import { PermissionsProvider } from '../../context/PermissionsContext';
 import { GlobalCallProvider } from '../../context/GlobalCallContext';
 import { SplashScreen } from '../../components/SplashScreen';
 import { SparkLoader } from '../../components/ui/SparkLoader';
+import { InformeeParticipantAccess } from '../../features/meetings/components/InformeeParticipantAccess';
 import type { SparkMeetingPrefill } from '../../components/Spark/SparkAssistant';
 import type { PageId } from '../navigation/useNavigation';
 import { Layout } from '../../components/Layout';
@@ -115,6 +116,9 @@ export function AppShell(props: AppShellProps) {
             {renderContent(rendererProps)}
           </Suspense>
         </Layout>
+        {currentUserId && activePage === 'calendar' && (
+          <InformeeParticipantAccess currentUserId={currentUserId} />
+        )}
         {currentUserId && sparkVisible && assistantReady && (
           <Suspense fallback={null}>
             <SparkAssistant
