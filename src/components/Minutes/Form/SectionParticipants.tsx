@@ -91,6 +91,9 @@ export function SectionParticipants({
   const updateInternal = (id: string, field: keyof DraftInternalParticipant, value: string) =>
     setInternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
 
+  const setInternalSignatory = (id: string, isSignatory: boolean) =>
+    setInternalParticipants(l => l.map(r => (r.id === id ? { ...r, isSignatory } : r)));
+
   const profileLabel = (p: ProfileOption) => p.full_name || p.username || p.user_id;
 
   const profileOptions: ComboboxOption[] = useMemo(() => profiles.map(p => {
@@ -123,6 +126,7 @@ export function SectionParticipants({
         positionSnapshot: '',
         orgUnitId: '',
         orgUnitNameSnapshot: '',
+        isSignatory: false,
       } : r));
     } else {
       updateInternal(rowId, 'nameSnapshot', value);
@@ -151,6 +155,9 @@ export function SectionParticipants({
 
   const updateExternal = (id: string, field: keyof DraftExternalParticipant, value: string) =>
     setExternalParticipants(l => l.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+
+  const setExternalSignatory = (id: string, isSignatory: boolean) =>
+    setExternalParticipants(l => l.map(r => (r.id === id ? { ...r, isSignatory } : r)));
 
   // Build suggestions from contacts_email. Deduplicate by normalized name.
   // metadata stores the full contact record so selection fills all fields at once.
@@ -219,6 +226,10 @@ export function SectionParticipants({
       <h2 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700 pb-3">
         شرکت‌کنندگان
       </h2>
+
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/40 rounded-xl px-4 py-3 text-sm text-blue-700 dark:text-blue-300">
+        شرکت‌کننده بودن به‌معنای امضاکننده بودن نیست. فقط افرادی که گزینه «امضاکننده صورت‌جلسه» برای آن‌ها فعال باشد وارد فرآیند امضا و محل امضای نسخه نهایی می‌شوند.
+      </div>
 
       {/* Internal participants */}
       <div>
@@ -330,6 +341,16 @@ export function SectionParticipants({
                   </div>
                 )}
               </div>
+              <label className={`inline-flex items-center gap-2 text-sm font-medium ${readOnly ? 'text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                <input
+                  type="checkbox"
+                  checked={!!row.isSignatory}
+                  onChange={event => setInternalSignatory(row.id, event.target.checked)}
+                  disabled={readOnly}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                />
+                امضاکننده صورت‌جلسه
+              </label>
               {/* Delegate display */}
               {row.delegateName && (
                 <div className="text-xs text-orange-600 dark:text-orange-400 px-1">
@@ -398,6 +419,16 @@ export function SectionParticipants({
                   </div>
                 )}
               </div>
+              <label className={`inline-flex items-center gap-2 text-sm font-medium ${readOnly ? 'text-gray-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                <input
+                  type="checkbox"
+                  checked={!!row.isSignatory}
+                  onChange={event => setExternalSignatory(row.id, event.target.checked)}
+                  disabled={readOnly}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                />
+                امضاکننده صورت‌جلسه
+              </label>
             </div>
           ))}
         </div>
