@@ -20,9 +20,9 @@ jobs:
           set -euo pipefail
           bash -n deploy/spark-cli/bootstrap.sh
           grep -Fq -- '--progress-bar' deploy/spark-cli/bootstrap.sh
-          grep -Fq "[1/3]" deploy/spark-cli/bootstrap.sh
-          grep -Fq "[2/3]" deploy/spark-cli/bootstrap.sh
-          grep -Fq "[3/3]" deploy/spark-cli/bootstrap.sh
+          grep -Fq "step '1/3'" deploy/spark-cli/bootstrap.sh
+          grep -Fq "step '2/3'" deploy/spark-cli/bootstrap.sh
+          grep -Fq "step '3/3'" deploy/spark-cli/bootstrap.sh
       - name: Run real install
         shell: bash
         run: |
