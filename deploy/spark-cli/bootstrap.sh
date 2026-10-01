@@ -58,9 +58,21 @@ import sys
 repo_url = os.environ["REPO_URL"]
 clone_path = os.environ["CLONE_PATH"]
 width = 40
-is_tty = sys.stderr.isatty()
 last_reported = -1
-milestones = {-1}
+milestones: set[int] = set()
+
+# bootstrap.sh is commonly executed through a pipe:
+#   curl .../bootstrap.sh | sudo bash
+# In that mode stdout/stderr may not reliably look interactive. Prefer the
+# controlling terminal directly so the progress bar remains live for the user.
+tty_stream = None
+try:
+    tty_stream = open("/dev/tty", "w", buffering=1, encoding="utf-8", errors="replace")
+except OSError:
+    tty_stream = None
+
+interactive = tty_stream is not None
+progress_stream = tty_stream if tty_stream is not None else sys.stderr
 
 
 def render(percent: int, final: bool = False) -> None:
@@ -69,25 +81,28 @@ def render(percent: int, final: bool = False) -> None:
     if percent == last_reported and not final:
         return
     last_reported = percent
+
     filled = int(width * percent / 100)
     bar = "█" * filled + "░" * (width - filled)
     text = f"  [{bar}]  {percent:3d}%"
 
-    if is_tty:
-        sys.stderr.write("\r" + text)
-        sys.stderr.flush()
+    if interactive:
+        # Rewrite the same terminal line on every real percentage update.
+        progress_stream.write("\r\033[36m" + text + "\033[0m")
+        progress_stream.flush()
         if final:
-            sys.stderr.write("\n")
-            sys.stderr.flush()
+            progress_stream.write("\n")
+            progress_stream.flush()
     else:
-        # Keep redirected logs compact while preserving real progress values.
+        # Redirected logs stay compact, but still preserve representative
+        # percentages and the guaranteed final 100% value.
         bucket = (percent // 25) * 25
         if percent == 100:
             bucket = 100
         if bucket not in milestones:
             milestones.add(bucket)
-            sys.stderr.write(text + "\n")
-            sys.stderr.flush()
+            progress_stream.write(text + "\n")
+            progress_stream.flush()
 
 
 render(0)
@@ -116,22 +131,26 @@ buffer = b""
 errors: list[str] = []
 pattern = re.compile(r"Receiving objects:\s+(\d+)%")
 
-while True:
-    chunk = proc.stderr.read(4096) if proc.stderr is not None else b""
-    if not chunk:
-        break
-    buffer += chunk
-    parts = re.split(br"[\r\n]", buffer)
-    buffer = parts.pop() if parts else b""
-    for raw in parts:
-        if not raw:
-            continue
-        line = raw.decode("utf-8", errors="replace").strip()
-        match = pattern.search(line)
-        if match:
-            render(int(match.group(1)))
-        elif any(token in line.lower() for token in ("fatal:", "error:", "failed")):
-            errors.append(line)
+# Use unbuffered os.read() instead of BufferedReader.read(4096). The latter may
+# wait for a large buffer and make many Git percentage updates appear at once.
+if proc.stderr is not None:
+    fd = proc.stderr.fileno()
+    while True:
+        chunk = os.read(fd, 512)
+        if not chunk:
+            break
+        buffer += chunk
+        parts = re.split(br"[\r\n]", buffer)
+        buffer = parts.pop() if parts else b""
+        for raw in parts:
+            if not raw:
+                continue
+            line = raw.decode("utf-8", errors="replace").strip()
+            match = pattern.search(line)
+            if match:
+                render(int(match.group(1)))
+            elif any(token in line.lower() for token in ("fatal:", "error:", "failed")):
+                errors.append(line)
 
 if buffer:
     line = buffer.decode("utf-8", errors="replace").strip()
@@ -143,12 +162,15 @@ if buffer:
 
 return_code = proc.wait()
 if return_code != 0:
-    if is_tty:
-        sys.stderr.write("\n")
+    if interactive:
+        progress_stream.write("\n")
+        progress_stream.flush()
     message = errors[-1] if errors else f"git clone exited with code {return_code}"
     raise SystemExit(f"Download failed: {message}")
 
 render(100, final=True)
+if tty_stream is not None:
+    tty_stream.close()
 PYDOWNLOAD
 done_step 'Download complete.'
 
