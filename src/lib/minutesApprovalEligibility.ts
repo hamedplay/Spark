@@ -11,7 +11,7 @@ export function resolveEligibleSystemApprovers(
   internalParticipants: DraftInternalParticipant[],
 ): SystemApproverCandidate[] {
   return internalParticipants
-    .filter(p => !!p.userId)
+    .filter(p => p.isSignatory && !!p.userId)
     .map(p => ({ id: p.id, userId: p.userId, nameSnapshot: p.nameSnapshot }));
 }
 
@@ -35,7 +35,7 @@ export function checkSystemApproverEligibility(
   if (eligible.length === 0) {
     return {
       canSubmit: false,
-      errorMessage: 'در مدل سیستمی حداقل یک شرکت‌کننده داخلی با حساب کاربری لازم است.',
+      errorMessage: 'در مدل سیستمی حداقل یک امضاکننده داخلی با حساب کاربری لازم است.',
     };
   }
   return { canSubmit: true, errorMessage: null };
