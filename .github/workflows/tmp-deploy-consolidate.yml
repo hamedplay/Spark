@@ -39,10 +39,9 @@ jobs:
               'deploy/livekit': 'deploy/spark-cli/livekit',
               'deploy/spark-build.yaml': 'deploy/spark-cli/spark-build.yaml',
           }
-          skip = {Path('.git')}
           changed = []
           for path in Path('.').rglob('*'):
-              if not path.is_file() or '.git' in path.parts:
+              if not path.is_file() or '.git' in path.parts or path == Path('.github/workflows/tmp-deploy-consolidate.yml'):
                   continue
               try:
                   text = path.read_text(encoding='utf-8')
@@ -66,12 +65,12 @@ jobs:
           test ! -e deploy/manual-production
           test ! -e deploy/production
 
-          if grep -RIn --exclude-dir=.git -E 'deploy/(livekit|spark-build\.yaml)' .; then
+          if grep -RIn --exclude-dir=.git --exclude='tmp-deploy-consolidate.yml' -E 'deploy/(livekit|spark-build\.yaml)' .; then
             echo 'ERROR: stale pre-consolidation deploy path remains' >&2
             exit 1
           fi
 
-          if grep -RIn --exclude-dir=.git -E 'deploy/(manual-production|production)(/|\b)' .; then
+          if grep -RIn --exclude-dir=.git --exclude='tmp-deploy-consolidate.yml' -E 'deploy/(manual-production|production)(/|\b)' .; then
             echo 'ERROR: references to removed legacy deployment trees remain' >&2
             exit 1
           fi
