@@ -36,6 +36,7 @@ export interface InternalParticipantRow {
   invitation_status: string;
   attendance_status: string | null;
   delegate_name: string | null;
+  is_signatory: boolean;
 }
 
 export interface ExternalParticipantRow {
@@ -46,6 +47,7 @@ export interface ExternalParticipantRow {
   mobile: string | null;
   email: string | null;
   attendance_status: string | null;
+  is_signatory: boolean;
 }
 
 export interface AgendaResultRow {
