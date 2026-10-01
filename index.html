@@ -7,8 +7,7 @@
     <meta name="theme-color" content="#1e293b" media="(prefers-color-scheme: dark)" />
     <meta name="description" content="سیستم مدیریت حرفه‌ای جلسات، پیگیری تصمیمات و همکاری تیمی" />
 
-    <!-- Warm only the configured API origin used during the initial auth/bootstrap path. -->
-    <link rel="preconnect" href="%VITE_SUPABASE_URL%" crossorigin />
+    <!-- Production API traffic is same-origin; no DNS-specific API preconnect. -->
 
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
