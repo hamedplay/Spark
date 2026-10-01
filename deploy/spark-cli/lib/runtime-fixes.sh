@@ -182,6 +182,11 @@ install_step_7() {
 # are loaded so these definitions become the active runtime behavior.
 source "${SCRIPT_DIR}/lib/same-origin.sh"
 
+# Application updates are a separate layer. Load this after the legacy update
+# module so app-update cannot mutate PostgreSQL, Supabase runtime, Functions,
+# workers, schedulers or the Manager control plane.
+source "${SCRIPT_DIR}/lib/application.sh"
+
 # Load the shared Spark CLI progress renderer late so all normal runtime paths
 # use the same activity/progress UI without duplicating logic in each module.
 source "${SCRIPT_DIR}/lib/progress-ui.sh"
