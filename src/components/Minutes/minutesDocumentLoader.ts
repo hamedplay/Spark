@@ -69,12 +69,12 @@ export async function loadDocumentSnapshot(
   const [partsRes, extRes, agendaRes, approvalsRes, commentsRes, decisionsRes] = await Promise.all([
     supabase
       .from('minutes_participants')
-      .select('id, user_id, name_snapshot, position_snapshot, org_unit_name_snapshot, invitation_status, attendance_status, delegate_name')
+      .select('id, user_id, name_snapshot, position_snapshot, org_unit_name_snapshot, invitation_status, attendance_status, delegate_name, is_signatory')
       .eq('minute_id', minuteId)
       .order('created_at', { ascending: true }),
     supabase
       .from('minutes_external_participants')
-      .select('id, full_name, organization, position, mobile, email, attendance_status')
+      .select('id, full_name, organization, position, mobile, email, attendance_status, is_signatory')
       .eq('minute_id', minuteId)
       .order('created_at', { ascending: true }),
     supabase
