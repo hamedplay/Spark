@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CalendarDays, Loader as Loader2, UserPlus, X } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { CalendarDays, UserPlus, X } from 'lucide-react';
 import { InformeeAddParticipantModal } from './InformeeAddParticipantModal';
 import {
   fetchInformeeMeetings,
@@ -58,7 +57,6 @@ export function InformeeParticipantAccess({ currentUserId }: Props) {
         }
       : meeting));
     setSelectedMeeting(null);
-    toast.success('فهرست شرکت‌کنندگان جلسه به‌روزرسانی شد');
   };
 
   if (loading || meetings.length === 0) return null;
