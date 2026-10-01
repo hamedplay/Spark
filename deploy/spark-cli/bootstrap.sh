@@ -6,19 +6,17 @@ TARGET="/usr/local/lib/spark-manager"
 MIGRATE_TARGET="/usr/local/lib/spark-migrate"
 BIN_DIR="/usr/local/bin"
 INBOX="/var/tmp/spark-manager-inbox"
-ARCHIVE_URL="https://codeload.github.com/hamedplay/Spark/tar.gz/refs/heads/main"
+REPO_URL="https://github.com/hamedplay/Spark.git"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   echo 'Run this installer as root (example: curl -fsSL .../bootstrap.sh | sudo bash).' >&2
   exit 1
 fi
 
-for cmd in tar find install ln mv rm mktemp cp bash python3; do
+for cmd in git install ln mv rm mktemp cp bash python3; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Required command missing: $cmd" >&2; exit 1; }
 done
 
-# Lightweight visual status for interactive installs. ANSI colors are used only
-# when stdout is attached to a terminal; redirected logs stay plain text.
 if [[ -t 1 ]]; then
   C_CYAN=$'\033[36m'
   C_GREEN=$'\033[32m'
@@ -49,110 +47,114 @@ printf '\n%s%sSpark Manager installer%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
 printf '%sFast install from GitHub main%s\n\n' "$C_DIM" "$C_RESET"
 
 step '1/3' 'Downloading latest Spark Manager...'
-ARCHIVE_URL="$ARCHIVE_URL" ARCHIVE_PATH="$tmp/spark-main.tar.gz" python3 <<'PYDOWNLOAD'
+REPO_URL="$REPO_URL" CLONE_PATH="$tmp/repo" python3 <<'PYDOWNLOAD'
 from __future__ import annotations
 
 import os
+import re
+import subprocess
 import sys
-import time
-import urllib.error
-import urllib.request
 
-url = os.environ["ARCHIVE_URL"]
-destination = os.environ["ARCHIVE_PATH"]
-width = 36
-attempts = 3
-chunk_size = 256 * 1024
+repo_url = os.environ["REPO_URL"]
+clone_path = os.environ["CLONE_PATH"]
+width = 40
 is_tty = sys.stderr.isatty()
+last_reported = -1
+milestones = {-1}
 
 
-def human_size(value: float) -> str:
-    units = ("B", "KB", "MB", "GB")
-    size = float(value)
-    for unit in units:
-        if size < 1024 or unit == units[-1]:
-            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
-        size /= 1024
-    return f"{size:.1f} GB"
-
-
-def render(downloaded: int, total: int, started: float, final: bool = False) -> None:
-    elapsed = max(time.monotonic() - started, 0.001)
-    speed = downloaded / elapsed
-    if total > 0:
-        percent = min(100, int(downloaded * 100 / total))
-        filled = min(width, int(width * percent / 100))
-        bar = "█" * filled + "░" * (width - filled)
-        text = (
-            f"  [{bar}] {percent:3d}%  "
-            f"{human_size(downloaded)} / {human_size(total)}  "
-            f"{human_size(speed)}/s"
-        )
-    else:
-        # Rare fallback when the server does not expose Content-Length.
-        pulse = int(elapsed * 8) % width
-        chars = ["░"] * width
-        chars[pulse] = "█"
-        bar = "".join(chars)
-        text = f"  [{bar}]  --%  {human_size(downloaded)}  {human_size(speed)}/s"
+def render(percent: int, final: bool = False) -> None:
+    global last_reported
+    percent = max(0, min(100, percent))
+    if percent == last_reported and not final:
+        return
+    last_reported = percent
+    filled = int(width * percent / 100)
+    bar = "█" * filled + "░" * (width - filled)
+    text = f"  [{bar}]  {percent:3d}%"
 
     if is_tty:
         sys.stderr.write("\r" + text)
         sys.stderr.flush()
         if final:
             sys.stderr.write("\n")
-    elif final:
-        # Keep CI/redirected logs compact while still reporting an explicit percentage.
-        sys.stderr.write(text + "\n")
-        sys.stderr.flush()
+            sys.stderr.flush()
+    else:
+        # Keep redirected logs compact while preserving real progress values.
+        bucket = (percent // 25) * 25
+        if percent == 100:
+            bucket = 100
+        if bucket not in milestones:
+            milestones.add(bucket)
+            sys.stderr.write(text + "\n")
+            sys.stderr.flush()
 
 
-last_error: Exception | None = None
-for attempt in range(1, attempts + 1):
-    try:
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": "Spark-Manager-Installer/4.0"},
-        )
-        started = time.monotonic()
-        downloaded = 0
-        with urllib.request.urlopen(request, timeout=30) as response, open(destination, "wb") as output:
-            total_header = response.headers.get("Content-Length", "")
-            total = int(total_header) if total_header.isdigit() else 0
-            render(0, total, started)
-            while True:
-                chunk = response.read(chunk_size)
-                if not chunk:
-                    break
-                output.write(chunk)
-                downloaded += len(chunk)
-                render(downloaded, total, started)
-            render(downloaded, total, started, final=True)
-        if downloaded <= 0:
-            raise RuntimeError("downloaded archive is empty")
+render(0)
+cmd = [
+    "git",
+    "-c", "advice.detachedHead=false",
+    "clone",
+    "--depth", "1",
+    "--single-branch",
+    "--branch", "main",
+    "--no-tags",
+    "--progress",
+    repo_url,
+    clone_path,
+]
+env = os.environ.copy()
+env["GIT_PROGRESS_DELAY"] = "0"
+proc = subprocess.Popen(
+    cmd,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.PIPE,
+    env=env,
+)
+
+buffer = b""
+errors: list[str] = []
+pattern = re.compile(r"Receiving objects:\s+(\d+)%")
+
+while True:
+    chunk = proc.stderr.read(4096) if proc.stderr is not None else b""
+    if not chunk:
         break
-    except Exception as exc:
-        last_error = exc
-        try:
-            os.remove(destination)
-        except FileNotFoundError:
-            pass
-        if is_tty:
-            sys.stderr.write("\n")
-        if attempt == attempts:
-            raise SystemExit(f"Download failed after {attempts} attempts: {exc}")
-        sys.stderr.write(f"  Retry {attempt}/{attempts} after download error: {exc}\n")
-        sys.stderr.flush()
-        time.sleep(1)
-else:
-    raise SystemExit(f"Download failed: {last_error}")
+    buffer += chunk
+    parts = re.split(br"[\r\n]", buffer)
+    buffer = parts.pop() if parts else b""
+    for raw in parts:
+        if not raw:
+            continue
+        line = raw.decode("utf-8", errors="replace").strip()
+        match = pattern.search(line)
+        if match:
+            render(int(match.group(1)))
+        elif any(token in line.lower() for token in ("fatal:", "error:", "failed")):
+            errors.append(line)
+
+if buffer:
+    line = buffer.decode("utf-8", errors="replace").strip()
+    match = pattern.search(line)
+    if match:
+        render(int(match.group(1)))
+    elif any(token in line.lower() for token in ("fatal:", "error:", "failed")):
+        errors.append(line)
+
+return_code = proc.wait()
+if return_code != 0:
+    if is_tty:
+        sys.stderr.write("\n")
+    message = errors[-1] if errors else f"git clone exited with code {return_code}"
+    raise SystemExit(f"Download failed: {message}")
+
+render(100, final=True)
 PYDOWNLOAD
 done_step 'Download complete.'
 
-step '2/3' 'Extracting and validating...'
-tar -xzf "$tmp/spark-main.tar.gz" -C "$tmp"
-source_dir="$(find "$tmp" -type d -path '*/deploy/spark-cli' -print -quit)"
-[[ -n "$source_dir" && -f "$source_dir/spark" && -f "$source_dir/spark-ui.py" && -d "$source_dir/lib" ]] || {
+step '2/3' 'Validating package...'
+source_dir="$tmp/repo/deploy/spark-cli"
+[[ -f "$source_dir/spark" && -f "$source_dir/spark-ui.py" && -d "$source_dir/lib" ]] || {
   echo 'Downloaded Spark Manager payload is incomplete.' >&2
   exit 1
 }
