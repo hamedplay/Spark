@@ -196,3 +196,8 @@ if declare -F install_step_22 >/dev/null 2>&1; then
     install_step_22_with_persisted_step21 "$@"
   }
 fi
+
+# airgap-observability-quiet.sh temporarily defines its own logging wrappers.
+# Re-load the common renderer here so Air-Gap commands end with the exact same
+# progress behavior as the normal Spark CLI.
+source "${SCRIPT_DIR}/lib/progress-ui.sh"
