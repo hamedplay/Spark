@@ -48,26 +48,6 @@ if base.SPARK_UI_VERSION != SPARK_UI_VERSION:
         f"Spark UI version mismatch: wrapper={SPARK_UI_VERSION} base={base.SPARK_UI_VERSION}"
     )
 
-PROVISIONING_ACTIONS = [
-    core.Action("architecture-overview", "Architecture Overview", "Render the active Spark environment topology from its profile."),
-    core.Action("architecture-profile", "Environment Profile", "Show active profile metadata and configuration readiness."),
-    core.Action("architecture-validate", "Validate Architecture", "Run static schema, role and network-policy validation."),
-    core.Action("architecture-network", "Network Connectivity", "Test only connections that are valid to measure from the current host role."),
-    core.Action("architecture-status", "Deployment Status", "Show configuration readiness and full-environment health state."),
-    core.Action("architecture-install-database", "Install Database Core", "Provision PostgreSQL and Supabase Core only on the database-role host.", "confirm"),
-    core.Action("architecture-install-application", "Install Application Server", "Provision frontend, Edge Runtime/Functions, LiveKit and Coturn on the application-role host.", "confirm"),
-    core.Action("architecture-install-proxy", "Install Reverse Proxy", "Provision the reverse-proxy role for public routing and provided TLS.", "confirm"),
-    core.Action("architecture-install-full", "Install Full Environment", "Run the local role workflow and report guided actions required on remaining hosts.", "confirm"),
-    core.Action("architecture-resume", "Resume Full Environment", "Reverify completed tasks and resume the local full-environment workflow.", "controlled"),
-    core.Action("architecture-validate-environment", "Validate Full Environment", "Inspect component health and declarative network checkpoints without provisioning."),
-    core.Action("architecture-repair", "Repair Local Role", "Repair only the current detected role when health checks require remediation.", "controlled"),
-    core.Action("architecture-central-plan", "Production Dry Run", "From the Jump node, verify SSH/host keys/sudo and identical Manager revision on all production nodes. No remote mutation."),
-    core.Action("architecture-central-install", "Production Install", "Run the gated Database → Application → Proxy #1 → Proxy #2 production workflow from the Jump node.", "confirm"),
-    core.Action("architecture-central-resume", "Resume Production Install", "Reverify previously completed nodes, then continue from the first unhealthy or incomplete production stage.", "controlled"),
-    core.Action("architecture-central-status", "Production Readiness", "Run non-mutating per-node health, network and end-to-end readiness checks from the Jump node."),
-    core.Action("architecture-central-repair", "Centralized Repair", "Repair only unhealthy roles while preserving healthy nodes and upstream services.", "controlled"),
-]
-
 MANAGER_OFFLINE_ACTIONS = [
     core.Action(
         "manager-airgap-build",
@@ -82,6 +62,29 @@ MANAGER_OFFLINE_ACTIONS = [
         "confirm",
     ),
 ]
+
+FINAL_MAIN_CATEGORIES = [
+    "Installation Internet",
+    "Installation Air-Gap",
+    "Diagnostics",
+    "Security",
+    "Backups",
+    "Cleanup / Remove",
+    "Application",
+    "Database",
+    "Linux System",
+    "Manager",
+]
+
+DATABASE_ACTION_IDS = {
+    "security-db-info",
+    "security-db-test",
+    "security-db-open",
+    "security-db-close",
+    "security-studio-info",
+    "security-studio-open",
+    "security-studio-close",
+}
 
 
 def _manager_actions(actions):
@@ -110,48 +113,65 @@ def _manager_actions(actions):
     return [*MANAGER_OFFLINE_ACTIONS, *rebuilt]
 
 
-def _extend_categories() -> None:
-    rebuilt = []
-    architecture_found = False
-    airgap_found = False
-    manager_found = False
-    for category, actions in core.CATEGORIES:
-        if category == "Architecture & Provisioning":
-            rebuilt.append((category, list(PROVISIONING_ACTIONS)))
-            architecture_found = True
-        elif category == "Installation":
-            rebuilt.append(("Installation Internet", actions))
-        elif category in ("Installation Air-Gapped", "Installation Air-Gap"):
-            existing = [action for action in actions if not action.action_id.startswith("manager-airgap-")]
-            rebuilt.append(("Installation Air-Gap", existing))
-            airgap_found = True
-        elif category == "System":
-            rebuilt.append(("Linux System", actions))
-        elif category == "Manager":
-            rebuilt.append(("Manager", _manager_actions(actions)))
-            manager_found = True
-        elif category == "Cleanup / Remove":
-            fixed = []
-            for action in actions:
-                if action.action_id == "backup-restore-plain" and action.label == "cleanup-backups":
-                    fixed.append(core.Action(
-                        "cleanup-backups",
-                        "Backup cleanup / free space",
-                        "Safely prune old Spark backups with a configurable retention period, or explicitly delete all retained backups.",
-                        "confirm",
-                    ))
-                else:
-                    fixed.append(action)
-            rebuilt.append((category, fixed))
+def _fix_cleanup_actions(actions):
+    fixed = []
+    for action in actions:
+        if action.action_id == "backup-restore-plain" and action.label == "cleanup-backups":
+            fixed.append(core.Action(
+                "cleanup-backups",
+                "Backup cleanup / free space",
+                "Safely prune old Spark backups with a configurable retention period, or explicitly delete all retained backups.",
+                "confirm",
+            ))
         else:
-            rebuilt.append((category, actions))
-    if not architecture_found:
-        rebuilt.append(("Architecture & Provisioning", list(PROVISIONING_ACTIONS)))
-    if not airgap_found:
-        rebuilt.append(("Installation Air-Gap", []))
-    if not manager_found:
-        rebuilt.append(("Manager", list(MANAGER_OFFLINE_ACTIONS)))
-    core.CATEGORIES[:] = rebuilt
+            fixed.append(action)
+    return fixed
+
+
+def _extend_categories() -> None:
+    # Normalize the stable/base registry first. Only the ten approved top-level
+    # categories are exposed by the final Manager UI. Removed categories keep
+    # their backend actions for compatibility, but they are no longer reachable
+    # from the main menu.
+    by_name = {}
+    for category, actions in core.CATEGORIES:
+        normalized = category
+        if category == "Installation":
+            normalized = "Installation Internet"
+        elif category in ("Installation Air-Gapped", "Installation Air-Gap"):
+            normalized = "Installation Air-Gap"
+        elif category == "System":
+            normalized = "Linux System"
+        by_name[normalized] = list(actions)
+
+    installation = by_name.get("Installation Internet", [])
+    airgap = [
+        action for action in by_name.get("Installation Air-Gap", [])
+        if not action.action_id.startswith("manager-airgap-")
+    ]
+    diagnostics = by_name.get("Diagnostics", [])
+    backups = by_name.get("Backups", [])
+    cleanup = _fix_cleanup_actions(by_name.get("Cleanup / Remove", []))
+    application = by_name.get("Application", [])
+    linux_system = by_name.get("Linux System", [])
+    manager = _manager_actions(by_name.get("Manager", []))
+
+    original_security = by_name.get("Security", [])
+    database = [action for action in original_security if action.action_id in DATABASE_ACTION_IDS]
+    security = [action for action in original_security if action.action_id not in DATABASE_ACTION_IDS]
+
+    core.CATEGORIES[:] = [
+        ("Installation Internet", installation),
+        ("Installation Air-Gap", airgap),
+        ("Diagnostics", diagnostics),
+        ("Security", security),
+        ("Backups", backups),
+        ("Cleanup / Remove", cleanup),
+        ("Application", application),
+        ("Database", database),
+        ("Linux System", linux_system),
+        ("Manager", manager),
+    ]
 
 
 _original_self_test = core.self_test
@@ -174,23 +194,15 @@ def manager_routed_task_init(self, spark_path, action_id, args, rows, cols):
 
 def provisioning_self_test() -> int:
     result = _original_self_test()
-    ids = {a.action_id for _, actions in core.CATEGORIES for a in actions if not a.special}
-    required = {action.action_id for action in PROVISIONING_ACTIONS} | {action.action_id for action in MANAGER_OFFLINE_ACTIONS}
-    missing = sorted(required - ids)
-    if missing:
-        raise RuntimeError("provisioning UI registry is incomplete: " + ", ".join(missing))
-    if len([category for category, _ in core.CATEGORIES if category == "Architecture & Provisioning"]) != 1:
-        raise RuntimeError("Architecture & Provisioning category is missing or duplicated")
-    if len([category for category, _ in core.CATEGORIES if category == "Installation Air-Gap"]) != 1:
-        raise RuntimeError("Installation Air-Gap category is missing or duplicated")
-    if len([category for category, _ in core.CATEGORIES if category == "Installation Internet"]) != 1:
-        raise RuntimeError("Installation Internet category is missing or duplicated")
-    if len([category for category, _ in core.CATEGORIES if category == "Diagnostics"]) != 1:
-        raise RuntimeError("Diagnostics category is missing or duplicated")
-    if len([category for category, _ in core.CATEGORIES if category == "Linux System"]) != 1:
-        raise RuntimeError("Linux System category is missing or duplicated")
-    if len([category for category, _ in core.CATEGORIES if category == "Manager"]) != 1:
-        raise RuntimeError("Manager category is missing or duplicated")
+
+    categories = [category for category, _ in core.CATEGORIES]
+    if categories != FINAL_MAIN_CATEGORIES:
+        raise RuntimeError(
+            "Spark Manager main menu mismatch: "
+            f"expected={FINAL_MAIN_CATEGORIES!r} actual={categories!r}"
+        )
+    if len(categories) != len(set(categories)):
+        raise RuntimeError("Spark Manager main menu contains duplicate categories")
 
     manager_actions = [a for category, actions in core.CATEGORIES if category == "Manager" for a in actions]
     manager_labels = {a.action_id: a.label for a in manager_actions}
@@ -213,21 +225,38 @@ def provisioning_self_test() -> int:
     if any(action_id.startswith("manager-airgap-") for action_id in airgap_ids):
         raise RuntimeError("Manager offline actions leaked into Installation Air-Gap")
 
+    security_ids = {
+        a.action_id
+        for category, actions in core.CATEGORIES
+        if category == "Security"
+        for a in actions
+    }
+    database_ids = {
+        a.action_id
+        for category, actions in core.CATEGORIES
+        if category == "Database"
+        for a in actions
+    }
+    if security_ids & DATABASE_ACTION_IDS:
+        raise RuntimeError("Database actions leaked into Security")
+    missing_database = DATABASE_ACTION_IDS - database_ids
+    if missing_database:
+        raise RuntimeError("Database category is incomplete: " + ", ".join(sorted(missing_database)))
+
     cleanup_actions = [a for category, actions in core.CATEGORIES if category == "Cleanup / Remove" for a in actions]
     if any(a.action_id == "backup-restore-plain" for a in cleanup_actions):
         raise RuntimeError("database restore action leaked into Cleanup / Remove")
     if len([a for a in cleanup_actions if a.action_id == "cleanup-backups"]) != 1:
         raise RuntimeError("Cleanup / Remove must contain exactly one cleanup-backups action")
 
+    forbidden = {"Overview", "Architecture & Provisioning", "Services", "Certificates", "Node / npm"}
+    leaked = forbidden & set(categories)
+    if leaked:
+        raise RuntimeError("Removed main-menu categories still visible: " + ", ".join(sorted(leaked)))
+
     spark_entry = HERE / "spark"
-    architecture_entry = HERE / "spark-architecture"
     if spark_entry.is_file() and "install-22)" not in spark_entry.read_text(encoding="utf-8"):
         raise RuntimeError("Spark backend does not expose install-22")
-    if architecture_entry.is_file():
-        architecture_source = architecture_entry.read_text(encoding="utf-8")
-        for action_id in ("architecture-central-install", "architecture-central-resume", "architecture-central-repair"):
-            if action_id not in architecture_source:
-                raise RuntimeError(f"architecture backend routing is missing: {action_id}")
     return result
 
 
