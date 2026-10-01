@@ -60,6 +60,7 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     org_unit_name_snapshot: p.org_unit_name_snapshot,
     attendance_status: p.attendance_status,
     delegate_name: p.delegate_name ?? null,
+    is_signatory: p.is_signatory,
   }));
 
   const externalParts: DocExternalPart[] = props.externalParts.map(p => ({
@@ -68,6 +69,7 @@ export function toDocData(props: ToDocDataInput): MinutesDocumentData {
     organization: p.organization,
     position: p.position,
     attendance_status: p.attendance_status,
+    is_signatory: p.is_signatory,
   }));
 
   const agendaItems: DocAgendaItem[] = props.agendaResults.map((a, i) => ({
