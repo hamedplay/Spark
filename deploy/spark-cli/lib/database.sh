@@ -84,8 +84,15 @@ spark_database_update_supabase() {
     return 1
   fi
 
-  local pending=() file base total current=0
-  mapfile -t pending < <(spark_database_pending_migrations)
+  local pending=() file base total current=0 pending_file
+  pending_file="$(mktemp)"
+  if ! spark_database_pending_migrations >"$pending_file"; then
+    rm -f "$pending_file"
+    fail "Unable to determine pending migrations; database update stopped."
+    return 1
+  fi
+  mapfile -t pending <"$pending_file"
+  rm -f "$pending_file"
   total="${#pending[@]}"
 
   if (( total == 0 )); then
