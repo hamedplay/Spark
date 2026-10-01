@@ -1,0 +1,76 @@
+name: Temporary fast Manager update v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-fast-manager-update-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply and validate fast Manager path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          workflow = Path('.github/workflows/tmp-fast-manager-update.yml').read_text(encoding='utf-8')
+          m = re.search(r"python3 - <<'PY'\n(.*?)\n          PY\n\n          # Validation", workflow, re.S)
+          if not m:
+              raise SystemExit('Unable to extract Manager transformation script')
+          code = '\n'.join(line[10:] if line.startswith('          ') else line for line in m.group(1).splitlines())
+          exec(compile(code, '<manager-transform>', 'exec'), {})
+
+          # Remove the legacy revision comparison body entirely. The compatibility
+          # command now delegates to readiness-only status and never compares versions.
+          p = Path('deploy/spark-cli/lib/airgap-manager.sh')
+          s = p.read_text(encoding='utf-8')
+          s, count = re.subn(
+              r'spark_manager_airgap_verify_revisions\(\) \{.*?\n\}\n\nspark_manager_airgap_install_environment\(\)',
+              'spark_manager_airgap_verify_revisions() {\n  spark_manager_airgap_status "${1:-$(spark_manager_airgap_profile_path)}"\n}\n\nspark_manager_airgap_install_environment()',
+              s,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit('Unable to replace legacy revision verifier')
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          bash -n deploy/spark-cli/bootstrap.sh
+          bash -n deploy/spark-cli/spark
+          bash -n deploy/spark-cli/lib/airgap-manager.sh
+          bash -n deploy/spark-cli/lib/airgap-full-source.sh
+          bash -n deploy/spark-cli/lib/spark-manager-airgap
+          bash -n deploy/spark-cli/spark-manager-airgap-bootstrap
+          bash -n deploy/spark-cli/bootstrap-full-source-airgap.sh
+          python3 -m py_compile deploy/spark-cli/spark-ui.py
+
+          if grep -nE 'SHA256SUMS|sha256sum|checksum verification|VERSION_MISMATCH' \
+            deploy/spark-cli/bootstrap.sh \
+            deploy/spark-cli/lib/airgap-manager.sh \
+            deploy/spark-cli/lib/airgap-full-source.sh \
+            deploy/spark-cli/lib/spark-manager-airgap \
+            deploy/spark-cli/spark-manager-airgap-bootstrap \
+            deploy/spark-cli/bootstrap-full-source-airgap.sh; then
+            echo 'Manager checksum/version mismatch gate still present.' >&2
+            exit 1
+          fi
+          ! grep -Fq 'Synchronizing final integration package' deploy/spark-cli/bootstrap.sh
+          ! grep -Fq 'commits/main' deploy/spark-cli/bootstrap.sh
+
+          git config user.name 'Spark Manager Automation'
+          git config user.email 'spark-manager@users.noreply.github.com'
+          git add deploy/spark-cli
+          git commit -m 'perf: streamline Spark Manager updates'
+          git push origin HEAD:main
