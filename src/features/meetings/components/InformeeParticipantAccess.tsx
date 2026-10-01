@@ -28,7 +28,7 @@ export function InformeeParticipantAccess({ currentUserId }: Props) {
 
   const loadMeetings = useCallback(async () => {
     try {
-      const rows = await fetchInformeeMeetings(currentUserId);
+      const rows = await fetchInformeeMeetings();
       setMeetings(rows);
     } catch {
       setMeetings([]);
