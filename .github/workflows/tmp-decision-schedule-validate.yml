@@ -1,0 +1,25 @@
+name: Temporary Decision Schedule Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-decision-schedule-validate.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Schedule structure checks
+        run: |
+          grep -q "decision_due_schedule_time" supabase/migrations/20261001223500_add_decision_notification_schedule_config.sql
+          grep -q "periodic_followup_schedule_time" supabase/migrations/20261001223500_add_decision_notification_schedule_config.sql
+          grep -q "DecisionScheduleTab" src/components/NotificationsConfigPanel.tsx
+          grep -q "next_attempt_at: remindAt" supabase/functions/process-minutes-reminders/index.ts
