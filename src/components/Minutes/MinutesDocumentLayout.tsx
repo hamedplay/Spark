@@ -65,12 +65,12 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
   }
 
   const allSigners = [
-    ...internalParts.map(p => ({
+    ...internalParts.filter(p => p.is_signatory).map(p => ({
       id: p.id,
       name: p.name_snapshot,
       sub: p.org_unit_name_snapshot || DASH,
     })),
-    ...externalParts.map(p => ({
+    ...externalParts.filter(p => p.is_signatory).map(p => ({
       id: p.id,
       name: p.full_name,
       sub: p.organization || DASH,
@@ -232,7 +232,7 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
 
         {showParticipants && allSigners.length > 0 && (
           <div className="mp-section">
-            <h2 className="mp-section-title">شرکت‌کنندگان و محل امضا</h2>
+            <h2 className="mp-section-title">امضاکنندگان صورت‌جلسه و محل امضا</h2>
             {signRows.map((row, rowIdx) => (
               <div key={rowIdx} className="mp-sign-grid" style={{ gridTemplateColumns: `repeat(${signCols}, 1fr)` }}>
                 {row.map(s => (
