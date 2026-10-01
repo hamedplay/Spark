@@ -417,7 +417,7 @@ airgap_install_manager_local() {
   airgap_require_file "${source_dir}/spark-ui-core.py" || return 1
   airgap_require_file "${source_dir}/spark-airgap" || return 1
   airgap_require_file "${source_dir}/spark-migrate" || return 1
-  require_dir "${SPARK_ROOT}/deploy/livekit" || return 1
+  require_dir "${SPARK_ROOT}/deploy/spark-cli/livekit" || return 1
 
   bash -n "${source_dir}/spark" || return 1
   bash -n "${source_dir}/spark-airgap" || return 1
@@ -450,7 +450,7 @@ PY
   install -m 0644 "${source_dir}/spark-ui.py" "$stage/spark-ui.py"
   install -m 0644 "${source_dir}/spark-ui-core.py" "$stage/spark-ui-core.py"
   for file in "${source_dir}"/lib/*.sh; do install -m 0644 "$file" "$stage/lib/$(basename "$file")"; done
-  cp -a "${SPARK_ROOT}/deploy/livekit/." "$stage/livekit/"
+  cp -a "${SPARK_ROOT}/deploy/spark-cli/livekit/." "$stage/livekit/"
   rm -rf "$target"
   mv "$stage" "$target"
   chmod 0755 "$target"

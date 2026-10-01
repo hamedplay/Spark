@@ -14,7 +14,7 @@ const tile = read('src/features/video-conference/components/LiveKitParticipantTi
 const devices = read('src/features/video-conference/components/controls/MediaDevicesPanel.tsx');
 const roomPage = read('src/features/video-conference/components/room/ConferenceRoomPage.tsx');
 const types = read('src/features/video-conference/types/conference.types.ts');
-const server = read('deploy/livekit/livekit.yaml');
+const server = read('deploy/spark-cli/livekit/livekit.yaml');
 
 test('Phase 14 exposes all required media profiles and camera resolutions', () => {
   for (const profile of ['AUTO', 'DATA_SAVER', 'BALANCED', 'HIGH']) {

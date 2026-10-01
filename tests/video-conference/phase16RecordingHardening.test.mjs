@@ -16,7 +16,7 @@ const consentBanner = read('src/features/video-conference/components/recording/R
 const page = read('src/components/VideoConference/VideoConferencePage.tsx');
 const roomHook = read('src/features/video-conference/hooks/useLiveKitRoom.ts');
 const types = read('src/features/video-conference/types/conference.types.ts');
-const compose = read('deploy/livekit/docker-compose.yml');
+const compose = read('deploy/spark-cli/livekit/docker-compose.yml');
 const manager = read('deploy/spark-cli/lib/install-livekit.sh');
 
 test('Phase 16 uses the exact production recording lifecycle', () => {

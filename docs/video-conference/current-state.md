@@ -180,7 +180,7 @@ supabase/functions/livekit-webhook/index.ts
 ### Self-hosted media deployment
 
 ```text
-deploy/livekit/
+deploy/spark-cli/livekit/
   docker-compose.yml
   livekit.yaml
   egress.yaml
@@ -408,7 +408,7 @@ Measured current files:
 
 ### P1 — Deployment config has duplicate sources
 
-`docker-compose.yml` injects `LIVEKIT_CONFIG` directly, while `deploy/livekit/livekit.yaml` also contains a server configuration. They are not identical; for example TURN UDP differs.
+`docker-compose.yml` injects `LIVEKIT_CONFIG` directly, while `deploy/spark-cli/livekit/livekit.yaml` also contains a server configuration. They are not identical; for example TURN UDP differs.
 
 **Impact:** an operator can validate/edit one file while runtime uses the other.
 

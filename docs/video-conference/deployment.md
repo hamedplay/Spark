@@ -7,7 +7,7 @@ The checked-in production model is a **single-host self-hosted LiveKit media sta
 Primary assets:
 
 ```text
-deploy/livekit/
+deploy/spark-cli/livekit/
 deploy/spark-cli/lib/install-livekit.sh
 ```
 
@@ -77,7 +77,7 @@ Treat these volumes as operational state during backup, upgrade, and rollback.
 
 ## 5. Secrets and environment
 
-Use `deploy/livekit/.env.example` only as a template.
+Use `deploy/spark-cli/livekit/.env.example` only as a template.
 
 Real values must never be committed for:
 

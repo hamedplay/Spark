@@ -167,7 +167,7 @@ BUNDLE_NPM
 
 airgap_collect_compose_images() {
   local supabase_source="$1" output="$2"
-  local livekit_dir="${SPARK_ROOT}/deploy/livekit"
+  local livekit_dir="${SPARK_ROOT}/deploy/spark-cli/livekit"
   {
     (cd "${supabase_source}/docker" && docker compose --env-file .env.example -f docker-compose.yml config --images) || return 1
     (cd "$livekit_dir" && docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.spark-cli.yml --profile observability config --images) || return 1
@@ -417,7 +417,7 @@ airgap_copy_certificate_pack() {
 
 
 airgap_observability_image_list() {
-  local env_file="${SPARK_ROOT}/deploy/livekit/.env.example"
+  local env_file="${SPARK_ROOT}/deploy/spark-cli/livekit/.env.example"
   local key value
   local -a keys=(
     PROMETHEUS_IMAGE

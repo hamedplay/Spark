@@ -134,7 +134,7 @@ source_dir="$SPARK_ROOT/deploy/spark-cli"
 for path in spark spark-airgap spark-ui.py spark-ui-core.py spark-migrate lib/airgap.sh lib/airgap-build.sh lib/airgap-runtime.sh lib/airgap-dnsless-runtime.sh; do
   [[ -f "$source_dir/$path" ]] || { echo "Air-gap capable Spark source is missing: $path" >&2; exit 1; }
 done
-[[ -d "$SPARK_ROOT/deploy/livekit" ]] || { echo 'Spark LiveKit deployment assets are missing.' >&2; exit 1; }
+[[ -d "$SPARK_ROOT/deploy/spark-cli/livekit" ]] || { echo 'Spark LiveKit deployment assets are missing.' >&2; exit 1; }
 
 bash -n "$source_dir/spark"
 bash -n "$source_dir/spark-airgap"
@@ -160,7 +160,7 @@ else
   install -m 0644 "$source_dir/spark-ui.py" "$stage/spark-ui.py"
   install -m 0644 "$source_dir/spark-ui-core.py" "$stage/spark-ui-core.py"
   for file in "$source_dir"/lib/*.sh; do install -m 0644 "$file" "$stage/lib/$(basename "$file")"; done
-  rsync -a --delete "$SPARK_ROOT/deploy/livekit/" "$stage/livekit/"
+  rsync -a --delete "$SPARK_ROOT/deploy/spark-cli/livekit/" "$stage/livekit/"
   rm -rf "$TARGET"
   mv "$stage" "$TARGET"
   chmod 0755 "$TARGET"

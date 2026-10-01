@@ -5,22 +5,22 @@ import { test } from 'node:test';
 const read = (path) =>
   readFileSync(new URL('../../' + path, import.meta.url), 'utf8');
 
-const compose = read('deploy/livekit/docker-compose.yml');
-const env = read('deploy/livekit/.env.example');
-const prometheus = read('deploy/livekit/monitoring/prometheus.yml');
-const alerts = read('deploy/livekit/monitoring/rules/livekit-alerts.yml');
-const alertmanager = read('deploy/livekit/monitoring/alertmanager.yml');
-const loki = read('deploy/livekit/monitoring/loki.yml');
-const alloy = read('deploy/livekit/monitoring/alloy.alloy');
-const blackbox = read('deploy/livekit/monitoring/blackbox.yml');
+const compose = read('deploy/spark-cli/livekit/docker-compose.yml');
+const env = read('deploy/spark-cli/livekit/.env.example');
+const prometheus = read('deploy/spark-cli/livekit/monitoring/prometheus.yml');
+const alerts = read('deploy/spark-cli/livekit/monitoring/rules/livekit-alerts.yml');
+const alertmanager = read('deploy/spark-cli/livekit/monitoring/alertmanager.yml');
+const loki = read('deploy/spark-cli/livekit/monitoring/loki.yml');
+const alloy = read('deploy/spark-cli/livekit/monitoring/alloy.alloy');
+const blackbox = read('deploy/spark-cli/livekit/monitoring/blackbox.yml');
 const datasources = read(
-  'deploy/livekit/monitoring/grafana/provisioning/datasources/datasources.yml',
+  'deploy/spark-cli/livekit/monitoring/grafana/provisioning/datasources/datasources.yml',
 );
 const overview = read(
-  'deploy/livekit/monitoring/grafana/dashboards/spark-livekit-overview.json',
+  'deploy/spark-cli/livekit/monitoring/grafana/dashboards/spark-livekit-overview.json',
 );
 const operations = read(
-  'deploy/livekit/monitoring/grafana/dashboards/spark-livekit-operations.json',
+  'deploy/spark-cli/livekit/monitoring/grafana/dashboards/spark-livekit-operations.json',
 );
 const manager = read('deploy/spark-cli/lib/install-livekit.sh');
 

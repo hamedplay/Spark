@@ -73,8 +73,8 @@ PY
     [[ -d "$source/$dir" ]] || { fail "Manager source directory missing: $dir"; return 1; }
     cp -a "$source/$dir" "$root/manager/$dir"
   done
-  if [[ -d "${source_root}/deploy/livekit" ]]; then
-    cp -a "${source_root}/deploy/livekit" "$root/manager/livekit"
+  if [[ -d "${source_root}/deploy/spark-cli/livekit" ]]; then
+    cp -a "${source_root}/deploy/spark-cli/livekit" "$root/manager/livekit"
   fi
 
   [[ -f "$source/bootstrap-full-source-airgap.sh" ]] || { fail "ZIP-based offline installer is missing."; return 1; }

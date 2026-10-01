@@ -144,7 +144,7 @@ for path in \
   lib/airgap-observability-quiet.sh lib/airgap-observability-quiet-base.sh; do
   [[ -f "${source_dir}/${path}" ]] || { echo "Bundled Spark control plane is missing: ${path}" >&2; exit 1; }
 done
-[[ -d "${SPARK_ROOT}/deploy/livekit" ]] || { echo "Bundled LiveKit assets are missing." >&2; exit 1; }
+[[ -d "${SPARK_ROOT}/deploy/spark-cli/livekit" ]] || { echo "Bundled LiveKit assets are missing." >&2; exit 1; }
 
 bash -n "${source_dir}/spark"
 bash -n "${source_dir}/spark-airgap"
@@ -170,7 +170,7 @@ install -m 0644 "${source_dir}/spark-ui-core.py" "${stage}/spark-ui-core.py"
 for file in "${source_dir}"/lib/*.sh; do
   install -m 0644 "$file" "${stage}/lib/$(basename "$file")"
 done
-rsync -a --delete "${SPARK_ROOT}/deploy/livekit/" "${stage}/livekit/"
+rsync -a --delete "${SPARK_ROOT}/deploy/spark-cli/livekit/" "${stage}/livekit/"
 printf '%s\n' "$spark_commit" >"${stage}/.spark-control-plane-commit"
 chmod 0644 "${stage}/.spark-control-plane-commit"
 

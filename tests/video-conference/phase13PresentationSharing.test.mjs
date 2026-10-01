@@ -18,7 +18,7 @@ const toolsBar = read('src/features/video-conference/components/controls/Confere
 const types = read('src/features/video-conference/types/conference.types.ts');
 const screenShare = read('src/features/video-conference/hooks/useScreenShare.ts');
 const manager = read('deploy/spark-cli/lib/install-livekit.sh');
-const readme = read('deploy/livekit/README.md');
+const readme = read('deploy/spark-cli/livekit/README.md');
 
 test('Phase 13 persists presentation metadata, shared state and annotations', () => {
   assert.match(subsystem, /create table if not exists public\.conference_presentations/);

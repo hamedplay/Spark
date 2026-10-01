@@ -1,0 +1,1 @@
+import{i as e}from"./rolldown-runtime-Dd_uD5pT.js";import{t}from"./react-BatatxyT.js";var n=e(t(),1);function r(e,t,r){(0,n.useEffect)(()=>{if(!e)return;let n=e=>{t.current&&!t.current.contains(e.target)&&r(null)};return document.addEventListener(`mousedown`,n),()=>document.removeEventListener(`mousedown`,n)},[e,t,r])}export{r as t};

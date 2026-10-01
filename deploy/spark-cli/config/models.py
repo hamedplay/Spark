@@ -148,7 +148,7 @@ class ApplicationEdgeConfig:
 @dataclass(frozen=True)
 class ApplicationLiveKitConfig:
     root: str = "/opt/spark/application/livekit"
-    source_dir: str = "deploy/livekit"
+    source_dir: str = "deploy/spark-cli/livekit"
     image: str = "livekit/livekit-server:v1.13.5"
     redis_image: str = "redis:7.4.5-alpine"
     api_port: int = 7880

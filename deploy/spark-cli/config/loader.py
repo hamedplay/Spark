@@ -164,7 +164,7 @@ def environment_from_mapping(data: dict[str, Any]) -> EnvironmentConfig:
             probe_function=str(edge_data.get("probe_function", "auth-health-check")), verify_jwt=bool(edge_data.get("verify_jwt", False)),
         ),
         livekit=ApplicationLiveKitConfig(
-            root=str(livekit_data.get("root", "/opt/spark/application/livekit")), source_dir=str(livekit_data.get("source_dir", "deploy/livekit")),
+            root=str(livekit_data.get("root", "/opt/spark/application/livekit")), source_dir=str(livekit_data.get("source_dir", "deploy/spark-cli/livekit")),
             image=str(livekit_data.get("image", "livekit/livekit-server:v1.13.5")), redis_image=str(livekit_data.get("redis_image", "redis:7.4.5-alpine")),
             api_port=int(livekit_data.get("api_port", 7880)), rtc_tcp_port=int(livekit_data.get("rtc_tcp_port", 7881)),
             rtc_udp_start=int(livekit_data.get("rtc_udp_start", 50000)), rtc_udp_end=int(livekit_data.get("rtc_udp_end", 60000)),

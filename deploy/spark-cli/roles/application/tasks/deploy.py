@@ -31,7 +31,7 @@ class ApplicationDeployTask(OperationTask):
         return ApplicationSourceManager(ctx.variables.get("command_runner")).resolve(self._profile(ctx).application.source)
 
     def _manifest(self, plan):
-        return load_build_manifest(Path(plan.release_path) / "deploy/spark-build.yaml")
+        return load_build_manifest(Path(plan.release_path) / "deploy/spark-cli/spark-build.yaml")
 
     def _activator(self, ctx):
         return ctx.variables.get("application_activator") or StaticApplicationActivator()

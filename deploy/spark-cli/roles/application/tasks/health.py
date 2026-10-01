@@ -41,7 +41,7 @@ class ApplicationHealthGateTask(OperationTask):
         env = _profile(ctx); plan = _source_plan(ctx)
         runner = ctx.variables.get("command_runner")
         provider = ctx.variables.get("application_secret_provider") or FileSecretProvider(env.application.secret_file)
-        manifest = load_build_manifest(Path(plan.release_path) / "deploy/spark-build.yaml")
+        manifest = load_build_manifest(Path(plan.release_path) / "deploy/spark-cli/spark-build.yaml")
         frontend = StaticHealthGate(runner).wait_healthy(manifest)
         edge_runtime = ctx.variables.get("application_edge_runtime") or EdgeRuntimeManager(runner)
         edge = EdgeVerifier(edge_runtime).inspect(env)

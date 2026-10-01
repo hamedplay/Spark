@@ -76,7 +76,7 @@ application:
     verify_jwt: false
   livekit:
     root: /opt/spark/application/livekit
-    source_dir: deploy/livekit
+    source_dir: deploy/spark-cli/livekit
     image: livekit/livekit-server:v1.13.5
     redis_image: redis:7.4.5-alpine
     api_port: 7880

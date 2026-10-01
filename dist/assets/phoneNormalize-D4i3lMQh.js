@@ -1,0 +1,1 @@
+function e(e){let t=String(e||``).replace(/\D/g,``);return/^00989\d{9}$/.test(t)?t.slice(2):/^989\d{9}$/.test(t)?t:/^09\d{9}$/.test(t)?`98${t.slice(1)}`:/^9\d{9}$/.test(t)?`98${t}`:``}export{e as t};

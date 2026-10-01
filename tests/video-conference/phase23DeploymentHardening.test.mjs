@@ -8,13 +8,13 @@ import { test } from 'node:test';
 const read = (path) =>
   readFileSync(new URL('../../' + path, import.meta.url), 'utf8');
 
-const compose = read('deploy/livekit/docker-compose.yml');
-const env = read('deploy/livekit/.env.example');
-const redis = read('deploy/livekit/redis.conf');
-const caddy = read('deploy/livekit/Caddyfile');
-const livekitYaml = read('deploy/livekit/livekit.yaml');
-const egressYaml = read('deploy/livekit/egress.yaml');
-const ingressYaml = read('deploy/livekit/ingress.yaml');
+const compose = read('deploy/spark-cli/livekit/docker-compose.yml');
+const env = read('deploy/spark-cli/livekit/.env.example');
+const redis = read('deploy/spark-cli/livekit/redis.conf');
+const caddy = read('deploy/spark-cli/livekit/Caddyfile');
+const livekitYaml = read('deploy/spark-cli/livekit/livekit.yaml');
+const egressYaml = read('deploy/spark-cli/livekit/egress.yaml');
+const ingressYaml = read('deploy/spark-cli/livekit/ingress.yaml');
 const manager = read('deploy/spark-cli/lib/install-livekit.sh');
 const gitignore = read('.gitignore');
 
@@ -202,7 +202,7 @@ test('secret files remain root-owned deployment state and real env is ignored', 
   assert.match(env, /GRAFANA_ADMIN_PASSWORD=replace-me/);
   assert.match(gitignore, /^\.env$/m);
   assert.equal(
-    existsSync(new URL('../../deploy/livekit/.env', import.meta.url)),
+    existsSync(new URL('../../deploy/spark-cli/livekit/.env', import.meta.url)),
     false,
   );
   assert.ok(

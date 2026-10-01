@@ -80,7 +80,7 @@ class M43Tests(unittest.TestCase):
     def make_release(self, root: Path):
         release = root / ("a" * 40); release.mkdir()
         (release / "package-lock.json").write_text('{"lockfileVersion":3}')
-        manifest = release / "deploy/spark-build.yaml"; manifest.parent.mkdir()
+        manifest = release / "deploy/spark-cli/spark-build.yaml"; manifest.parent.mkdir(parents=True)
         manifest.write_text(MANIFEST.replace("CURRENT", str(root / "current")))
         return release, manifest
 

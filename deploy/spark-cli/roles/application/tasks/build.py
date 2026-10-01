@@ -31,9 +31,9 @@ class ApplicationBuildTask(OperationTask):
         return ctx.variables.get("application_builder") or StaticApplicationBuilder(ctx.variables.get("command_runner"))
 
     def _manifest(self, plan):
-        path = Path(plan.release_path) / "deploy/spark-build.yaml"
+        path = Path(plan.release_path) / "deploy/spark-cli/spark-build.yaml"
         if not path.is_file():
-            raise RuntimeError("REFUSED: deploy/spark-build.yaml is missing from pinned release")
+            raise RuntimeError("REFUSED: deploy/spark-cli/spark-build.yaml is missing from pinned release")
         return path
 
     def detect(self, ctx):

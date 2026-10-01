@@ -5,7 +5,7 @@
 Phase 22 adds a complete single-host observability stack under:
 
 ```text
-deploy/livekit/monitoring/
+deploy/spark-cli/livekit/monitoring/
 ```
 
 Components:
