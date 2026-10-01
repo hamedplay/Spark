@@ -31,6 +31,7 @@ export interface DocInternalPart {
   org_unit_name_snapshot: string | null;
   attendance_status: string | null;
   delegate_name: string | null;
+  is_signatory: boolean;
 }
 
 export interface DocExternalPart {
@@ -39,6 +40,7 @@ export interface DocExternalPart {
   organization: string | null;
   position: string | null;
   attendance_status: string | null;
+  is_signatory: boolean;
 }
 
 export interface DocAgendaItem {
