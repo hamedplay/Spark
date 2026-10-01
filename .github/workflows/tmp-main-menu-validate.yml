@@ -53,3 +53,4 @@ jobs:
           for i, name in enumerate(actual, 1):
               print(f'{i:02d}. {name}')
           PY
+          echo 'validation-rerun=2'
