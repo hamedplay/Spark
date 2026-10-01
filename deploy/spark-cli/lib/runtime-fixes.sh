@@ -178,6 +178,10 @@ install_step_7() {
   fi
 }
 
+# Apply the Internet same-origin migration after legacy update/Nginx functions
+# are loaded so these definitions become the active runtime behavior.
+source "${SCRIPT_DIR}/lib/same-origin.sh"
+
 # Load the shared Spark CLI progress renderer late so all normal runtime paths
 # use the same activity/progress UI without duplicating logic in each module.
 source "${SCRIPT_DIR}/lib/progress-ui.sh"
