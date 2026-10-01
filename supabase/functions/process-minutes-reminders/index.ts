@@ -1,7 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.2";
 import { timingSafeCompare } from "../_shared/crypto.ts";
 
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -53,6 +52,19 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // Reuse this existing worker as the periodic scheduler. Materialization is
+    // idempotent in Postgres (one row per decision + recurrence cycle).
+    const { data: materialized, error: materializeError } = await supabase
+      .rpc("materialize_due_minutes_periodic_reminders", { p_limit: 100 });
+
+    if (materializeError) {
+      console.error("[process-reminders] periodic materialization failed", materializeError);
+      return new Response(
+        JSON.stringify({ error: "materialize_failed", details: materializeError.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const { data: claimedReminders, error: claimError } = await supabase
       .rpc("claim_due_minutes_decision_reminders", { p_limit: 50 });
 
@@ -66,7 +78,7 @@ Deno.serve(async (req: Request) => {
 
     if (!claimedReminders || claimedReminders.length === 0) {
       return new Response(
-        JSON.stringify({ processed: 0 }),
+        JSON.stringify({ materialized: Number(materialized ?? 0), processed: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -85,7 +97,12 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
+        const isPeriodic = Boolean(reminder.recurrence_cycle_at);
         const idempotencyKey = `reminder:${reminder.id}:decision_followup_due:${reminder.recipient_user_id}`;
+        const fallbackTitle = isPeriodic ? "یادآوری طرح مجدد مصوبه" : "موعد پیگیری مصوبه";
+        const fallbackMessage = isPeriodic
+          ? `مصوبه «${reminder.decision_title}» براساس برنامه پیگیری تعیین‌شده باید در دستور جلسه بعدی قرار گیرد.`
+          : `موعد پیگیری مصوبه «${reminder.decision_title}» فرا رسیده است.`;
 
         const { data: queueResult, error: queueError } = await supabase
           .rpc("resolve_and_queue_notification", {
@@ -98,11 +115,14 @@ Deno.serve(async (req: Request) => {
             p_actor_user_id: null,
             p_context: {
               decision_title: reminder.decision_title,
-              decision_link: `#minutes-my-decisions?decision=${reminder.decision_id}`,
-              fallback_title: "موعد پیگیری مصوبه",
-              fallback_message: `موعد پیگیری مصوبه «${reminder.decision_title}» فرا رسیده است.`,
+              decision_link: `#minutes-hub?decision=${reminder.decision_id}`,
+              fallback_title: fallbackTitle,
+              fallback_message: fallbackMessage,
               audience: "decision_owner",
               reminder_id: reminder.id,
+              periodic_followup: isPeriodic,
+              recurrence_cycle_at: reminder.recurrence_cycle_at ?? null,
+              recipient_type: reminder.recipient_type ?? null,
             },
             p_idempotency_key: idempotencyKey,
             p_revision_number: null,
@@ -172,6 +192,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
+        materialized: Number(materialized ?? 0),
         processed: claimedReminders.length,
         queued: queuedCount,
         duplicates: duplicateCount,
