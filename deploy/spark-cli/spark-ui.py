@@ -72,13 +72,13 @@ MANAGER_OFFLINE_ACTIONS = [
     core.Action(
         "manager-airgap-build",
         "Build Manager Offline Update",
-        "Build a checksum-verified offline bundle containing the complete Spark repository and Manager, pinned to one exact commit.",
+        "Build an offline Spark + Manager update bundle from the latest fetched main source.",
         "controlled",
     ),
     core.Action(
         "manager-airgap-install-environment",
         "Update Manager — Offline",
-        "Install or update Spark and Spark Manager from one verified offline bundle across the configured environment.",
+        "Install or update Spark and Spark Manager from one offline bundle across the configured environment.",
         "confirm",
     ),
 ]

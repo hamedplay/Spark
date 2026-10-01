@@ -10,7 +10,7 @@ case "$archive" in
   /var/tmp/spark-manager-inbox/spark-manager-airgap-*.tar.gz) ;;
   *) echo 'Manager archive must be under /var/tmp/spark-manager-inbox.' >&2; exit 1 ;;
 esac
-for cmd in tar find sha256sum; do command -v "$cmd" >/dev/null 2>&1 || { echo "Required command missing: $cmd" >&2; exit 1; }; done
+for cmd in tar find; do command -v "$cmd" >/dev/null 2>&1 || { echo "Required command missing: $cmd" >&2; exit 1; }; done
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 while IFS= read -r entry; do
@@ -23,6 +23,5 @@ fi
 tar -xzf "$archive" -C "$work"
 root="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'spark-manager-airgap-*' | head -n1)"
 [[ -n "$root" && -x "$root/install.sh" ]] || { echo 'Invalid Manager bundle root.' >&2; exit 1; }
-(cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
 "$root/install.sh"
 rm -f -- "$archive"

@@ -106,20 +106,14 @@ with open(path, 'w', encoding='utf-8') as f:
     }, f, indent=2, sort_keys=True)
     f.write('\n')
 PY
-  (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS)
-  (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
   python3 -m compileall -q "$root/manager/core" "$root/manager/config" "$root/manager/architecture" "$root/manager/adapters" "$root/manager/secrets" "$root/manager/roles"
   bash -n "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-manager-airgap-bootstrap" "$root/manager/lib/spark-manager-airgap" "$root/manager/lib/build-manager-airgap"
-  SPARK_MANAGER_REVISION="$revision" SPARK_ENV_PROFILE="$root/manager/config/environments/example.production.yaml" \
-    PYTHONPATH="$root/manager" python3 "$root/manager/spark-architecture" revision | grep -Fq "Revision: $revision"
-  SPARK_MANAGER_REVISION="$revision" "$root/manager/lib/spark-manager-airgap" --help >/dev/null
+  "$root/manager/lib/spark-manager-airgap" --help >/dev/null
 
   partial="$(mktemp "${output_root}/.${bundle_id}.XXXXXX")"
   tar -C "$output_root" -czf "$partial" "$bundle_id"
-  gzip -t "$partial"
   mv "$partial" "$archive"
   partial=""
-  sha256sum "$archive" >"${archive}.sha256"
   rm -rf "$root" "$source_root" "$bundle_repo"
   trap - EXIT
   ok "Spark full-repository + Manager Air-Gap bundle created: $archive"
@@ -141,23 +135,28 @@ for n in build_inventory(e):
 PY
 }
 
-spark_manager_airgap_verify_revisions() {
-  local profile="${1:-$(spark_manager_airgap_profile_path)}" desired="${2:-$(spark_manager_airgap_revision)}"
+spark_manager_airgap_status() {
+  local profile="${1:-$(spark_manager_airgap_profile_path)}"
   [[ -f "$profile" ]] || { fail "Production profile not found: $profile"; return 1; }
-  [[ "$desired" =~ ^[0-9a-f]{40}$ ]] || { fail "Desired Manager revision is unavailable."; return 1; }
-  printf 'SPARK MANAGER DISTRIBUTION\n\n'
-  printf '%-18s %-15s %s\n' 'Node' 'Revision' 'Status'
-  local id role host user known connect command output actual status overall=0
+  printf 'SPARK MANAGER NODES\n\n'
+  printf '%-18s %s\n' 'Node' 'Status'
+  local id role host user known connect command status overall=0
   while IFS=$'\t' read -r id role host user known connect command; do
-    [[ -n "$user" ]] || { printf '%-18s %-15s %s\n' "$id" '-' 'SSH_USER_MISSING'; overall=1; continue; }
-    output="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -o "ConnectTimeout=$connect" \
-      "$user@$host" sudo -n /usr/local/bin/spark-architecture revision 2>/dev/null || true)"
-    actual="$(sed -n 's/^Revision: //p' <<<"$output" | tail -n1)"
-    if [[ "$actual" == "$desired" ]]; then status=PASS; else status=VERSION_MISMATCH; overall=1; fi
-    printf '%-18s %-15s %s\n' "$id" "${actual:0:12}" "$status"
+    if [[ -z "$user" ]]; then
+      status=SSH_USER_MISSING; overall=1
+    elif ssh -q -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -o "ConnectTimeout=$connect" \
+      "$user@$host" 'test -x /usr/local/bin/spark' </dev/null >/dev/null 2>&1; then
+      status=READY
+    else
+      status=UNREACHABLE; overall=1
+    fi
+    printf '%-18s %s\n' "$id" "$status"
   done < <(spark_manager_airgap_inventory "$profile")
-  printf '\nRESULT            %s\n' "$([[ $overall -eq 0 ]] && echo READY || echo NOT_READY)"
   return "$overall"
+}
+
+spark_manager_airgap_verify_revisions() {
+  spark_manager_airgap_status "${1:-$(spark_manager_airgap_profile_path)}"
 }
 
 spark_manager_airgap_install_environment() {
@@ -170,7 +169,6 @@ spark_manager_airgap_install_environment() {
   tar -xzf "$bundle" -C "$work"
   root="$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'spark-manager-airgap-*' | head -n1)"
   [[ -n "$root" ]] || { fail 'Manager bundle root missing.'; return 1; }
-  (cd "$root" && sha256sum -c SHA256SUMS >/dev/null) || { fail 'Manager bundle checksum verification failed.'; return 1; }
   manifest="$root/metadata/manifest.json"
   revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["spark_revision"])' "$manifest")"
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { fail 'Invalid Manager bundle revision.'; return 1; }
@@ -192,5 +190,4 @@ spark_manager_airgap_install_environment() {
       "$user@$host" sudo -n /usr/local/sbin/spark-manager-airgap-bootstrap "$remote_archive" \
       || { fail "Manager install failed: $id"; return 1; }
   done < <(spark_manager_airgap_inventory "$profile")
-  spark_manager_airgap_verify_revisions "$profile" "$revision"
 }

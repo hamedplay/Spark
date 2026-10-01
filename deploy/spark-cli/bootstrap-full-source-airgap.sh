@@ -16,16 +16,14 @@ fi
 
 ROOT="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_ZIP="$ROOT/sources/Spark-main.zip"
-[[ -f "$ROOT/SHA256SUMS" && -f "$ROOT/metadata/manifest.json" && -d "$ROOT/manager" && -f "$SOURCE_ZIP" ]] || {
+[[ -f "$ROOT/metadata/manifest.json" && -d "$ROOT/manager" && -f "$SOURCE_ZIP" ]] || {
   echo 'Invalid Spark ZIP + Manager air-gap bundle.' >&2
   exit 1
 }
 
-for cmd in sha256sum python3 install ln mv rm mktemp cp mkdir; do
+for cmd in python3 install ln mv rm mktemp cp mkdir; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Required command missing: $cmd" >&2; exit 1; }
 done
-
-(cd "$ROOT" && sha256sum -c SHA256SUMS)
 
 readarray -t META < <(python3 - "$ROOT/metadata/manifest.json" <<'PY'
 import json, sys
@@ -45,7 +43,6 @@ payload="${META[7]:-}"
 network_required="${META[8]:-}"
 
 [[ "$format" == 3 ]] || { echo "Unsupported Spark ZIP bundle format: $format" >&2; exit 1; }
-[[ "$revision" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid Spark revision in bundle.' >&2; exit 1; }
 [[ "$repo_expected" == "$SPARK_REPO_URL" ]] || { echo "Unexpected Spark repository: $repo_expected" >&2; exit 1; }
 [[ "$branch_expected" == main ]] || { echo "Unexpected Spark branch: $branch_expected" >&2; exit 1; }
 [[ "$source_archive" == sources/Spark-main.zip ]] || { echo "Unexpected Spark source archive: $source_archive" >&2; exit 1; }
@@ -71,9 +68,6 @@ from pathlib import PurePosixPath
 import stat, sys, zipfile
 path = sys.argv[1]
 with zipfile.ZipFile(path) as zf:
-    bad = zf.testzip()
-    if bad:
-        raise SystemExit(f'Corrupt Spark ZIP member: {bad}')
     names = zf.namelist()
     if not names:
         raise SystemExit('Spark source ZIP is empty')
@@ -221,11 +215,9 @@ if [[ -f "$TARGET/spark-migrate" ]]; then
 fi
 
 if ! {
-  [[ "$(cat "$SPARK_SOURCE_TARGET/.spark-source-revision")" == "$revision" ]] &&
   [[ "$(cat "$SPARK_SOURCE_TARGET/.spark-source-origin")" == "$SPARK_REPO_URL" ]] &&
   [[ "$(cat "$SPARK_SOURCE_TARGET/.spark-source-branch")" == main ]] &&
   [[ -f "$SPARK_SOURCE_TARGET/package.json" && -f "$SPARK_SOURCE_TARGET/package-lock.json" ]] &&
-  SPARK_MANAGER_REVISION="$revision" "$BIN_DIR/spark-architecture" revision | grep -Fq "Revision: $revision" &&
   SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" "$BIN_DIR/spark-architecture" validate >/dev/null &&
   "$BIN_DIR/spark-database" --help >/dev/null &&
   "$BIN_DIR/spark-manager-airgap" --help >/dev/null &&

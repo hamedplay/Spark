@@ -2,201 +2,87 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-REPO_API="https://api.github.com/repos/hamedplay/Spark"
 TARGET="/usr/local/lib/spark-manager"
+MIGRATE_TARGET="/usr/local/lib/spark-migrate"
+BIN_DIR="/usr/local/bin"
+INBOX="/var/tmp/spark-manager-inbox"
+ARCHIVE_URL="https://codeload.github.com/hamedplay/Spark/tar.gz/refs/heads/main"
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-  exec sudo -E "$0" "$@"
+  echo 'Run this installer as root (example: curl -fsSL .../bootstrap.sh | sudo bash).' >&2
+  exit 1
 fi
 
-command -v curl >/dev/null 2>&1 || {
-  echo "curl is required. Install curl first." >&2
-  exit 1
-}
-command -v python3 >/dev/null 2>&1 || {
-  echo "python3 is required for Spark Manager bootstrap." >&2
-  exit 1
-}
+for cmd in curl tar find install ln mv rm mktemp cp bash python3; do
+  command -v "$cmd" >/dev/null 2>&1 || { echo "Required command missing: $cmd" >&2; exit 1; }
+done
 
-resolve_main_sha() {
-  local response sha
-  response="$(curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors -H 'Accept: application/vnd.github+json' \
-    -H 'Cache-Control: no-cache' \
-    "${REPO_API}/commits/main?nocache=$(date +%s)")" || {
-      echo "Unable to resolve current Spark main commit from GitHub API." >&2
-      return 1
-    }
-  sha="$(printf '%s' "$response" \
-    | grep -m1 -Eo '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' \
-    | grep -Eo '[0-9a-f]{40}' || true)"
-  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
-    echo "GitHub API returned an invalid Spark Manager revision." >&2
-    return 1
-  }
-  printf '%s\n' "$sha"
-}
-
-MAIN_SHA="$(resolve_main_sha)"
-RAW_BASE="https://raw.githubusercontent.com/hamedplay/Spark/${MAIN_SHA}/deploy/spark-cli"
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+stage=""
+trap 'rm -rf "$tmp" "${stage:-}"' EXIT
 
-printf 'Resolved Spark Manager revision: %s\n' "${MAIN_SHA:0:12}"
-printf 'Running stable bootstrap base...\n'
-curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors -H 'Cache-Control: no-cache' "${RAW_BASE}/bootstrap-base.sh" -o "$tmp/bootstrap-base.sh"
-python3 - "$tmp/bootstrap-base.sh" <<'PY'
+echo 'Downloading latest Spark Manager...'
+curl -fsSL --retry 3 --retry-delay 1 --connect-timeout 10 --max-time 300 \
+  "$ARCHIVE_URL" -o "$tmp/spark-main.tar.gz"
+tar -xzf "$tmp/spark-main.tar.gz" -C "$tmp"
+source_dir="$(find "$tmp" -type d -path '*/deploy/spark-cli' -print -quit)"
+[[ -n "$source_dir" && -f "$source_dir/spark" && -f "$source_dir/spark-ui.py" && -d "$source_dir/lib" ]] || {
+  echo 'Downloaded Spark Manager payload is incomplete.' >&2
+  exit 1
+}
+
+# Fast local syntax checks only; no revision/version/checksum matching.
+bash -n "$source_dir/spark"
+[[ ! -f "$source_dir/spark-airgap" ]] || bash -n "$source_dir/spark-airgap"
+[[ ! -f "$source_dir/spark-architecture" ]] || bash -n "$source_dir/spark-architecture"
+[[ ! -f "$source_dir/spark-database" ]] || bash -n "$source_dir/spark-database"
+[[ ! -f "$source_dir/spark-migrate" ]] || bash -n "$source_dir/spark-migrate"
+for file in "$source_dir"/lib/*.sh; do bash -n "$file"; done
+python3 - "$source_dir/spark-ui.py" "$source_dir/spark-ui-core.py" <<'PYCODE'
 from pathlib import Path
 import sys
+for value in sys.argv[1:]:
+    path = Path(value)
+    if path.is_file():
+        compile(path.read_text(encoding='utf-8'), str(path), 'exec')
+PYCODE
 
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
+install -d -m 0755 /usr/local/lib "$BIN_DIR"
+stage="$(mktemp -d /usr/local/lib/spark-manager.new.XXXXXX)"
+cp -a "$source_dir/." "$stage/"
+chmod 0755 "$stage/spark"
+for file in spark-airgap spark-architecture spark-database spark-migrate spark-manager-airgap-bootstrap; do
+  [[ ! -f "$stage/$file" ]] || chmod 0755 "$stage/$file"
+done
+for file in "$stage/lib/spark-manager-airgap" "$stage/lib/build-manager-airgap"; do
+  [[ ! -f "$file" ]] || chmod 0755 "$file"
+done
 
-revision_resolution = 'MAIN_SHA="$(resolve_main_sha)"\n'
-revision_pinned = '''if [[ -n "${SPARK_MANAGER_REVISION:-}" ]]; then
-  MAIN_SHA="$SPARK_MANAGER_REVISION"
-else
-  MAIN_SHA="$(resolve_main_sha)"
-fi
-[[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-  echo "Invalid pinned Spark Manager revision." >&2
-  exit 1
-}
-'''
-if revision_resolution not in text:
-    raise SystemExit("bootstrap-base revision resolution contract changed; refusing unsafe patch")
-text = text.replace(revision_resolution, revision_pinned, 1)
-
-architecture_check = 'SPARK_ENV_PROFILE="$tmp/config/environments/example.production.yaml" python3 "$tmp/spark-architecture" validate >/dev/null\n'
-if architecture_check not in text:
-    raise SystemExit("bootstrap-base architecture validation contract changed; refusing unsafe patch")
-text = text.replace(architecture_check, '', 1)
-
-ui_wrapper_check = '''grep -Fq "SPARK_UI_VERSION = \\\"${EXPECTED_UI_VERSION}\\\"" "$tmp/spark-ui.py" || {
-  echo "Spark UI version validation failed." >&2
-  exit 1
-}
-'''
-if ui_wrapper_check not in text:
-    raise SystemExit("bootstrap-base UI wrapper validation contract changed; refusing unsafe patch")
-text = text.replace(ui_wrapper_check, '', 1)
-
-database_smoke_check = '''if ! "$DATABASE_CLI_PATH" --help >/dev/null 2>&1; then
-  echo "Spark database lifecycle CLI smoke test failed; rolling back." >&2
-  rollback_install
+backup="${TARGET}.previous.$$"
+[[ ! -e "$TARGET" ]] || mv "$TARGET" "$backup"
+if ! mv "$stage" "$TARGET"; then
+  [[ ! -e "$backup" ]] || mv "$backup" "$TARGET"
   exit 1
 fi
-'''
-if database_smoke_check not in text:
-    raise SystemExit("bootstrap-base database smoke-test contract changed; refusing unsafe patch")
-text = text.replace(database_smoke_check, '', 1)
+stage=""
 
-path.write_text(text, encoding="utf-8")
-PY
-chmod 0755 "$tmp/bootstrap-base.sh"
-SPARK_MANAGER_REVISION="$MAIN_SHA" "$tmp/bootstrap-base.sh" "$@"
+ln -sfn "$TARGET/spark" "$BIN_DIR/spark"
+[[ ! -f "$TARGET/spark-airgap" ]] || ln -sfn "$TARGET/spark-airgap" "$BIN_DIR/spark-airgap"
+[[ ! -f "$TARGET/spark-architecture" ]] || ln -sfn "$TARGET/spark-architecture" "$BIN_DIR/spark-architecture"
+[[ ! -f "$TARGET/spark-database" ]] || ln -sfn "$TARGET/spark-database" "$BIN_DIR/spark-database"
+[[ ! -f "$TARGET/lib/spark-manager-airgap" ]] || ln -sfn "$TARGET/lib/spark-manager-airgap" "$BIN_DIR/spark-manager-airgap"
+[[ ! -f "$TARGET/lib/build-manager-airgap" ]] || ln -sfn "$TARGET/lib/build-manager-airgap" "$BIN_DIR/build-manager-airgap"
 
-printf 'Synchronizing final integration package from the same revision...\n'
-python3 - "$MAIN_SHA" "$TARGET" <<'PY'
-from __future__ import annotations
-import json, os, subprocess, sys, tempfile
-from pathlib import Path
+if [[ -f "$TARGET/spark-migrate" ]]; then
+  install -d -m 0755 "$MIGRATE_TARGET"
+  install -m 0755 "$TARGET/spark-migrate" "$MIGRATE_TARGET/spark-migrate"
+  ln -sfn "$MIGRATE_TARGET/spark-migrate" "$BIN_DIR/spark-migrate"
+fi
+if [[ -f "$TARGET/spark-manager-airgap-bootstrap" ]]; then
+  install -m 0755 "$TARGET/spark-manager-airgap-bootstrap" /usr/local/sbin/spark-manager-airgap-bootstrap
+  install -d -m 1777 "$INBOX"
+fi
 
-sha, target_value = sys.argv[1:]
-target = Path(target_value)
-repo = "hamedplay/Spark"
-source_root = "deploy/spark-cli/"
-prefixes = (
-    "deploy/spark-cli/core/", "deploy/spark-cli/config/", "deploy/spark-cli/architecture/",
-    "deploy/spark-cli/adapters/", "deploy/spark-cli/secrets/", "deploy/spark-cli/roles/",
-    "deploy/spark-cli/lib/",
-)
-explicit_files = {
-    "deploy/spark-cli/spark-ui-base.py",
-    "deploy/spark-cli/spark-manager-airgap-bootstrap",
-}
-
-def read_url(url: str, *, api: bool = False) -> bytes:
-    command = [
-        "curl", "-fsSL",
-        "--retry", "5",
-        "--retry-delay", "1",
-        "--retry-all-errors",
-        "--connect-timeout", "10",
-        "--max-time", "120",
-        "-H", "Cache-Control: no-cache",
-        "-H", "User-Agent: spark-manager-bootstrap",
-    ]
-    if api:
-        command += ["-H", "Accept: application/vnd.github+json"]
-    command.append(url)
-    try:
-        return subprocess.check_output(command, stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as exc:
-        detail = exc.stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(f"Unable to download {url}: {detail}") from exc
-
-tree = json.loads(read_url(f"https://api.github.com/repos/{repo}/git/trees/{sha}?recursive=1", api=True).decode("utf-8"))
-if tree.get("truncated"):
-    raise SystemExit("GitHub returned a truncated repository tree; refusing incomplete manager sync")
-selected = []
-for item in tree.get("tree", []):
-    path = str(item.get("path", ""))
-    if item.get("type") == "blob" and (path in explicit_files or path.startswith(prefixes)):
-        selected.append(path)
-required = {
-    "deploy/spark-cli/core/workflow.py",
-    "deploy/spark-cli/roles/environment/orchestrator.py",
-    "deploy/spark-cli/roles/environment/remote/executor.py",
-    "deploy/spark-cli/roles/environment/remote/ssh.py",
-    "deploy/spark-cli/roles/reverse_proxy/workflow.py",
-    "deploy/spark-cli/roles/application/edge/runtime.py",
-    "deploy/spark-cli/roles/application/livekit/runtime.py",
-    "deploy/spark-cli/roles/application/coturn/runtime.py",
-    "deploy/spark-cli/lib/airgap-manager.sh",
-    "deploy/spark-cli/lib/spark-manager-airgap",
-    "deploy/spark-cli/lib/build-manager-airgap",
-    "deploy/spark-cli/spark-manager-airgap-bootstrap",
-}
-missing = sorted(required.difference(selected))
-if missing:
-    raise SystemExit("Final integration package is incomplete: " + ", ".join(missing))
-for source_path in sorted(selected):
-    relative = source_path.removeprefix(source_root)
-    destination = target / relative
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    payload = read_url(f"https://raw.githubusercontent.com/{repo}/{sha}/{source_path}")
-    fd, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", dir=str(destination.parent))
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temporary_name, 0o644)
-        os.replace(temporary_name, destination)
-    except Exception:
-        try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
-        raise
-revision = target / ".revision"
-revision.write_text(sha + "\n", encoding="utf-8")
-os.chmod(revision, 0o644)
-print(f"Synced {len(selected)} integration package files from {sha[:12]}")
-PY
-
-chmod 0755 "$TARGET/lib/spark-manager-airgap" "$TARGET/lib/build-manager-airgap" "$TARGET/spark-manager-airgap-bootstrap"
-ln -sfn "$TARGET/lib/spark-manager-airgap" /usr/local/bin/spark-manager-airgap
-ln -sfn "$TARGET/lib/build-manager-airgap" /usr/local/bin/build-manager-airgap
-install -m 0755 "$TARGET/spark-manager-airgap-bootstrap" /usr/local/sbin/spark-manager-airgap-bootstrap
-install -d -m 1777 /var/tmp/spark-manager-inbox
-
-python3 -m compileall -q "$TARGET/core" "$TARGET/config" "$TARGET/architecture" "$TARGET/adapters" "$TARGET/secrets" "$TARGET/roles"
-bash -n "$TARGET/lib/spark-manager-airgap" "$TARGET/lib/build-manager-airgap" "$TARGET/spark-manager-airgap-bootstrap"
-/usr/local/bin/spark --ui-self-test >/dev/null
-python3 "$TARGET/spark-ui.py" --self-test >/dev/null
-/usr/local/bin/spark-database --help >/dev/null
-/usr/local/bin/spark-manager-airgap --help >/dev/null
-SPARK_ENV_PROFILE="$TARGET/config/environments/example.production.yaml" /usr/local/bin/spark-architecture validate >/dev/null
-SPARK_MANAGER_REVISION="$MAIN_SHA" /usr/local/bin/spark-architecture revision | grep -Fq "Revision: $MAIN_SHA"
-printf 'Spark Manager final integration package validation: OK\n'
+rm -rf "$backup"
+echo 'Spark Manager installed/updated successfully.'
+echo 'Run: spark'

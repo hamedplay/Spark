@@ -130,31 +130,17 @@ PY
 self_update() {
   title
   new_log "manager-self-update"
-  local response sha tmp
-  response="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
-    -H 'Cache-Control: no-cache' \
-    "https://api.github.com/repos/hamedplay/Spark/commits/main?nocache=$(date +%s)")" || {
-      fail "Unable to resolve the latest Spark Manager revision."
-      return 1
-    }
-  sha="$(printf '%s' "$response" \
-    | grep -m1 -Eo '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' \
-    | grep -Eo '[0-9a-f]{40}' || true)"
-  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
-    fail "GitHub returned an invalid Spark Manager revision."
-    return 1
-  }
-
+  local tmp
   tmp="$(mktemp)"
-  if ! run_logged "Download Spark Manager bootstrap (${sha:0:12})" \
-    curl -fsSL -H 'Cache-Control: no-cache' \
-      "https://raw.githubusercontent.com/hamedplay/Spark/${sha}/deploy/spark-cli/bootstrap.sh" \
+  if ! run_logged "Download latest Spark Manager installer" \
+    curl -fsSL --retry 3 --retry-delay 1 \
+      "https://raw.githubusercontent.com/hamedplay/Spark/main/deploy/spark-cli/bootstrap.sh" \
       -o "$tmp"; then
     rm -f "$tmp"
     return 1
   fi
   if ! bash -n "$tmp" >>"$CURRENT_LOG" 2>&1; then
-    fail "Downloaded bootstrap has invalid syntax."
+    fail "Downloaded Manager installer has invalid syntax."
     rm -f "$tmp"
     return 1
   fi

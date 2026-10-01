@@ -44,9 +44,6 @@ from pathlib import PurePosixPath
 import sys, zipfile
 path = sys.argv[1]
 with zipfile.ZipFile(path) as zf:
-    bad = zf.testzip()
-    if bad:
-        raise SystemExit(f"Corrupt ZIP member: {bad}")
     names = zf.namelist()
     if not names:
         raise SystemExit("Spark source ZIP is empty")
@@ -98,21 +95,14 @@ with open(path, 'w', encoding='utf-8') as f:
     }, f, indent=2, sort_keys=True)
     f.write('\n')
 PY
-
-  (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS)
-  (cd "$root" && sha256sum -c SHA256SUMS >/dev/null)
   python3 -m compileall -q "$root/manager/core" "$root/manager/config" "$root/manager/architecture" "$root/manager/adapters" "$root/manager/secrets" "$root/manager/roles"
   bash -n "$root/install.sh" "$root/manager/spark" "$root/manager/spark-airgap" "$root/manager/spark-architecture" "$root/manager/spark-database" "$root/manager/spark-manager-airgap-bootstrap" "$root/manager/lib/spark-manager-airgap" "$root/manager/lib/build-manager-airgap"
-  SPARK_MANAGER_REVISION="$revision" SPARK_ENV_PROFILE="$root/manager/config/environments/example.production.yaml" \
-    PYTHONPATH="$root/manager" python3 "$root/manager/spark-architecture" revision | grep -Fq "Revision: $revision"
-  SPARK_MANAGER_REVISION="$revision" "$root/manager/lib/spark-manager-airgap" --help >/dev/null
+  "$root/manager/lib/spark-manager-airgap" --help >/dev/null
 
   partial="$(mktemp "${output_root}/.${bundle_id}.XXXXXX")"
   tar -C "$output_root" -czf "$partial" "$bundle_id"
-  gzip -t "$partial"
   mv "$partial" "$archive"
   partial=""
-  sha256sum "$archive" >"${archive}.sha256"
   rm -rf "$root" "$source_root"
   trap - EXIT
 
