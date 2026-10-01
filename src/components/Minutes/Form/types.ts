@@ -77,7 +77,7 @@ export interface DraftInternalParticipant {
   delegateUserId: string | null;
   delegateName: string;
   notes: string;
-  isSignatory: boolean;
+  isSignatory?: boolean;
   source: InternalParticipantSource;
 }
 
@@ -94,7 +94,7 @@ export interface DraftExternalParticipant {
   invitationStatus: InvitationStatus;
   attendanceStatus: AttendanceStatus | null;
   notes: string;
-  isSignatory: boolean;
+  isSignatory?: boolean;
   source: ExternalParticipantSource;
 }
 
