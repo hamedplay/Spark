@@ -17,13 +17,44 @@ for cmd in curl tar find install ln mv rm mktemp cp bash python3; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "Required command missing: $cmd" >&2; exit 1; }
 done
 
+# Lightweight visual status for interactive installs. ANSI colors are used only
+# when stdout is attached to a terminal; redirected logs stay plain text.
+if [[ -t 1 ]]; then
+  C_CYAN=$'\033[36m'
+  C_GREEN=$'\033[32m'
+  C_DIM=$'\033[2m'
+  C_RESET=$'\033[0m'
+else
+  C_CYAN=''
+  C_GREEN=''
+  C_DIM=''
+  C_RESET=''
+fi
+
+step() {
+  printf '%s[%s]%s %s\n' "$C_CYAN" "$1" "$C_RESET" "$2"
+}
+
+done_step() {
+  printf '%s✓%s %s\n' "$C_GREEN" "$C_RESET" "$1"
+}
+
 tmp="$(mktemp -d)"
 stage=""
 trap 'rm -rf "$tmp" "${stage:-}"' EXIT
 
-echo 'Downloading latest Spark Manager...'
-curl -fsSL --retry 3 --retry-delay 1 --connect-timeout 10 --max-time 300 \
+printf '\n%sSpark Manager installer%s\n' "$C_CYAN" "$C_RESET"
+printf '%sFast install from GitHub main%s\n\n' "$C_DIM" "$C_RESET"
+
+step '1/3' 'Downloading latest Spark Manager...'
+# --progress-bar keeps the download visible while preserving the fast single-
+# archive path. It writes the live meter to stderr, so it remains visible even
+# when bootstrap.sh itself is piped into sudo bash.
+curl -fL --progress-bar --retry 3 --retry-delay 1 --connect-timeout 10 --max-time 300 \
   "$ARCHIVE_URL" -o "$tmp/spark-main.tar.gz"
+done_step 'Download complete.'
+
+step '2/3' 'Extracting and validating...'
 tar -xzf "$tmp/spark-main.tar.gz" -C "$tmp"
 source_dir="$(find "$tmp" -type d -path '*/deploy/spark-cli' -print -quit)"
 [[ -n "$source_dir" && -f "$source_dir/spark" && -f "$source_dir/spark-ui.py" && -d "$source_dir/lib" ]] || {
@@ -44,7 +75,9 @@ for value in sys.argv[1:]:
     if path.is_file():
         compile(path.read_text(encoding='utf-8'), str(path), 'exec')
 PYCODE
+done_step 'Package ready.'
 
+step '3/3' 'Installing Spark Manager...'
 install -d -m 0755 /usr/local/lib "$BIN_DIR"
 stage="$(mktemp -d /usr/local/lib/spark-manager.new.XXXXXX)"
 cp -a "$source_dir/." "$stage/"
@@ -82,5 +115,5 @@ if [[ -f "$TARGET/spark-manager-airgap-bootstrap" ]]; then
 fi
 
 rm -rf "$backup"
-echo 'Spark Manager installed/updated successfully.'
-echo 'Run: spark'
+done_step 'Spark Manager installed/updated successfully.'
+printf '\nRun: %sspark%s\n' "$C_GREEN" "$C_RESET"
