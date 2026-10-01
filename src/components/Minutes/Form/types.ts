@@ -109,6 +109,9 @@ export interface DraftAgendaItem {
   additionalNotes: string;
 }
 
+export type FollowupRecurrence = 'none' | 'weekly' | 'monthly';
+export type FollowupRecipientType = 'secretary' | 'owner';
+
 export interface DraftDecision {
   id: string;
   /** Stable DB identity. New unsaved decisions receive a UUID immediately so
@@ -131,6 +134,11 @@ export interface DraftDecision {
   startDate: string;
   dueDate: string;
   requiresFollowup: boolean;
+  /** Undefined only while loading settings for an existing decision created
+   * before/without the periodic-followup fields in the edit payload. */
+  followupRecurrence?: FollowupRecurrence;
+  followupRecipientType?: FollowupRecipientType;
+  nextPeriodicFollowupAt?: string | null;
   latestUpdate: string;
   discussionResult: string;
   resultType: AgendaResultType;
