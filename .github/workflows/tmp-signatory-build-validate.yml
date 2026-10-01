@@ -1,0 +1,33 @@
+name: Temporary Minutes Signatory Build Validation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-signatory-build-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Approval mode tests
+        run: npm run test:approval-mode
