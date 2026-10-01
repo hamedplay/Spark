@@ -104,7 +104,6 @@ PY
   chmod 0755 /usr/local/lib/spark-manager
   ln -sfn /usr/local/lib/spark-manager/spark "$CLI_PATH"
 
-
   rm -rf "$backup"
   rm -rf /usr/local/share/spark-manager 2>/dev/null || true
 }
@@ -239,6 +238,7 @@ spark_backend_dispatch_inner() {
       ;;
 
     app-update) update_spark ;;
+    database-update-supabase) spark_database_update_supabase ;;
     linux-update) linux_update ;;
     resources) resource_status ;;
     version-info) version_info ;;
