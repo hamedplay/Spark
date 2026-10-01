@@ -1,0 +1,55 @@
+name: Temporary Spark Manager main menu validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-main-menu-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate final main menu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile deploy/spark-cli/spark-ui.py
+          python3 deploy/spark-cli/spark-ui.py --self-test
+          python3 - <<'PY'
+          import importlib.util, pathlib, sys
+          path = pathlib.Path('deploy/spark-cli/spark-ui.py').resolve()
+          spec = importlib.util.spec_from_file_location('spark_ui_final_menu', path)
+          mod = importlib.util.module_from_spec(spec)
+          sys.modules[spec.name] = mod
+          spec.loader.exec_module(mod)
+          expected = [
+              'Installation Internet',
+              'Installation Air-Gap',
+              'Diagnostics',
+              'Security',
+              'Backups',
+              'Cleanup / Remove',
+              'Application',
+              'Database',
+              'Linux System',
+              'Manager',
+          ]
+          actual = [name for name, _ in mod.core.CATEGORIES]
+          assert actual == expected, (actual, expected)
+          forbidden = {'Overview', 'Architecture & Provisioning', 'Services', 'Certificates', 'Node / npm'}
+          assert not (set(actual) & forbidden)
+          db_ids = {a.action_id for name, actions in mod.core.CATEGORIES if name == 'Database' for a in actions}
+          required_db = {
+              'security-db-info','security-db-test','security-db-open','security-db-close',
+              'security-studio-info','security-studio-open','security-studio-close',
+          }
+          assert required_db <= db_ids, sorted(required_db - db_ids)
+          print('FINAL_MAIN_MENU_PASS')
+          for i, name in enumerate(actual, 1):
+              print(f'{i:02d}. {name}')
+          PY
