@@ -12,6 +12,9 @@ export interface ExternalSmsResult {
   error?: string;
 }
 
+export const MEETING_VIDEO_CONFERENCE_ENABLED = false;
+export const MEETING_VIDEO_CONFERENCE_DISABLED_REASON = 'VIDEO_CONFERENCE_DISABLED';
+
 export async function sendSmsToExternals(
   externalNames: string[],
   allContacts: ContactEmail[],
@@ -97,6 +100,9 @@ export async function createConferenceRoom(
   userId: string | null,
   meetingSubject: string,
 ): Promise<{ id: string; code: string } | null> {
+  if (!MEETING_VIDEO_CONFERENCE_ENABLED) {
+    throw new Error(MEETING_VIDEO_CONFERENCE_DISABLED_REASON);
+  }
   if (!userId) return null;
   const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const segment = () => Array.from(
