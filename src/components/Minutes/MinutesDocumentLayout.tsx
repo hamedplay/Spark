@@ -76,8 +76,19 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
       sub: p.organization || DASH,
     })),
   ];
-  const signCols = allSigners.length <= 1 ? 1 : Math.min(allSigners.length, 6);
-  const signRows = chunkArray(allSigners, signCols);
+
+  const previewSignCols = allSigners.length <= 1 ? 1 : Math.min(allSigners.length, 6);
+  const previewSignRows = chunkArray(allSigners, previewSignCols);
+
+  // Print footer prioritizes width before creating another row to keep the
+  // repeated footer compact and minimize unnecessary page growth.
+  const printSignCols = allSigners.length <= 6
+    ? Math.max(allSigners.length, 1)
+    : allSigners.length <= 12
+      ? 6
+      : 8;
+  const printSignRows = chunkArray(allSigners, printSignCols);
+  const printFooterDense = allSigners.length > 12;
 
   const rootClass = variant === 'print' ? 'minutes-print-root' : 'minutes-preview-root';
 
@@ -230,11 +241,11 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
           </div>
         )}
 
-        {showParticipants && allSigners.length > 0 && (
+        {variant === 'preview' && showParticipants && allSigners.length > 0 && (
           <div className="mp-section">
             <h2 className="mp-section-title">امضاکنندگان صورت‌جلسه و محل امضا</h2>
-            {signRows.map((row, rowIdx) => (
-              <div key={rowIdx} className="mp-sign-grid" style={{ gridTemplateColumns: `repeat(${signCols}, 1fr)` }}>
+            {previewSignRows.map((row, rowIdx) => (
+              <div key={rowIdx} className="mp-sign-grid" style={{ gridTemplateColumns: `repeat(${previewSignCols}, 1fr)` }}>
                 {row.map(s => (
                   <div key={s.id} className="mp-sign-box">
                     <div className="mp-sign-name">{s.name}</div>
@@ -280,6 +291,23 @@ export function MinutesDocumentLayout({ data, variant }: MinutesDocumentLayoutPr
 
         <div className="mp-end-note">{footerText}</div>
       </div>
+
+      {variant === 'print' && showParticipants && allSigners.length > 0 && (
+        <div className={`mp-print-signature-footer${printFooterDense ? ' mp-print-signature-footer--dense' : ''}`}>
+          <div className="mp-print-signature-title">امضاکنندگان صورت‌جلسه</div>
+          <div
+            className="mp-print-signature-grid"
+            style={{ gridTemplateColumns: `repeat(${printSignCols}, minmax(0, 1fr))` }}
+          >
+            {printSignRows.flat().map(signer => (
+              <div key={signer.id} className="mp-print-signature-item">
+                <div className="mp-print-signature-space" />
+                <div className="mp-print-signature-name">{signer.name}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
