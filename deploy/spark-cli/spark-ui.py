@@ -174,7 +174,6 @@ def _extend_categories() -> None:
     ]
 
 
-_original_self_test = core.self_test
 _original_task_init = core.TaskProcess.__init__
 
 
@@ -193,7 +192,13 @@ def manager_routed_task_init(self, spark_path, action_id, args, rows, cols):
 
 
 def provisioning_self_test() -> int:
-    result = _original_self_test()
+    # The wrapper owns the final menu contract. Do not call the legacy base
+    # self-test here because it intentionally requires retired top-level
+    # categories such as Architecture & Provisioning and the old Air-Gapped name.
+    if core.SPARK_UI_VERSION != SPARK_UI_VERSION:
+        raise RuntimeError(
+            f"Spark UI core version mismatch: wrapper={SPARK_UI_VERSION} core={core.SPARK_UI_VERSION}"
+        )
 
     categories = [category for category, _ in core.CATEGORIES]
     if categories != FINAL_MAIN_CATEGORIES:
@@ -222,6 +227,17 @@ def provisioning_self_test() -> int:
         if category == "Installation Air-Gap"
         for a in actions
     }
+    required_airgap = {
+        "airgap-build",
+        "airgap-validate",
+        "airgap-import",
+        "airgap-step",
+        "airgap-install-all",
+        "airgap-status",
+    }
+    missing_airgap = required_airgap - airgap_ids
+    if missing_airgap:
+        raise RuntimeError("Installation Air-Gap is incomplete: " + ", ".join(sorted(missing_airgap)))
     if any(action_id.startswith("manager-airgap-") for action_id in airgap_ids):
         raise RuntimeError("Manager offline actions leaked into Installation Air-Gap")
 
@@ -254,10 +270,18 @@ def provisioning_self_test() -> int:
     if leaked:
         raise RuntimeError("Removed main-menu categories still visible: " + ", ".join(sorted(leaked)))
 
+    # Preserve the base English-only UI guard without inheriting its retired
+    # menu-shape assertions.
+    base.assert_english_ui_registry()
+    sample = "\u062a\u0633\u062a Docker\n"
+    sanitized = base.sanitize_backend_text(sample, "diagnostic-docker")
+    if base.NON_ENGLISH_UI_RE.search(sanitized) or "Docker" not in sanitized:
+        raise RuntimeError("English-only PTY rendering guard failed")
+
     spark_entry = HERE / "spark"
     if spark_entry.is_file() and "install-22)" not in spark_entry.read_text(encoding="utf-8"):
         raise RuntimeError("Spark backend does not expose install-22")
-    return result
+    return 0
 
 
 _extend_categories()
