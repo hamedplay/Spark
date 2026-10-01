@@ -14,6 +14,14 @@ export function DeleteMeetingDialog({
   onConfirmFull: () => void;
   onClose: () => void;
 }) {
+  const handleRemoveFromMyCalendar = () => {
+    if (!meeting?.id) return;
+    window.dispatchEvent(new CustomEvent('spark:remove-meeting-from-my-calendar', {
+      detail: { meetingId: meeting.id },
+    }));
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" dir="rtl">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
@@ -25,6 +33,18 @@ export function DeleteMeetingDialog({
         <div className="p-5 space-y-3">
           {isOwner ? (
             <>
+              <button
+                onClick={handleRemoveFromMyCalendar}
+                className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-orange-500 dark:hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all text-right group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0 group-hover:bg-orange-500 transition-colors">
+                  <Trash2 className="w-4 h-4 text-orange-600 dark:text-orange-400 group-hover:text-white" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800 dark:text-white text-sm">حذف از تقویم من</p>
+                  <p className="text-xs text-gray-400 mt-0.5">جلسه فقط از تقویم شخصی شما حذف می‌شود و برای دیگران باقی می‌ماند</p>
+                </div>
+              </button>
               <button
                 onClick={onConfirmRevert}
                 className="w-full flex items-start gap-3 p-4 rounded-xl border-2 border-gray-200 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all text-right group"
