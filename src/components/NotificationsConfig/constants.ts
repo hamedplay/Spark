@@ -1,4 +1,4 @@
-import { Group as GroupIcon, FileText, ChartBar as BarChart2 } from 'lucide-react';
+import { Group as GroupIcon, FileText, ChartBar as BarChart2, Clock3 } from 'lucide-react';
 
 export const NOTIFICATION_TYPES = [
   { key: 'meeting_invite',    label: 'دعوت به جلسه',           category: 'جلسات' },
@@ -22,7 +22,6 @@ export const NOTIFICATION_TYPES = [
   { key: 'note_share',        label: 'اشتراک یادداشت',         category: 'یادداشت‌ها' },
   { key: 'report_ready',      label: 'گزارش آماده شد',         category: 'گزارشات' },
   { key: 'system_alert',      label: 'هشدار سیستم',            category: 'سیستم' },
-  // Minutes events (canonical minute_ prefix)
   { key: 'minute_submitted',           label: 'ارسال صورت‌جلسه برای تأیید',  category: 'صورت‌جلسات' },
   { key: 'minute_approval_requested',  label: 'درخواست تأیید',                category: 'صورت‌جلسات' },
   { key: 'minute_approved_by_user',     label: 'تأیید توسط تأییدکننده',         category: 'صورت‌جلسات' },
@@ -32,7 +31,6 @@ export const NOTIFICATION_TYPES = [
   { key: 'minute_chair_confirmed',     label: 'تأیید رئیس جلسه',               category: 'صورت‌جلسات' },
   { key: 'minute_published',           label: 'انتشار صورت‌جلسه',              category: 'صورت‌جلسات' },
   { key: 'minute_revision_invalidated', label: 'باطل‌شدن نسخه',                category: 'صورت‌جلسات' },
-  // Decision events
   { key: 'decision_assigned',           label: 'تخصیص مصوبه',           category: 'مصوبات' },
   { key: 'decision_status_changed',     label: 'تغییر وضعیت',            category: 'مصوبات' },
   { key: 'decision_progress_updated',   label: 'به‌روزرسانی پیشرفت',     category: 'مصوبات' },
@@ -69,6 +67,7 @@ export const COLOR_BADGE: Record<string, string> = {
 export const TABS = [
   { key: 'groups',    label: 'گروه‌بندی اعلان',   icon: GroupIcon },
   { key: 'templates', label: 'قالب اعلان‌ها',     icon: FileText },
+  { key: 'schedule',  label: 'زمان‌بندی مصوبات',  icon: Clock3 },
   { key: 'logs',      label: 'گزارش اعلان‌ها',    icon: BarChart2 },
 ];
 
@@ -91,23 +90,5 @@ export const AUDIENCE_COLORS: Record<string, string> = {
 };
 
 export const NOTIF_SAMPLE_VALUES: Record<string, string> = {
-  full_name: 'سارا احمدی',
-  meeting_subject: 'جلسه هماهنگی پروژه',
-  meeting_date: '۱۵/۳/۱۴۰۵',
-  meeting_time: '۰۹:۰۰-۱۰:۰۰',
-  location: 'اتاق کنفرانس A',
-  location_part: ' | اتاق کنفرانس A',
-  representative: 'رضا کریمی',
-  minutes: '۱۵',
-  task_title: 'بررسی گزارش هفتگی',
-  priority: 'بالا',
-  due_date: '۲۰/۳/۱۴۰۵',
-  event_title: 'جشن سالگرد تأسیس',
-  event_date: '۲۵/۳/۱۴۰۵',
-  sender_name: 'علی محمدی',
-  note_title: 'یادداشت جلسه هیئت مدیره',
-  message_preview: 'سلام، آیا گزارش آماده شده؟',
-  alert_message: 'خرابی موقت در سرویس ایمیل',
-  join_link: 'https://example.com?conference=ABC-DEF-GHI',
-  agenda: '۱. بررسی پیشرفت پروژه | ارائه‌دهنده: علی محمدی | ۲۰ دقیقه\n۲. تخصیص منابع | ۱۵ دقیقه',
+  full_name: 'سارا احمدی', meeting_subject: 'جلسه هماهنگی پروژه', meeting_date: '۱۵/۳/۱۴۰۵', meeting_time: '۰۹:۰۰-۱۰:۰۰', location: 'اتاق کنفرانس A', location_part: ' | اتاق کنفرانس A', representative: 'رضا کریمی', minutes: '۱۵', task_title: 'بررسی گزارش هفتگی', priority: 'بالا', due_date: '۲۰/۳/۱۴۰۵', event_title: 'جشن سالگرد تأسیس', event_date: '۲۵/۳/۱۴۰۵', sender_name: 'علی محمدی', note_title: 'یادداشت جلسه هیئت مدیره', message_preview: 'سلام، آیا گزارش آماده شده؟', alert_message: 'خرابی موقت در سرویس ایمیل', join_link: 'https://example.com?conference=ABC-DEF-GHI', agenda: '۱. بررسی پیشرفت پروژه | ارائه‌دهنده: علی محمدی | ۲۰ دقیقه\n۲. تخصیص منابع | ۱۵ دقیقه',
 };
