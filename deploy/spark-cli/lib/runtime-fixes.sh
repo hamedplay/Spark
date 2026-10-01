@@ -187,6 +187,10 @@ source "${SCRIPT_DIR}/lib/same-origin.sh"
 # workers, schedulers or the Manager control plane.
 source "${SCRIPT_DIR}/lib/application.sh"
 
+# Database migrations are a separate layer as well. Application updates never
+# source or call this updater; it is exposed only through the Database menu.
+source "${SCRIPT_DIR}/lib/database.sh"
+
 # Load the shared Spark CLI progress renderer late so all normal runtime paths
 # use the same activity/progress UI without duplicating logic in each module.
 source "${SCRIPT_DIR}/lib/progress-ui.sh"
