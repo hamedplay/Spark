@@ -3,3 +3,5 @@ node_modules/
 tests/video-conference/e2e/.state/
 tests/video-conference/e2e/*.storage-state.json
 tests/video-conference/runtime/.env
+__pycache__/
+*.py[cod]
