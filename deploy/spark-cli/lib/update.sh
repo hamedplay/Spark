@@ -258,6 +258,10 @@ update_spark() (
     rollback_after_switch
     return 1
   fi
+  if ! run_logged "Apply Nginx gzip performance profile" spark_apply_nginx_gzip_profile; then
+    rollback_after_switch
+    return 1
+  fi
   if ! run_logged "Nginx config test" nginx -t; then
     rollback_after_switch
     return 1
