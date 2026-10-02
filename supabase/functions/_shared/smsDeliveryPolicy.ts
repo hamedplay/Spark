@@ -153,7 +153,7 @@ export function evaluateSmsDeliveryPolicy(
     const fixed = parseMinutes(policy.fixedTime);
     if (fixed == null) return { sendNow: true, nextAllowedAt: null };
     const [hour, minute] = policy.fixedTime.split(":").map(Number);
-    const eventDate = eventMinutes < fixed ? localEvent : addDays(localEvent, 1);
+    const eventDate = eventMinutes <= fixed ? localEvent : addDays(localEvent, 1);
     const target = zonedToUtc(eventDate.year, eventDate.month, eventDate.day, hour, minute, policy.timezone);
     if (now.getTime() >= target.getTime()) {
       return { sendNow: true, nextAllowedAt: null };
