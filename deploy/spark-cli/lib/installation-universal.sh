@@ -66,12 +66,10 @@ install_step_1() {
   title
   new_log "install-01-host-agnostic"
   configure_values_interactive || return 1
-  if run_logged "Validate host-agnostic installation values" test_values; then
-    mark_step 1
-  else
-    unmark_step 1
-    return 1
-  fi
+  # configure_values_interactive derives and persists the only required local
+  # values; avoid immediately running the same validation a second time.
+  mark_step 1
+  ok "Host-agnostic installation configuration is ready."
 }
 
 spark_latest_node_major() {
