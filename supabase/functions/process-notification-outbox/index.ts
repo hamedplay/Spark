@@ -509,7 +509,40 @@ async function processDeferredSmsQueue(
       const { data: result, error: invokeError } = await supabase.functions.invoke("send-sms", { body });
 
       if (invokeError || !result?.ok || result?.status === "failed") {
+        if (row.delivery_mode === "send") {
+          await supabase.from("sms_dispatch_logs").insert({
+            target_phone: row.target_phones?.[0] || null,
+            category: row.category,
+            event_type: row.event_type,
+            audience: row.audience,
+            message: row.raw_message || "",
+            provider_id: row.provider_id,
+            status: "failed",
+            error_text: invokeError?.message || result?.errorCode || result?.error || "DEFERRED_SMS_FAILED",
+            raw_response: result || null,
+          });
+        }
         throw new Error(invokeError?.message || result?.errorCode || result?.error || "DEFERRED_SMS_FAILED");
+      }
+
+      if (row.delivery_mode === "send") {
+        const returnIds: string[] = Array.isArray(result?.returnIds) ? result.returnIds.map(String) : [];
+        const providerMessageId = returnIds[0] || null;
+        await supabase.from("sms_dispatch_logs").insert({
+          target_phone: row.target_phones?.[0] || null,
+          category: row.category,
+          event_type: row.event_type,
+          audience: row.audience,
+          message: row.raw_message || "",
+          provider_id: row.provider_id,
+          status: "sent",
+          pack_id: result?.packId ? String(result.packId) : null,
+          message_ids: result?.messageIds ?? null,
+          cost: result?.cost ?? null,
+          raw_response: result ?? null,
+          provider_message_id: providerMessageId,
+          delivery_status: providerMessageId ? "pending" : null,
+        });
       }
 
       await supabase
