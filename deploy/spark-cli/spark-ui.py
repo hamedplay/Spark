@@ -135,7 +135,7 @@ def _database_actions(security_actions):
     update = core.Action(
         DATABASE_UPDATE_ACTION_ID,
         "Update Supabase",
-        "Apply pending Spark SQL migrations to PostgreSQL in order, record migration history, and reload the PostgREST schema cache. Application files and Supabase Docker/runtime versions are not modified.",
+        "Upgrade the active Supabase self-hosted runtime to the latest stable self-hosted release, preserve Spark secrets/data, re-apply Spark runtime hardening, and validate service health. Spark SQL migrations are not applied.",
         "confirm",
     )
     return [update, *existing]
