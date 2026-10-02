@@ -149,14 +149,18 @@ function buildGroups(users: OrgUserProfile[]): OrgUnitGroup[] {
   });
 }
 
-export function useOrgUsers(currentUserId: string | null): UseOrgUsersResult {
+export function useOrgUsers(currentUserId: string | null, enabled = true): UseOrgUsersResult {
   const [groups, setGroups] = useState<OrgUnitGroup[]>([]);
   const [allUsers, setAllUsers] = useState<OrgUserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!currentUserId) { setLoading(false); return; }
+    if (!enabled || !currentUserId) {
+      setLoading(false);
+      setError(false);
+      return;
+    }
     let cancelled = false;
 
     (async () => {
@@ -176,7 +180,7 @@ export function useOrgUsers(currentUserId: string | null): UseOrgUsersResult {
     })();
 
     return () => { cancelled = true; };
-  }, [currentUserId]);
+  }, [currentUserId, enabled]);
 
   const usersById = useMemo(() => {
     const map: Record<string, OrgUserProfile> = {};
