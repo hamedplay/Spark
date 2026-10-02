@@ -1,21 +1,24 @@
 // @ts-nocheck
+import { lazy, Suspense } from 'react';
 import { ChevronRight, Calendar, RefreshCw, X, Plus, Users, CalendarPlus } from 'lucide-react';
 import { CalendarViews } from './CalendarViews';
 import { supabase } from '../../lib/supabase';
-import { CalendarMeetingForm } from '../CalendarMeetingForm';
 import { MEETING_VIDEO_CONFERENCE_ENABLED } from '../CalendarMeetingForm/services';
 import { MeetingInboxButton } from '../MeetingInboxButton';
 import { JALAALI_MONTHS, VIEW_OPTIONS, parseRequestDateToDateStr } from './utils';
 import { CalendarSidebar } from './CalendarSidebar';
-import { MeetingDetailModal } from './MeetingDetailModal';
-import { CreateEditCalendarModal } from './CreateEditCalendarModal';
-import { SubscriptionsModal } from './SubscriptionsModal';
-import { CalendarListModal } from './CalendarListModal';
-import { ReminderAlertModal } from './ReminderAlertModal';
-import { DeleteMeetingDialog } from './DeleteMeetingDialog';
-import { MoveConfirmDialog } from './MoveConfirmDialog';
-import { ResizeConfirmDialog } from './ResizeConfirmDialog';
 import { CalendarToolbar } from './CalendarToolbar';
+
+const CalendarMeetingForm = lazy(() => import('../CalendarMeetingForm').then(m => ({ default: m.CalendarMeetingForm })));
+const MeetingDetailModal = lazy(() => import('./MeetingDetailModal').then(m => ({ default: m.MeetingDetailModal })));
+const CreateEditCalendarModal = lazy(() => import('./CreateEditCalendarModal').then(m => ({ default: m.CreateEditCalendarModal })));
+const SubscriptionsModal = lazy(() => import('./SubscriptionsModal').then(m => ({ default: m.SubscriptionsModal })));
+const CalendarListModal = lazy(() => import('./CalendarListModal').then(m => ({ default: m.CalendarListModal })));
+const ReminderAlertModal = lazy(() => import('./ReminderAlertModal').then(m => ({ default: m.ReminderAlertModal })));
+const DeleteMeetingDialog = lazy(() => import('./DeleteMeetingDialog').then(m => ({ default: m.DeleteMeetingDialog })));
+const MoveConfirmDialog = lazy(() => import('./MoveConfirmDialog').then(m => ({ default: m.MoveConfirmDialog })));
+const ResizeConfirmDialog = lazy(() => import('./ResizeConfirmDialog').then(m => ({ default: m.ResizeConfirmDialog })));
+
 
 export function CalendarPageView({ model }: { model: Record<string, any> }) {
   const {
@@ -55,7 +58,8 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
     workStartMin
   } = model;
   return (
-    <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
+    <Suspense fallback={null}>
+      <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
 
       {/* Reminder alert */}
       <ReminderAlertModal reminderAlert={reminderAlert} onDismiss={() => setReminderAlert(null)} />
@@ -634,6 +638,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
 
       {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}
       <MeetingInboxButton />
-    </div>
+      </div>
+    </Suspense>
   );
 }
