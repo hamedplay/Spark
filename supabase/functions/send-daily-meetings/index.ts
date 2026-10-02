@@ -646,17 +646,8 @@ Deno.serve(async (req: Request) => {
           const smsData = await smsResp.json().catch(() => ({}));
 
           if (smsData?.ok && smsData?.reason === "DEFERRED_BY_SMS_POLICY") {
-            await supabase.from("sms_dispatch_logs").insert({
-              target_phone: phone,
-              category: "daily_report",
-              event_type: "daily_meetings",
-              message: smsBody,
-              provider_id: provider?.id ?? null,
-              provider_name: provider?.title || provider?.provider_name || null,
-              status: "pending",
-              error_text: "DEFERRED_BY_SMS_POLICY",
-              raw_response: smsData,
-            });
+            // Deferred queue owns the lifecycle. A dispatch log is written only
+            // when the queued SMS is actually sent, avoiding orphan "pending" logs.
           } else if (smsData?.ok) {
             smsSent++;
             const returnIds: string[] = Array.isArray(smsData.returnIds) ? smsData.returnIds : [];
