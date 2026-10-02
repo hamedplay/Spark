@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { AuthPage } from './components/AuthPage';
+import { AuthPage, type PublicAuthBootstrapPromise } from './components/AuthPage';
 import { supabase } from './lib/supabase';
 
 // Login-only behavior stays with this lazy public-auth root so DOM observers
@@ -11,6 +11,7 @@ import './auth-pointer-glow.ts';
 
 interface PublicAuthRootProps {
   onSessionEstablished: () => void;
+  initialAuthBootstrap?: PublicAuthBootstrapPromise | null;
 }
 
 const toasterProps = {
@@ -19,7 +20,7 @@ const toasterProps = {
   toastOptions: { duration: 8000 },
 };
 
-export default function PublicAuthRoot({ onSessionEstablished }: PublicAuthRootProps) {
+export default function PublicAuthRoot({ onSessionEstablished, initialAuthBootstrap = null }: PublicAuthRootProps) {
   const [authPageKey, setAuthPageKey] = useState(0);
 
   const handleAuthSuccess = useCallback(async () => {
@@ -38,7 +39,11 @@ export default function PublicAuthRoot({ onSessionEstablished }: PublicAuthRootP
     <>
       <Toaster {...toasterProps} />
       <div className="spark-auth-flow min-h-screen">
-        <AuthPage key={authPageKey} onSuccess={() => void handleAuthSuccess()} />
+        <AuthPage
+          key={authPageKey}
+          onSuccess={() => void handleAuthSuccess()}
+          initialAuthBootstrap={initialAuthBootstrap}
+        />
       </div>
     </>
   );
