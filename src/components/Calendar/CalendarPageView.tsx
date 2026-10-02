@@ -262,7 +262,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
                 {dayEvs.map(ev => (
                   <div key={ev.id} className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center justify-between ${ev.type === 'leave' ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'}`}>
                     <span>{ev.title}</span>
-                    <button type="button" onClick={async () => { await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70"><X className="w-3 h-3" /></button>
+                    <button type="button" aria-label="حذف رویداد تمام‌روز" onClick={async () => { await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70"><X className="w-3 h-3" /></button>
                   </div>
                 ))}
                 {dm.length === 0 && occ.length === 0 && dayEvs.length === 0 && (
