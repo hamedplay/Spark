@@ -1,0 +1,102 @@
+name: Temporary universal installation validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-universal-install.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: node
+          cache: npm
+
+      - name: Regenerate lockfile root metadata without version pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          npm install --package-lock-only --ignore-scripts
+          node - <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+          if ('engines' in pkg || 'packageManager' in pkg) throw new Error('package.json still pins Node/npm');
+          const root = lock.packages?.[''] || {};
+          if ('engines' in root || 'packageManager' in root) throw new Error('package-lock root still pins Node/npm');
+          NODE
+
+      - name: Validate latest npm with current latest Node
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install -g npm@latest
+          echo "Node=$(node --version)"
+          echo "npm=$(npm --version)"
+          npm ci
+          VITE_SUPABASE_URL=http://127.0.0.1 VITE_SUPABASE_ANON_KEY=test-anon-key npm run build
+          test -s dist/index.html
+
+      - name: Validate installer syntax and contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in deploy/spark-cli/lib/*.sh deploy/spark-cli/spark deploy/spark-cli/spark-airgap deploy/spark-cli/bootstrap-airgap.sh deploy/spark-cli/bootstrap-airgap-bundle.sh; do
+            bash -n "$f"
+          done
+          python3 -m py_compile             deploy/spark-cli/roles/application/build/builder.py             deploy/spark-cli/tests/application/test_m43_static_build_deploy.py             deploy/spark-cli/spark-ui.py             deploy/spark-cli/spark-ui-core.py
+          python3 deploy/spark-cli/spark-ui.py --self-test
+          PYTHONPATH=deploy/spark-cli python3 deploy/spark-cli/tests/application/test_m43_static_build_deploy.py
+
+          universal=deploy/spark-cli/lib/installation-universal.sh
+          grep -Fq 'server_name _;' "$universal"
+          grep -Fq 'npm install -g npm@latest' "$universal"
+          grep -Fq 'spark_latest_node_major' "$universal"
+          grep -Fq "PHONE_LOGIN_ALLOWED_ORIGINS \"same-origin\"" "$universal"
+          grep -Fq "Host: arbitrary.spark.example" "$universal"
+          ! sed -n '/^configure_values_interactive() {/,/^}/p' "$universal" | grep -Eq 'prompt_default|read -r -p'
+          ! grep -Eq '24\.21\.0|24\.18\.1|npm@12\.2\.0|node_24\.x' "$universal"
+
+          grep -Fq 'source "${SCRIPT_DIR}/lib/installation-universal.sh"' deploy/spark-cli/spark
+          grep -Fq 'source "${SCRIPT_DIR}/lib/installation-universal.sh"' deploy/spark-cli/spark-airgap
+          grep -Fq 'lib/installation-universal.sh' deploy/spark-cli/bootstrap-airgap.sh
+          grep -Fq 'lib/installation-universal.sh' deploy/spark-cli/bootstrap-airgap-bundle.sh
+
+          grep -Fq 'requirement: ""' deploy/spark-cli/spark-build.yaml
+          ! grep -Eq '24\.21\.0|>=24|<25' deploy/spark-cli/roles/application/build/builder.py
+
+          airgap=deploy/spark-cli/lib/airgap-build.sh
+          grep -Fq 'npm install -g npm@latest' "$airgap"
+          grep -Fq 'node_${latest_node_major}.x' "$airgap"
+          ! grep -Eq 'node_24\.x|npm@12\.2\.0' "$airgap"
+          ! grep -Fq 'TLS certificate pack source (optional' "$airgap"
+
+          grep -Fq 'allowed.includes("same-origin")' supabase/functions/auth-health-check/index.ts
+          grep -Fq 'const avatarUrl = `/storage/v1/object/public/' supabase/functions/avatar-upload/index.ts
+          ! grep -Fq 'api.shahrmeeting.ir' netlify.toml
+
+      - name: Commit regenerated lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "hamedplay"
+          git config user.email "hamedkhaleghi493@gmail.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already synchronized."
+            exit 0
+          fi
+          git commit -m "chore: remove Node npm pins from lockfile"
+          git push origin HEAD:main
