@@ -122,7 +122,8 @@ git -C "${restore_stage}/spark" update-ref refs/remotes/origin/main "$spark_comm
   echo "Restored Spark source commit does not match bundle manifest." >&2
   exit 1
 }
-bash "${restore_stage}/spark/deploy/spark-cli/spark-airgap" --validate "$root"
+# The complete SHA256 manifest was already verified above. Source checkout below
+# verifies the Spark commit, and import performs the remaining semantic checks.
 if [[ -e "$SPARK_ROOT" ]]; then
   backup="$(mktemp -d /var/backups/spark-airgap-source.XXXXXX)"
   chmod 0700 "$backup"
@@ -189,7 +190,7 @@ ln -sfn "$MIGRATE_TARGET/spark-migrate" "$MIGRATE_PATH"
 
 # Import the same verified extracted root. The format-v2 Manager performs the
 # stronger Edge Runtime/cache/image identity validation before activation.
-"$AIRGAP_CLI_PATH" --backend-action airgap-import "$root"
+SPARK_AIRGAP_SHA256_PREVERIFIED=1 "$AIRGAP_CLI_PATH" --backend-action airgap-import "$root"
 
 printf '\nSpark Air-Gap format-v2 bundle bootstrapped successfully.\n'
 printf 'Bundle        : %s\n' "$bundle_id"
