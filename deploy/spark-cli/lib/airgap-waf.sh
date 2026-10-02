@@ -261,6 +261,7 @@ install_step_14() {
   require_manager_values || return 1
   local old=""
   [[ -f /etc/nginx/sites-available/spark ]] && old="$(mktemp)" && cp -a /etc/nginx/sites-available/spark "$old"
+  spark_apply_nginx_gzip_profile || return 1
   airgap_waf_write_nginx_production || return 1
   if nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 && airgap_waf_test_nginx >>"$CURRENT_LOG" 2>&1; then
     [[ -n "$old" ]] && rm -f "$old"
