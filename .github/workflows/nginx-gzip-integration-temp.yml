@@ -1,0 +1,88 @@
+name: Temporary nginx gzip integration validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/spark-cli/lib/core.sh'
+      - 'deploy/spark-cli/lib/install-platform-b.sh'
+      - 'deploy/spark-cli/lib/installation-universal.sh'
+      - 'deploy/spark-cli/lib/airgap-ip.sh'
+      - 'deploy/spark-cli/lib/airgap-waf.sh'
+      - 'deploy/spark-cli/lib/update.sh'
+      - '.github/workflows/nginx-gzip-integration-temp.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell syntax
+        run: |
+          bash -n deploy/spark-cli/lib/core.sh
+          bash -n deploy/spark-cli/lib/install-platform-b.sh
+          bash -n deploy/spark-cli/lib/installation-universal.sh
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+          bash -n deploy/spark-cli/lib/airgap-waf.sh
+          bash -n deploy/spark-cli/lib/update.sh
+      - name: Validate gzip profile patch is idempotent
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          export MANAGER_CONF=/tmp/spark-manager-test.conf
+          export BACKUP_DIR=/tmp/spark-backups
+          export STATE_DIR=/tmp/spark-state
+          export STEP_DIR=/tmp/spark-state/steps
+          export LOG_DIR=/tmp/spark-logs
+          export C_GREEN='' C_RED='' C_YELLOW='' C_BLUE='' C_CYAN='' C_WHITE='' C_BOLD='' C_DIM='' C_RESET=''
+          mkdir -p "$BACKUP_DIR" "$STEP_DIR" "$LOG_DIR"
+          source deploy/spark-cli/lib/core.sh
+
+          cat >/tmp/nginx.conf <<'EOF'
+user www-data;
+worker_processes auto;
+events { worker_connections 768; }
+http {
+    sendfile on;
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    ##
+    # Gzip Settings
+    ##
+
+    gzip on;
+    # gzip_vary on;
+    # gzip_proxied any;
+    # gzip_comp_level 6;
+    # gzip_types text/plain text/css application/json application/javascript;
+
+    ##
+    # Virtual Host Configs
+    ##
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}
+EOF
+
+          spark_apply_nginx_gzip_profile /tmp/nginx.conf
+          spark_apply_nginx_gzip_profile /tmp/nginx.conf
+
+          test "$(grep -Ec '^[[:space:]]*gzip[[:space:]]+on;' /tmp/nginx.conf)" -eq 1
+          grep -Eq '^[[:space:]]*gzip_vary[[:space:]]+on;' /tmp/nginx.conf
+          grep -Eq '^[[:space:]]*gzip_proxied[[:space:]]+any;' /tmp/nginx.conf
+          grep -Eq '^[[:space:]]*gzip_comp_level[[:space:]]+6;' /tmp/nginx.conf
+          grep -Eq '^[[:space:]]*gzip_min_length[[:space:]]+1024;' /tmp/nginx.conf
+          grep -Eq '^[[:space:]]*gzip_http_version[[:space:]]+1\.1;' /tmp/nginx.conf
+          grep -Fq 'application/javascript' /tmp/nginx.conf
+          grep -Fq 'text/css' /tmp/nginx.conf
+          grep -Fq 'application/manifest+json' /tmp/nginx.conf
+          grep -Fq 'image/svg+xml;' /tmp/nginx.conf
+      - name: Validate install/update integration points
+        run: |
+          grep -Fq 'spark_apply_nginx_gzip_profile' deploy/spark-cli/lib/installation-universal.sh
+          grep -Fq 'spark_apply_nginx_gzip_profile' deploy/spark-cli/lib/airgap-ip.sh
+          grep -Fq 'spark_apply_nginx_gzip_profile' deploy/spark-cli/lib/airgap-waf.sh
+          grep -Fq 'spark_apply_nginx_gzip_profile' deploy/spark-cli/lib/install-platform-b.sh
+          grep -Fq 'Apply Nginx gzip performance profile' deploy/spark-cli/lib/update.sh
