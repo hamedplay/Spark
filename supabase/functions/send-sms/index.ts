@@ -92,6 +92,33 @@ Deno.serve(async (req: Request) => {
       return json({ ok: false, error: "Forbidden: admin access required" }, 403);
     }
 
+    // ── MODE: clear_logs ───────────────────────────────────────────────────────
+    // Operational SMS logs are intentionally short-lived. Manual purge is
+    // restricted to admins and deletes only sms_dispatch_logs.
+    if (mode === "clear_logs") {
+      if (!caller.isAdmin) {
+        return json({ ok: false, error: "Forbidden: admin access required" }, 403);
+      }
+
+      const { count, error: clearError } = await supabase
+        .from("sms_dispatch_logs")
+        .delete({ count: "exact" })
+        .not("id", "is", null);
+
+      if (clearError) {
+        return json({
+          ok: false,
+          errorCode: "SMS_LOG_CLEAR_FAILED",
+          error: clearError.message,
+        }, 500);
+      }
+
+      return json({
+        ok: true,
+        deleted: count ?? 0,
+      });
+    }
+
     // ── MODE: dispatch ─────────────────────────────────────────────────────────
     // Server-side SMS dispatch for internal users (participants/observers).
     // Resolves target phone + provider from server-side rules — never trusts client-provided phone.
