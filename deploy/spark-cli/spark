@@ -264,7 +264,7 @@ spark_backend_dispatch_inner() {
     version-info) version_info ;;
 
     npm-versions) new_log "npm-versions"; run_report "Node / npm versions" bash -c 'node --version; npm --version' ;;
-    npm-update) new_log "npm-update"; run_visible "Update npm 11" npm install -g 'npm@^11.6.2' ;;
+    npm-update) new_log "npm-update"; run_visible "Update npm 12.2" npm install -g 'npm@12.2.0' ;;
     npm-ci) new_log "npm-ci"; run_visible "npm ci" bash -c "cd '$SPARK_ROOT' && npm ci" ;;
     npm-audit) new_log "npm-audit"; run_report "npm audit" bash -c "cd '$SPARK_ROOT' && npm audit" ;;
     npm-audit-prod) new_log "npm-audit-prod"; run_report "npm audit --omit=dev" bash -c "cd '$SPARK_ROOT' && npm audit --omit=dev" ;;
