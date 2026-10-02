@@ -58,11 +58,14 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
     workStartMin
   } = model;
   return (
-    <Suspense fallback={null}>
-      <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
+    <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
 
       {/* Reminder alert */}
-      <ReminderAlertModal reminderAlert={reminderAlert} onDismiss={() => setReminderAlert(null)} />
+      {reminderAlert && (
+        <Suspense fallback={null}>
+          <ReminderAlertModal reminderAlert={reminderAlert} onDismiss={() => setReminderAlert(null)} />
+        </Suspense>
+      )}
 
       {/* Meeting form */}
       {showMeetingForm && (
@@ -72,19 +75,22 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
             style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
             onClick={e => e.stopPropagation()}
           >
-            <CalendarMeetingForm
+            <Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-gray-500">در حال آماده‌سازی فرم جلسه...</div>}>
+              <CalendarMeetingForm
               prefillData={prefillData}
               calendars={[...calendars.filter(c => !c.is_occasions && c.type !== 'private'), ...subscribedCalendars.filter(c => !c.is_occasions && c.type !== 'private')]}
               onCancel={() => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); }}
               onSuccess={(subject, isUpdate) => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); fetchMeetings(); if (onScheduleComplete) onScheduleComplete(); sendNotification(isUpdate ? 'جلسه ویرایش شد' : 'جلسه ثبت شد', subject || ''); }}
-            />
+              />
+            </Suspense>
           </div>
         </div>
       )}
 
       {/* Meeting detail */}
       {detailMeeting && (
-        <MeetingDetailModal
+        <Suspense fallback={null}>
+          <MeetingDetailModal
           meeting={detailMeeting}
           currentUserId={currentUserId}
           resolveName={resolveName}
@@ -129,7 +135,8 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
             setShowMeetingForm(true);
           }}
           onRegisterMinutes={onRegisterMinutes}
-        />
+          />
+        </Suspense>
       )}
 
       {/* Repeat edit scope dialog */}
@@ -198,13 +205,15 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
         const meeting = meetings.find(x => x.id === deleteMeetingDialog.id);
         const isOwner = meeting?.user_id === currentUserId;
         return (
-          <DeleteMeetingDialog
+          <Suspense fallback={null}>
+            <DeleteMeetingDialog
             meeting={meeting}
             isOwner={isOwner}
             onConfirmRevert={() => handleDeleteMeetingConfirm('revert')}
             onConfirmFull={() => handleDeleteMeetingConfirm('full')}
             onClose={() => setDeleteMeetingDialog(null)}
-          />
+            />
+          </Suspense>
         );
       })()}
 
@@ -350,18 +359,21 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
 
       {/* Create/Edit calendar */}
       {showCreateCalendar && (
-        <CreateEditCalendarModal
+        <Suspense fallback={null}>
+          <CreateEditCalendarModal
           editingCalendar={editingCalendar}
           form={calendarForm}
           onChange={setCalendarForm}
           onSave={handleSaveCalendar}
           onClose={() => { setShowCreateCalendar(false); setEditingCalendar(null); }}
-        />
+          />
+        </Suspense>
       )}
 
       {/* Calendar list */}
       {showCalendarList && (
-        <CalendarListModal
+        <Suspense fallback={null}>
+          <CalendarListModal
           calendars={calendars}
           subscribedCalendars={subscribedCalendars}
           meetings={meetings}
@@ -373,12 +385,14 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
           onEdit={cal => { setEditingCalendar(cal); setCalendarForm({ name: cal.name, type: cal.type, description: cal.description || '', is_active: cal.is_active, enable_reminder: cal.enable_reminder, create_online_link: false, show_time_overlap: cal.enable_overlap, free_for_all: true, color: cal.color }); setShowCreateCalendar(true); setShowCalendarList(false); }}
           onDelete={handleDeleteCalendar}
           onClose={() => setShowCalendarList(false)}
-        />
+          />
+        </Suspense>
       )}
 
       {/* Subscriptions */}
       {showSubscriptionsModal && subscriptionsCalendar && (
-        <SubscriptionsModal
+        <Suspense fallback={null}>
+          <SubscriptionsModal
           calendar={subscriptionsCalendar}
           subscriptions={subscriptions}
           allUsers={allUsers}
@@ -392,7 +406,8 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
           onRemove={handleRemoveSubscription}
           onUpdatePermission={handleUpdateSubPermission}
           onClose={() => setShowSubscriptionsModal(false)}
-        />
+          />
+        </Suspense>
       )}
 
       {/* Main layout */}
@@ -617,28 +632,35 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
       )}
 
       {/* Move change decision dialog */}
-      <MoveConfirmDialog
-        pendingMove={pendingMove}
-        committing={isMoveCommitting}
-        onCommitWithNotify={() => commitMove(true)}
-        onCommitWithoutNotify={() => commitMove(false)}
-        onReturnToEdit={returnMoveToEdit}
-        onCancel={() => setPendingMove(null)}
-      />
+      {pendingMove && (
+        <Suspense fallback={null}>
+          <MoveConfirmDialog
+            pendingMove={pendingMove}
+            committing={isMoveCommitting}
+            onCommitWithNotify={() => commitMove(true)}
+            onCommitWithoutNotify={() => commitMove(false)}
+            onReturnToEdit={returnMoveToEdit}
+            onCancel={() => setPendingMove(null)}
+          />
+        </Suspense>
+      )}
 
       {/* Resize change decision dialog */}
-      <ResizeConfirmDialog
-        pendingResize={pendingResize}
-        committing={isResizeCommitting}
-        onCommitWithNotify={() => commitResize(true)}
-        onCommitWithoutNotify={() => commitResize(false)}
-        onReturnToEdit={returnResizeToEdit}
-        onCancel={() => setPendingResize(null)}
-      />
+      {pendingResize && (
+        <Suspense fallback={null}>
+          <ResizeConfirmDialog
+            pendingResize={pendingResize}
+            committing={isResizeCommitting}
+            onCommitWithNotify={() => commitResize(true)}
+            onCommitWithoutNotify={() => commitResize(false)}
+            onReturnToEdit={returnResizeToEdit}
+            onCancel={() => setPendingResize(null)}
+          />
+        </Suspense>
+      )}
 
       {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}
       <MeetingInboxButton />
-      </div>
-    </Suspense>
+    </div>
   );
 }
