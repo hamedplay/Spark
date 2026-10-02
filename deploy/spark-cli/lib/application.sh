@@ -115,6 +115,22 @@ update_spark() (
   run_logged "Prepare production frontend environment" \
     application_prepare_frontend_env "$stage" || return 1
 
+  local pending_migrations_file
+  pending_migrations_file="$(mktemp)"
+  if ! spark_database_pending_migrations "$stage/supabase/migrations" >"$pending_migrations_file"; then
+    rm -f "$pending_migrations_file"
+    fail "Unable to verify database compatibility for target application source."
+    return 1
+  fi
+  if [[ -s "$pending_migrations_file" ]]; then
+    warn "Target application requires pending database migrations:"
+    sed 's#^.*/#  - #' "$pending_migrations_file" | tee -a "$CURRENT_LOG"
+    rm -f "$pending_migrations_file"
+    fail "Application update stopped before build/deploy. Run the Database -> Update Supabase action first, then retry the application update."
+    return 1
+  fi
+  rm -f "$pending_migrations_file"
+
   run_logged "Install application dependencies with npm ci" \
     bash -c "cd '$stage' && npm ci" || return 1
 
