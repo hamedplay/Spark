@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History, Signature as FileSignature } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
@@ -13,13 +13,15 @@ import type { MinuteDetail, InternalParticipantRow, ExternalParticipantRow, Agen
 import { DetailLoadingView, DetailErrorView, DetailNotFoundView } from './Detail/DetailViews';
 import { DetailHeader } from './Detail/DetailHeader';
 import { TabSummary, TabParticipants } from './Detail/TabSummaryParticipants';
-import { TabAgenda } from './Detail/TabAgenda';
-import { TabDecisions } from './Detail/TabDecisions';
-import { TabAttachments } from './Detail/TabAttachments';
-import { TabApprovals } from './Detail/TabApprovals';
-import { RequestChangesModal } from './Detail/TabApprovals';
-import { TabHistory } from './Detail/TabHistory';
-import { TabFinalVersion } from './Detail/TabFinalVersion';
+
+const TabAgenda = lazy(() => import('./Detail/TabAgenda').then((m) => ({ default: m.TabAgenda })));
+const TabDecisions = lazy(() => import('./Detail/TabDecisions').then((m) => ({ default: m.TabDecisions })));
+const TabAttachments = lazy(() => import('./Detail/TabAttachments').then((m) => ({ default: m.TabAttachments })));
+const TabApprovals = lazy(() => import('./Detail/TabApprovals').then((m) => ({ default: m.TabApprovals })));
+const RequestChangesModal = lazy(() => import('./Detail/TabApprovals').then((m) => ({ default: m.RequestChangesModal })));
+const TabHistory = lazy(() => import('./Detail/TabHistory').then((m) => ({ default: m.TabHistory })));
+const TabFinalVersion = lazy(() => import('./Detail/TabFinalVersion').then((m) => ({ default: m.TabFinalVersion })));
+
 
 const TABS = [
   { id: 'summary',       label: 'خلاصه',              icon: FileText },
@@ -110,30 +112,12 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
     };
   }, [printReady]);
 
-  // Load config once on mount
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setConfigLoading(true);
-      setConfigError(null);
-      try {
-        const { logoUrl: logo, config } = await fetchMinutesConfig();
-        if (cancelled) return;
-        setLogoUrl(logo);
-        setDocConfig(config);
-      } catch (e) {
-        if (!cancelled) setConfigError(e instanceof Error ? e.message : 'خطا در بارگذاری تنظیمات قالب');
-      } finally {
-        if (!cancelled) setConfigLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
   const fetchDetail = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setNotFound(false);
+    setConfigLoading(true);
+    setConfigError(null);
 
     // Invalidate any previous snapshot
     setFinalDocData(null);
@@ -173,6 +157,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       setFinalDocData(snapshot.docData);
       setLogoUrl(snapshot.logoUrl);
       setDocConfig(snapshot.config);
+      setConfigLoading(false);
       setIsLoading(false);
 
       // Auto-print if print=1 in URL (triggered from list page)
@@ -184,6 +169,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       }
     } catch (e) {
       if (myToken !== loadTokenRef.current) return;
+      setConfigLoading(false);
       const msg = e instanceof Error ? e.message : 'خطا در بارگذاری';
       if (msg === 'MINUTE_NOT_FOUND') {
         setNotFound(true);
@@ -192,7 +178,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       }
       setIsLoading(false);
     }
-  }, [minuteId, docConfig, logoUrl]);
+  }, [minuteId]);
 
   useEffect(() => {
     fetchDetail();
@@ -465,30 +451,35 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
         <div className="p-5">
           {activeTab === 'summary' && <TabSummary minute={minute} />}
           {activeTab === 'participants' && <TabParticipants internal={internalParts} external={externalParts} />}
-          {activeTab === 'agenda' && <TabAgenda items={agendaResults} />}
+          {activeTab === 'agenda' && <Suspense fallback={null}><TabAgenda items={agendaResults} /></Suspense>}
           {activeTab === 'decisions' && (
-            <TabDecisions
+            <Suspense fallback={null}>
+              <TabDecisions
               minuteId={minute.id}
               minuteStatus={minute.status}
               secretaryId={minute.secretary_user_id}
               chairId={minute.chair_user_id}
               currentUserId={currentUserId}
               isAdmin={isAdmin}
-            />
+              />
+            </Suspense>
           )}
-          {activeTab === 'attachments' && <TabAttachments minuteId={minute.id} canManage={canManage} revisionNumber={minute.revision_number} />}
+          {activeTab === 'attachments' && <Suspense fallback={null}><TabAttachments minuteId={minute.id} canManage={canManage} revisionNumber={minute.revision_number} /></Suspense>}
           {activeTab === 'approvals' && (
-            <TabApprovals
+            <Suspense fallback={null}>
+              <TabApprovals
               approvals={approvals}
               comments={approvalComments}
               agendaItems={agendaResults}
               minute={minute}
               internalParticipants={internalParts}
-            />
+              />
+            </Suspense>
           )}
-          {activeTab === 'history' && <TabHistory minuteId={minute.id} />}
+          {activeTab === 'history' && <Suspense fallback={null}><TabHistory minuteId={minute.id} /></Suspense>}
           {activeTab === 'final_version' && (
-            <TabFinalVersion
+            <Suspense fallback={null}>
+              <TabFinalVersion
               minuteId={minute.id}
               revisionNumber={minute.revision_number}
               canManage={canManage}
@@ -514,7 +505,8 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
               onWordExport={handleWordExport}
               wordLoading={wordLoading}
               printLoading={printLoading}
-            />
+              />
+            </Suspense>
           )}
         </div>
       </div>
@@ -522,13 +514,15 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
         <MinutesPrintView data={finalDocData} />
       )}
       {showRequestChanges && (
-        <RequestChangesModal
+        <Suspense fallback={null}>
+          <RequestChangesModal
           minute={minute}
           agendaItems={agendaResults}
           onClose={() => setShowRequestChanges(false)}
           onSubmitted={() => { setShowRequestChanges(false); refresh(); }}
           currentUserId={currentUserId ?? undefined}
-        />
+          />
+        </Suspense>
       )}
     </div>
   );
