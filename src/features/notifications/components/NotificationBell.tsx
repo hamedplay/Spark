@@ -21,10 +21,12 @@ export interface NotificationBellProps {
   onNavigate?: (
     page: PageId
   ) => void;
+  currentUserId?: string | null;
 }
 
 export function NotificationBell({
   onNavigate,
+  currentUserId = null,
 }: NotificationBellProps) {
   const [showPanel, setShowPanel] =
     useState(false);
@@ -37,7 +39,7 @@ export function NotificationBell({
     loading,
     handleNotificationClick,
     markAllAsRead,
-  } = useNotificationBell(onNavigate);
+  } = useNotificationBell(onNavigate, currentUserId);
 
   useEffect(() => {
     const handler = (
@@ -80,6 +82,8 @@ export function NotificationBell({
           setShowPanel((v) => !v)
         }
         className="relative p-2 text-gray-600 hover:text-blue-500 transition-colors dark:text-gray-300 dark:hover:text-blue-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+        aria-label="اعلان‌ها"
+        aria-expanded={showPanel}
       >
         {unreadCount > 0 ? (
           <>
@@ -90,7 +94,7 @@ export function NotificationBell({
                   'bellRing 1.2s ease-in-out infinite',
               }}
             />
-            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full font-bold px-0.5 shadow-sm">
+            <span className="absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[10px] min-w-[18px] h-[18px] flex items-center justify-center rounded-full font-bold px-0.5 shadow-sm">
               {unreadCount > 99
                 ? '99+'
                 : unreadCount}
