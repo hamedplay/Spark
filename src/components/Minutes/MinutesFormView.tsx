@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { lazy, Suspense, type Dispatch, type SetStateAction } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -16,15 +16,15 @@ import {
 import { PageHeader, TableSkeleton } from './MinutesShared';
 import { MinutesBackButton } from './MinutesBackButton';
 import { SectionInfo } from './Form/SectionInfo';
-import {
-  SectionParticipants,
-  type ExternalParticipantSuggestion,
-} from './Form/SectionParticipants';
-import { SectionAgenda } from './Form/SectionAgenda';
-import { SectionDecisions } from './Form/SectionDecisions';
-import { SectionAttachments } from './Form/SectionAttachments';
-import { SectionApprovers } from './Form/SectionApprovers';
-import { SectionFinal } from './Form/SectionFinal';
+import type { ExternalParticipantSuggestion } from './Form/SectionParticipants';
+
+const SectionParticipants = lazy(() => import('./Form/SectionParticipants').then((m) => ({ default: m.SectionParticipants })));
+const SectionAgenda = lazy(() => import('./Form/SectionAgenda').then((m) => ({ default: m.SectionAgenda })));
+const SectionDecisions = lazy(() => import('./Form/SectionDecisions').then((m) => ({ default: m.SectionDecisions })));
+const SectionAttachments = lazy(() => import('./Form/SectionAttachments').then((m) => ({ default: m.SectionAttachments })));
+const SectionApprovers = lazy(() => import('./Form/SectionApprovers').then((m) => ({ default: m.SectionApprovers })));
+const SectionFinal = lazy(() => import('./Form/SectionFinal').then((m) => ({ default: m.SectionFinal })));
+
 import { DebugPayloadPanel } from './Form/DebugPayloadPanel';
 import { MINUTES_FORM_SECTIONS } from './MinutesFormConfig';
 import type { MinutesLayoutConfig } from './MinutesDocumentData';
@@ -272,6 +272,7 @@ export function MinutesFormView({
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <Suspense fallback={<div className="flex min-h-48 items-center justify-center text-sm text-gray-400">در حال آماده‌سازی بخش...</div>}>
             {activeSection === 0 && (
               <SectionInfo
                 info={info}
@@ -380,6 +381,7 @@ export function MinutesFormView({
                 canManage={true}
               />
             )}
+            </Suspense>
           </div>
 
           <div className="flex items-center justify-between mt-4 flex-wrap gap-3">
