@@ -1,0 +1,59 @@
+name: Temporary fast installation validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-fast-install.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/spark-cli/lib/installation-universal.sh
+          bash -n deploy/spark-cli/lib/airgap.sh
+          bash -n deploy/spark-cli/lib/airgap-build.sh
+          bash -n deploy/spark-cli/lib/airgap-runtime.sh
+          bash -n deploy/spark-cli/bootstrap-airgap.sh
+          bash -n deploy/spark-cli/bootstrap-airgap-bundle.sh
+
+      - name: Fast installation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          u=deploy/spark-cli/lib/installation-universal.sh
+          a=deploy/spark-cli/lib/airgap-build.sh
+          ag=deploy/spark-cli/lib/airgap.sh
+
+          ! grep -Fq 'full-upgrade' "$u"
+          grep -Fq 'server_name _;' "$u"
+
+          step12="$(sed -n '/^install_step_12() {/,/^}/p' "$u")"
+          [[ "$(grep -c 'nginx -t' <<<"$step12")" -eq 1 ]]
+
+          step14="$(sed -n '/^install_step_14() {/,/^}/p' "$u")"
+          ! grep -Fq 'spark_universal_write_nginx' <<<"$step14"
+          grep -Fq 'STEP_DIR}/12.ok' <<<"$step14"
+
+          ! grep -Fq '.tar.gz.sha256' "$a"
+          ! grep -Fq 'gzip -t "$archive"' "$a"
+          ! grep -Fq 'docker image save "$image" >/dev/null' "$a"
+
+          grep -Fq 'SPARK_AIRGAP_SHA256_PREVERIFIED' "$ag"
+          grep -Fq 'sha256sum -c SHA256SUMS' deploy/spark-cli/bootstrap-airgap-bundle.sh
+          grep -Fq 'SPARK_AIRGAP_SHA256_PREVERIFIED=1' deploy/spark-cli/bootstrap-airgap-bundle.sh
+          ! grep -Fq 'spark-airgap" --validate "$root"' deploy/spark-cli/bootstrap-airgap-bundle.sh
+
+      - name: Air-Gap regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 deploy/spark-cli/tests/test_airgap_completeness.py
+          python3 deploy/spark-cli/tests/test_airgap_offline_install.py
+          python3 deploy/spark-cli/tests/test_airgap_image_identity.py
