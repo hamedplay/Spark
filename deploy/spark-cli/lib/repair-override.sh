@@ -28,7 +28,7 @@ normalize_auth_hook_secret() {
 # Route Spark's SMS Auth Hook through the public HTTPS API.
 patch_compose() {
   local compose_file="${SUPABASE_ROOT}/docker-compose.yml"
-  COMPOSE_FILE="$compose_file" SPARK_ROOT_ENV="$SPARK_ROOT" API_DOMAIN_ENV="$API_DOMAIN" python3 - <<'PY'
+  COMPOSE_FILE="$compose_file" SPARK_ROOT_ENV="$SPARK_ROOT" python3 - <<'PY'
 import os,yaml
 from pathlib import Path
 
@@ -41,10 +41,6 @@ required=["api-gw","db","supavisor","auth","functions"]
 missing=[x for x in required if x not in services]
 if missing:
     raise SystemExit(f"Refusing to guess service names. Missing: {missing}")
-
-api_domain=os.environ.get("API_DOMAIN_ENV","").strip()
-if not api_domain:
-    raise SystemExit("API_DOMAIN is required for the HTTPS Auth Hook URI")
 
 services["api-gw"]["ports"]=["127.0.0.1:8000:8000/tcp"]
 services["db"].pop("ports",None)
@@ -69,13 +65,23 @@ def env_to_dict(v):
         return out
     raise SystemExit("Unsupported environment format")
 
-auth_env=env_to_dict(services["auth"].get("environment"))
+auth_service=services["auth"]
+auth_env=env_to_dict(auth_service.get("environment"))
 auth_env.update({
     "GOTRUE_HOOK_SEND_SMS_ENABLED":"true",
-    "GOTRUE_HOOK_SEND_SMS_URI":f"https://{api_domain}/functions/v1/auth-send-sms-hook",
+    "GOTRUE_HOOK_SEND_SMS_URI":"http://host.docker.internal:8000/functions/v1/auth-send-sms-hook",
     "GOTRUE_HOOK_SEND_SMS_SECRETS":"${SEND_SMS_HOOK_SECRET}",
 })
-services["auth"]["environment"]=auth_env
+auth_service["environment"]=auth_env
+extra_hosts=auth_service.get("extra_hosts") or []
+if isinstance(extra_hosts,str):
+    extra_hosts=[extra_hosts]
+elif not isinstance(extra_hosts,list):
+    raise SystemExit("Unsupported auth extra_hosts format")
+host_gateway="host.docker.internal:host-gateway"
+if host_gateway not in extra_hosts:
+    extra_hosts.append(host_gateway)
+auth_service["extra_hosts"]=extra_hosts
 
 fn=services["functions"]
 env_file=fn.get("env_file",[])
