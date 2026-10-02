@@ -16,6 +16,11 @@ eval "$(declare -f install_step_21 | sed '1s/install_step_21/install_step_21_uni
 eval "$(declare -f install_step_22 | sed '1s/install_step_22/install_step_22_universal_base/')"
 eval "$(declare -f installation_step_probe | sed '1s/installation_step_probe/installation_step_probe_universal_base/')"
 
+spark_universal_is_airgap() {
+  [[ "${SPARK_AIRGAP_CONTEXT:-0}" == "1" ]] && return 0
+  declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active
+}
+
 spark_universal_local_ipv4() {
   local ip
   ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')"
@@ -141,7 +146,7 @@ install_step_2() {
   title
   new_log "install-02-latest-packages"
 
-  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+  if spark_universal_is_airgap; then
     install_step_2_universal_base || return 1
   else
     run_logged "Validate supported Ubuntu target" check_supported_ubuntu || return 1
@@ -216,7 +221,7 @@ install_step_11() {
   title
   new_log "install-11-frontend-same-origin"
 
-  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+  if spark_universal_is_airgap; then
     install_step_11_universal_base || return 1
     return 0
   fi
@@ -453,28 +458,28 @@ spark_universal_deferred_video_step() {
 }
 
 install_step_19() {
-  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+  if spark_universal_is_airgap; then
     install_step_19_universal_base
   else
     spark_universal_deferred_video_step 19
   fi
 }
 install_step_20() {
-  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+  if spark_universal_is_airgap; then
     install_step_20_universal_base
   else
     spark_universal_deferred_video_step 20
   fi
 }
 install_step_21() {
-  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+  if spark_universal_is_airgap; then
     install_step_21_universal_base
   else
     spark_universal_deferred_video_step 21
   fi
 }
 install_step_22() {
-  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+  if spark_universal_is_airgap; then
     install_step_22_universal_base
   else
     spark_universal_deferred_video_step 22
@@ -484,7 +489,7 @@ install_step_22() {
 installation_step_probe() {
   case "$1" in
     19|20|21|22)
-      if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+      if spark_universal_is_airgap; then
         installation_step_probe_universal_base "$1"
       else
         [[ -f "${STEP_DIR}/$1.ok" ]]
