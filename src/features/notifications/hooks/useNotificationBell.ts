@@ -7,7 +7,7 @@ import {
 import toast from 'react-hot-toast';
 
 const UNREAD_COUNT_RECONCILE_INTERVAL_MS =
-  5_000;
+  60_000;
 
 import type {
   PageId,
@@ -64,7 +64,8 @@ export interface UseNotificationBellResult {
 export function useNotificationBell(
   onNavigate?: (
     page: PageId
-  ) => void
+  ) => void,
+  initialUserId: string | null = null
 ): UseNotificationBellResult {
   const [notifications, setNotifications] =
     useState<AppNotification[]>([]);
@@ -73,7 +74,7 @@ export function useNotificationBell(
   const [loading, setLoading] =
     useState(true);
   const [currentUserId, setCurrentUserId] =
-    useState<string | null>(null);
+    useState<string | null>(initialUserId);
   const onNavigateRef =
     useRef(onNavigate);
   const unreadCountRef =
@@ -217,6 +218,11 @@ export function useNotificationBell(
   }, []);
 
   useEffect(() => {
+    if (initialUserId) {
+      setCurrentUserId(initialUserId);
+      return;
+    }
+
     let disposed = false;
 
     void (async () => {
@@ -230,7 +236,7 @@ export function useNotificationBell(
     return () => {
       disposed = true;
     };
-  }, []);
+  }, [initialUserId]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -306,7 +312,12 @@ export function useNotificationBell(
           );
           scheduleUnreadCountSync();
         },
-        onRealtimeSubscribed: () => {
+        onRealtimeSubscribed: (reconnected) => {
+          // The initial HTTP snapshot already ran above. Re-fetch only after a
+          // real realtime reconnect; otherwise startup issued the same
+          // notifications query twice.
+          if (!reconnected) return;
+
           void (async () => {
             try {
               const loaded =
