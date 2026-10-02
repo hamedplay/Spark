@@ -155,6 +155,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar, curre
       <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <Suspense fallback={<div className="flex min-h-40 items-center justify-center text-xs text-slate-500">در حال آماده‌سازی فرم ویرایش...</div>}>
           <CreateMeetingForm
+          currentUserId={currentUserId}
           onSuccess={handleEditFormSuccess}
           prefillData={prefill}
           onCancel={() => { setIsEditing(false); setEditPrefill(null); }}
