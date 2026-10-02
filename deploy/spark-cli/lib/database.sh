@@ -4,7 +4,7 @@
 # frontend application or the Supabase Docker/runtime version.
 
 spark_database_pending_migrations() {
-  local migrations_dir="${SPARK_ROOT}/supabase/migrations"
+  local migrations_dir="${1:-${SPARK_ROOT}/supabase/migrations}"
   local latest_applied file base version
 
   [[ -d "$migrations_dir" ]] || {
