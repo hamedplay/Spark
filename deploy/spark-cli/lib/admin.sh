@@ -22,7 +22,7 @@ npm_menu() {
     case "$c" in
       0) return ;;
       1) run_report "Versions" bash -c 'node --version; npm --version'; pause ;;
-      2) run_visible "Update npm" npm install -g 'npm@^11.6.2' || true; pause ;;
+      2) run_visible "Update npm" npm install -g 'npm@12.2.0' || true; pause ;;
       3) run_visible "npm ci" bash -c "cd '$SPARK_ROOT' && npm ci" || true; pause ;;
       4) run_report "npm audit" bash -c "cd '$SPARK_ROOT' && npm audit"; pause ;;
       5) run_report "npm audit production" bash -c "cd '$SPARK_ROOT' && npm audit --omit=dev"; pause ;;
