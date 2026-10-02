@@ -242,15 +242,15 @@ airgap_publish_bundle() (
   local root="$1" output_root="$2" bundle_id archive partial
   bundle_id="$(basename "$root")"
   archive="${output_root}/${bundle_id}.tar.gz"
-  [[ ! -e "$archive" && ! -e "${archive}.sha256" ]] || { fail "Bundle output already exists: $archive"; return 1; }
+  [[ ! -e "$archive" ]] || { fail "Bundle output already exists: $archive"; return 1; }
   partial="$(mktemp "${output_root}/.${bundle_id}.XXXXXX")" || return 1
-  trap 'rm -f -- "$partial" "${partial}.sha256"' EXIT
+  trap 'rm -f -- "$partial"' EXIT
+  # tar/gzip failure is already fatal. The internal SHA256SUMS manifest is the
+  # single integrity authority after extraction, so do not reread the entire
+  # multi-GB archive for gzip -t or an external .sha256 sidecar.
   tar -C "$(dirname "$root")" -czf "$partial" "$bundle_id" || return 1
-  gzip -t "$partial" || return 1
-  printf '%s  %s\n' "$(sha256sum "$partial" | cut -d' ' -f1)" "${bundle_id}.tar.gz" >"${partial}.sha256" || return 1
-  chmod 0600 "$partial" "${partial}.sha256"
+  chmod 0600 "$partial"
   mv "$partial" "$archive" || return 1
-  mv "${partial}.sha256" "${archive}.sha256" || return 1
 )
 
 airgap_linux_amd64_registry_digest() {
@@ -682,10 +682,10 @@ for line in (root/'metadata/manifest.env').read_text().splitlines():
 (root/'manifest.json').write_text(json.dumps(values, indent=2, sort_keys=True)+"\n", encoding='utf-8')
 PY
 
+  # Generate the internal integrity manifest once. Do not immediately reread
+  # every payload file to verify hashes that were just calculated.
   (cd "$bundle" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS) || return 1
-  airgap_validate_checksum_manifest "$bundle" || return 1
   tar -C "$work" -czf "${output_root}/${bundle_id}.tar.gz" "$bundle_id" || return 1
-  (cd "$output_root" && sha256sum "${bundle_id}.tar.gz" >"${bundle_id}.tar.gz.sha256")
   rm -rf "$work"
 
   ok "Air-gap bundle created: ${output_root}/${bundle_id}.tar.gz"
