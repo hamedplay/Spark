@@ -61,7 +61,7 @@ export function WeekView(p: CalendarViewProps) {
                     <div className="text-[10px] sm:text-[11px]">{JALAALI_WEEKDAYS[d.weekday]}</div>
                     <div
                       className={`mt-0.5 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-sm font-bold transition-colors sm:h-8 sm:w-8 sm:text-base ${isToday(d.jy, d.jm, d.jd)
-                        ? 'bg-violet-600 text-white shadow-sm dark:bg-violet-500'
+                        ? 'bg-violet-700 text-white shadow-sm dark:bg-violet-600'
                         : 'text-slate-700 hover:bg-slate-100 dark:text-white dark:hover:bg-slate-800'}`}
                       onClick={() => { setSelectedJy(d.jy); setSelectedJm(d.jm); setSelectedJd(d.jd); setViewMode('day'); }}
                     >
@@ -116,7 +116,7 @@ export function WeekView(p: CalendarViewProps) {
                           ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300'
                           : 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
                         <span className="truncate">{ev.title}</span>
-                        <button type="button" onClick={async e => { e.stopPropagation(); await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="flex-shrink-0 hover:opacity-70">
+                        <button type="button" aria-label="حذف رویداد تمام‌روز" onClick={async e => { e.stopPropagation(); await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="flex-shrink-0 hover:opacity-70">
                           <X className="h-2 w-2" />
                         </button>
                       </div>
