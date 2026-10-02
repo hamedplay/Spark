@@ -34,6 +34,8 @@ export function SparkLoader({
             <img
               src="/logo_spark.png"
               alt="Spark"
+              width={70}
+              height={70}
               className="spark-loader__logo"
               draggable={false}
             />
