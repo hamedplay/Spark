@@ -1,0 +1,77 @@
+name: Temporary Node npm separation validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-node-npm-separation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: npm
+
+      - name: Validate Manager wiring and separation contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/spark-cli/lib/application-maintenance.sh
+          bash -n deploy/spark-cli/spark
+          python3 -m py_compile deploy/spark-cli/spark-ui.py
+          python3 deploy/spark-cli/spark-ui.py --self-test
+
+          grep -Fq 'app-npm-update) application_npm_update ;;' deploy/spark-cli/spark
+          grep -Fq 'app-node-update) application_node_update ;;' deploy/spark-cli/spark
+          grep -Fq 'app-packages-update) application_packages_update ;;' deploy/spark-cli/spark
+
+          node_block="$(sed -n '/^application_node_update() {/,/^application_npm_update() {/p' deploy/spark-cli/lib/application-maintenance.sh)"
+          npm_block="$(sed -n '/^application_npm_update() {/,/^application_npm_outdated() {/p' deploy/spark-cli/lib/application-maintenance.sh)"
+          packages_block="$(sed -n '/^application_packages_update() (/,/^application_node_update() {/p' deploy/spark-cli/lib/application-maintenance.sh)"
+
+          grep -Fq 'apt-cache policy nodejs' <<<"$node_block"
+          grep -Fq 'apt-get install -y --only-upgrade nodejs' <<<"$node_block"
+          grep -Fq 'npm was preserved' <<<"$node_block"
+          ! grep -Fq 'Update npm CLI to' <<<"$node_block"
+
+          grep -Fq "npm view 'npm@12' version --json" <<<"$npm_block"
+          grep -Fq 'npm install -g "npm@${latest}"' <<<"$npm_block"
+          grep -Fq 'Node.js was preserved' <<<"$npm_block"
+          ! grep -Fq 'apt-get' <<<"$npm_block"
+
+          grep -Fq 'npm update --no-audit --no-fund' <<<"$packages_block"
+
+      - name: Resolve latest npm 12 release from registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm view 'npm@12' version --json > /tmp/npm12.json
+          python3 - <<'PY'
+import json, re
+data=json.load(open('/tmp/npm12.json'))
+if isinstance(data,str): data=[data]
+vals=[]
+for value in data:
+    m=re.fullmatch(r'(\d+)\.(\d+)\.(\d+)(?:[-+].*)?', value)
+    if m and int(m.group(1)) == 12:
+        vals.append((tuple(map(int,m.groups()[:3])),value))
+assert vals
+print('latest npm 12:', max(vals)[1])
+PY
+
+      - name: Validate current project baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install -g npm@12.2.0
+          test "$(node --version)" = "v24.21.0"
+          npm ci
+          VITE_SUPABASE_URL=https://example.invalid VITE_SUPABASE_ANON_KEY=test-anon-key npm run build
