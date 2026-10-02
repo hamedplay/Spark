@@ -241,6 +241,7 @@ spark_backend_dispatch_inner() {
     app-update-offline) application_update_offline ;;
     app-npm-update) application_npm_update ;;
     app-node-update) application_node_update ;;
+    app-packages-update) application_packages_update ;;
     app-npm-outdated) application_npm_outdated ;;
     app-npm-audit-production) application_npm_audit_production ;;
     app-npm-audit-all) application_npm_audit_all ;;
