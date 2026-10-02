@@ -31,6 +31,7 @@ create index if not exists deferred_sms_queue_due_idx
 
 alter table public.deferred_sms_queue enable row level security;
 revoke all on table public.deferred_sms_queue from public, anon, authenticated;
+grant all on table public.deferred_sms_queue to service_role;
 
 insert into public.system_config(section,key,value,value_type,label)
 values
@@ -113,3 +114,5 @@ $function$;
 
 revoke all on function public.claim_deferred_sms_queue(integer) from public, anon, authenticated;
 grant execute on function public.claim_deferred_sms_queue(integer) to service_role;
+
+notify pgrst, 'reload schema';
