@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.2";
 import { timingSafeCompare } from "../_shared/crypto.ts";
+import { evaluateSmsDeliveryPolicy, loadSmsDeliveryPolicy } from "../_shared/smsDeliveryPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,10 +37,12 @@ interface ClaimedRow {
 type OutboxMetadata = {
   event_type: string;
   meeting_id: string | null;
+  created_at: string;
 };
 
 type DeferredSmsRow = {
   id: string;
+  delivery_mode: "dispatch" | "external" | "send";
   target_user_id: string | null;
   target_phones: string[];
   category: string;
@@ -49,6 +52,8 @@ type DeferredSmsRow = {
   meeting_id: string | null;
   actor_user_id: string | null;
   event_key: string | null;
+  raw_message: string | null;
+  provider_id: string | null;
   attempt_count: number;
 };
 
@@ -97,7 +102,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const deferredResult = await processDeferredMeetingSmsQueue(supabase);
+    const deferredResult = await processDeferredSmsQueue(supabase);
 
     const { data: claimedRows, error: claimError } = await supabase
       .rpc("claim_notification_outbox_rows", { p_limit: 50 });
@@ -123,7 +128,7 @@ Deno.serve(async (req: Request) => {
     const claimed = claimedRows as ClaimedRow[];
     const { data: metadataRows, error: metadataError } = await supabase
       .from("notification_outbox")
-      .select("id, event_type, meeting_id")
+      .select("id, event_type, meeting_id, created_at")
       .in("id", claimed.map((row) => row.id));
 
     if (metadataError) {
@@ -150,6 +155,7 @@ Deno.serve(async (req: Request) => {
       metadataById.set(meta.id, {
         event_type: meta.event_type,
         meeting_id: meta.meeting_id,
+        created_at: meta.created_at,
       });
     }
 
@@ -333,7 +339,32 @@ Deno.serve(async (req: Request) => {
           smsStatus !== "skipped_no_phone" &&
           smsStatus !== "skipped_no_provider_rule"
         ) {
-          const smsResult = await dispatchSms(supabase, row, eventType, meetingId, context);
+          const policy = await loadSmsDeliveryPolicy(supabase, row.category, eventType);
+          const policyDecision = evaluateSmsDeliveryPolicy(
+            policy,
+            new Date(),
+            metadata?.created_at ? new Date(metadata.created_at) : new Date(),
+          );
+
+          if (!policyDecision.sendNow && policyDecision.nextAllowedAt) {
+            await supabase
+              .from("notification_outbox")
+              .update({
+                status: "partial",
+                notification_status: notificationSent ? "sent" : row.notification_status,
+                sms_status: "pending",
+                next_attempt_at: policyDecision.nextAllowedAt.toISOString(),
+                last_error: "SMS_DEFERRED_BY_POLICY",
+                processed_at: null,
+              })
+              .eq("id", row.id);
+            continue;
+          }
+
+          const smsResult = await dispatchSms(supabase, row, eventType, meetingId, {
+            ...context,
+            sms_policy_deferred_delivery: true,
+          });
 
           if (smsResult.sent) {
             smsStatus = "sent";
@@ -435,13 +466,11 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-async function processDeferredMeetingSmsQueue(
+async function processDeferredSmsQueue(
   supabase: ReturnType<typeof createClient>,
 ): Promise<{ processed: number; failed: number }> {
   const { data, error } = await supabase.rpc("claim_deferred_sms_queue", { p_limit: 50 });
   if (error) {
-    // The manual repair may not be installed yet. Do not block the main
-    // notification outbox while the database is being rolled out.
     console.warn("[outbox-worker] deferred SMS queue unavailable", error.message);
     return { processed: 0, failed: 0 };
   }
@@ -452,23 +481,32 @@ async function processDeferredMeetingSmsQueue(
 
   for (const row of rows) {
     try {
-      const { data: result, error: invokeError } = await supabase.functions.invoke("send-sms", {
-        body: {
-          mode: row.target_user_id ? "dispatch" : "external",
-          targetUserId: row.target_user_id,
-          mobiles: row.target_phones || [],
-          category: row.category,
-          eventType: row.event_type,
-          audience: row.audience,
-          context: {
-            ...(row.context || {}),
-            sms_window_deferred_delivery: true,
-          },
-          meetingId: row.meeting_id,
-          eventKey: row.event_key,
-          triggeredByUserId: row.actor_user_id,
+      const body: Record<string, unknown> = {
+        mode: row.delivery_mode,
+        category: row.category,
+        eventType: row.event_type,
+        audience: row.audience,
+        meetingId: row.meeting_id,
+        eventKey: row.event_key,
+        triggeredByUserId: row.actor_user_id,
+        context: {
+          ...(row.context || {}),
+          sms_policy_deferred_delivery: true,
         },
-      });
+      };
+
+      if (row.delivery_mode === "dispatch") {
+        body.targetUserId = row.target_user_id;
+      } else if (row.delivery_mode === "external") {
+        body.mobiles = row.target_phones || [];
+      } else {
+        body.mobiles = row.target_phones || [];
+        body.message = row.raw_message || "";
+        body.providerId = row.provider_id;
+        body.bypassDeliveryPolicy = true;
+      }
+
+      const { data: result, error: invokeError } = await supabase.functions.invoke("send-sms", { body });
 
       if (invokeError || !result?.ok || result?.status === "failed") {
         throw new Error(invokeError?.message || result?.errorCode || result?.error || "DEFERRED_SMS_FAILED");
