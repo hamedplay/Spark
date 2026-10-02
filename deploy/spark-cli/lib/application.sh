@@ -54,7 +54,8 @@ update_spark() (
   fi
 
   local old_sha target_sha stage frontend_next frontend_prev
-  local source_advanced=0 frontend_switched=0 update_success=0
+  local modules_next modules_prev
+  local source_advanced=0 frontend_switched=0 modules_switched=0 update_success=0
 
   old_sha="$(git -C "$SPARK_ROOT" rev-parse HEAD)" || return 1
   run_logged "Fetch latest application source from origin/main" \
@@ -70,8 +71,10 @@ update_spark() (
   fi
 
   stage="/opt/spark-app-update-${target_sha:0:12}-$$"
-  frontend_next="/var/www/spark.next.$$"
-  frontend_prev="/var/www/spark.prev.$$"
+  frontend_next="/var/www/spark.next.$"
+  frontend_prev="/var/www/spark.prev.$"
+  modules_next="${SPARK_ROOT}/node_modules.next.$"
+  modules_prev="${SPARK_ROOT}/node_modules.prev.$"
 
   rollback_application() {
     warn "Rolling back application layer only."
@@ -83,6 +86,13 @@ update_spark() (
       fi
       frontend_switched=0
     fi
+    if (( modules_switched == 1 )); then
+      rm -rf "${SPARK_ROOT}/node_modules"
+      if [[ -d "$modules_prev" ]]; then
+        mv "$modules_prev" "${SPARK_ROOT}/node_modules" || true
+      fi
+      modules_switched=0
+    fi
     if (( source_advanced == 1 )); then
       git -C "$SPARK_ROOT" reset --hard "$old_sha" >>"$CURRENT_LOG" 2>&1 || true
       source_advanced=0
@@ -91,11 +101,12 @@ update_spark() (
 
   cleanup_application_update() {
     git -C "$SPARK_ROOT" worktree remove --force "$stage" >/dev/null 2>&1 || true
-    rm -rf "$stage" "$frontend_next"
+    rm -rf "$stage" "$frontend_next" "$modules_next"
     if (( update_success == 1 )); then
-      rm -rf "$frontend_prev"
-    elif (( frontend_switched == 0 )); then
-      rm -rf "$frontend_prev"
+      rm -rf "$frontend_prev" "$modules_prev"
+    else
+      (( frontend_switched == 0 )) && rm -rf "$frontend_prev"
+      (( modules_switched == 0 )) && rm -rf "$modules_prev"
     fi
   }
 
@@ -107,7 +118,7 @@ update_spark() (
   trap cleanup_application_update EXIT
   trap handle_application_signal INT TERM
 
-  rm -rf "$stage" "$frontend_next" "$frontend_prev"
+  rm -rf "$stage" "$frontend_next" "$frontend_prev" "$modules_next" "$modules_prev"
 
   run_logged "Create temporary application worktree" \
     git -C "$SPARK_ROOT" worktree add --detach "$stage" "$target_sha" || return 1
@@ -124,6 +135,10 @@ update_spark() (
   run_logged "Validate application build" \
     application_validate_frontend_build "$stage" || return 1
 
+  mkdir -p "$modules_next"
+  run_logged "Stage active application dependencies" \
+    rsync -a --delete "${stage}/node_modules/" "${modules_next}/" || return 1
+
   mkdir -p "$frontend_next"
   rsync -a --delete "${stage}/dist/" "${frontend_next}/" >>"$CURRENT_LOG" 2>&1 || return 1
   [[ -f "${frontend_next}/index.html" ]] || { fail "Application staging is missing index.html."; return 1; }
@@ -134,6 +149,21 @@ update_spark() (
       git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
     source_advanced=1
   fi
+
+  if [[ -d "${SPARK_ROOT}/node_modules" ]]; then
+    mv "${SPARK_ROOT}/node_modules" "$modules_prev" || {
+      rollback_application
+      fail "Unable to stage previous application dependencies for rollback."
+      return 1
+    }
+  fi
+  if ! mv "$modules_next" "${SPARK_ROOT}/node_modules"; then
+    [[ -d "$modules_prev" ]] && mv "$modules_prev" "${SPARK_ROOT}/node_modules" || true
+    rollback_application
+    fail "Unable to activate application dependencies."
+    return 1
+  fi
+  modules_switched=1
 
   if [[ -d /var/www/spark ]]; then
     mv /var/www/spark "$frontend_prev" || {
@@ -161,8 +191,9 @@ update_spark() (
   fi
 
   update_success=1
-  rm -rf "$frontend_prev"
+  rm -rf "$frontend_prev" "$modules_prev"
   frontend_switched=0
+  modules_switched=0
   if declare -F application_record_active_version >/dev/null 2>&1; then
     application_record_active_version "internet" "$target_sha"
   fi
