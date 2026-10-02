@@ -213,7 +213,24 @@ set delivery_mode=case
       else p.delivery_mode
     end,
     window_start=case
-      when coalesce(v.start_raw,'') ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]
+      when coalesce(v.start_raw,'') ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' then v.start_raw::time
+      else p.window_start
+    end,
+    window_end=case
+      when coalesce(v.end_raw,'') ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' then v.end_raw::time
+      else p.window_end
+    end,
+    updated_at=now()
+from legacy_values v
+where p.category='meeting'
+  and p.event_type=v.event_type
+  and v.enabled_raw is not null;
+
+delete from public.system_config
+where section='notifications'
+  and key like 'meeting_sms_window_%';
+
+drop function if exists public.claim_deferred_sms_queue(integer);
 
 create function public.claim_deferred_sms_queue(p_limit integer default 50)
 returns table(
