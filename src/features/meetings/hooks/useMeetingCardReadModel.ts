@@ -16,17 +16,11 @@ interface UseMeetingCardReadModelResult {
   isCreator: boolean;
 }
 
-export function useMeetingCardReadModel(meeting: Meeting): UseMeetingCardReadModelResult {
+export function useMeetingCardReadModel(meeting: Meeting, providedCurrentUserId: string | null = null): UseMeetingCardReadModelResult {
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, ParticipantStatusEntry>>({});
   const [delegateNames, setDelegateNames] = useState<Record<string, string>>({});
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const currentUserId = providedCurrentUserId;
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setCurrentUserId(user.id);
-    });
-  }, []);
 
   useEffect(() => {
     if (!meeting.id) return;
