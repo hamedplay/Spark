@@ -58,6 +58,7 @@ interface CalendarEntry {
 }
 
 interface CreateMeetingFormProps {
+  currentUserId?: string | null;
   onSuccess: (subject?: string, isUpdate?: boolean) => void;
   onCancel?: () => void;
   calendars?: CalendarEntry[];
@@ -79,9 +80,9 @@ function getErrorMessage(
   return undefined;
 }
 
-export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars = [] }: CreateMeetingFormProps) {
+export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null, onSuccess, onCancel, prefillData, calendars = [] }: CreateMeetingFormProps) {
   const [loading, setLoading] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(providedCurrentUserId);
 
   // گروه‌بندی کاربران بر اساس واحد سازمانی
   const { groups: orgGroups, allUsers } = useOrgUsers(userId);
@@ -155,6 +156,7 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
   useEffect(() => {
     const getUser = async () => {
       const currentUserId =
+        providedCurrentUserId ??
         await getCurrentAuthUserId();
 
       if (currentUserId) {
@@ -177,8 +179,8 @@ export function CreateMeetingForm({ onSuccess, onCancel, prefillData, calendars 
         }
       } else { setShowAuthError(true); }
     };
-    getUser();
-  }, []);
+    void getUser();
+  }, [providedCurrentUserId]);
 
   useEffect(() => {
     allUsersRef.current = allUsers;
