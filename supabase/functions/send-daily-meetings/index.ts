@@ -631,12 +631,33 @@ Deno.serve(async (req: Request) => {
               "Content-Type": "application/json",
               "Authorization": `Bearer ${serviceKey}`,
             },
-            body: JSON.stringify({ mobiles: [mobile], message: smsBody }),
+            body: JSON.stringify({
+              mode: "send",
+              mobiles: [mobile],
+              message: smsBody,
+              category: "daily_report",
+              eventType: "daily_meetings",
+              audience: "all",
+              context: { report_date: tehranDate },
+              eventKey: "daily_meetings:" + tehranDate + ":" + userId,
+            }),
           });
 
           const smsData = await smsResp.json().catch(() => ({}));
 
-          if (smsData?.ok) {
+          if (smsData?.ok && smsData?.reason === "DEFERRED_BY_SMS_POLICY") {
+            await supabase.from("sms_dispatch_logs").insert({
+              target_phone: phone,
+              category: "daily_report",
+              event_type: "daily_meetings",
+              message: smsBody,
+              provider_id: provider?.id ?? null,
+              provider_name: provider?.title || provider?.provider_name || null,
+              status: "pending",
+              error_text: "DEFERRED_BY_SMS_POLICY",
+              raw_response: smsData,
+            });
+          } else if (smsData?.ok) {
             smsSent++;
             const returnIds: string[] = Array.isArray(smsData.returnIds) ? smsData.returnIds : [];
             const providerMessageId = returnIds[0] ?? null;
