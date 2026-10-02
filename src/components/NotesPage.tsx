@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import '../notes-theme.css';
 import { Plus, Mic } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -11,13 +11,15 @@ import { NOTE_COLORS } from './Notes/constants';
 import type { Note } from './Notes/types';
 import { getFileIcon, formatFileSize } from './Notes/utils';
 import { BrandedShareCard } from './Notes/BrandedShareCard';
-import { ShareImageModal } from './Notes/ShareImageModal';
 import { RecordingIndicator } from './Notes/RecordingIndicator';
-import { CreateNoteForm } from './Notes/CreateNoteForm';
 import { NotesToolbar } from './Notes/NotesToolbar';
-import { DeleteConfirmModal } from './Notes/DeleteConfirmModal';
-import { AssignNoteModal } from './Notes/AssignNoteModal';
 import { NoteCard } from './Notes/NoteCard';
+
+const ShareImageModal = lazy(() => import('./Notes/ShareImageModal').then((m) => ({ default: m.ShareImageModal })));
+const CreateNoteForm = lazy(() => import('./Notes/CreateNoteForm').then((m) => ({ default: m.CreateNoteForm })));
+const DeleteConfirmModal = lazy(() => import('./Notes/DeleteConfirmModal').then((m) => ({ default: m.DeleteConfirmModal })));
+const AssignNoteModal = lazy(() => import('./Notes/AssignNoteModal').then((m) => ({ default: m.AssignNoteModal })));
+
 
 export function NotesPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
   const isMobile = window.innerWidth < 768;
@@ -43,7 +45,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   const [assignNote, setAssignNote] = useState<Note | null>(null);
   const [assignSearch, setAssignSearch] = useState('');
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-  const { allUsers: orgUsers } = useOrgUsers(userId);
+  const { allUsers: orgUsers } = useOrgUsers(userId, assignNote !== null);
   const [newNote, setNewNote] = useState({
     title: '',
     content: ''
@@ -478,11 +480,15 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     <div className="min-h-full bg-slate-50/80 dark:bg-slate-950 flex flex-col" dir="rtl">
       <BrandedShareCard shareNote={shareNote} brandedCardRef={brandedCardRef} />
 
-      <ShareImageModal
-        shareNote={shareNote}
-        shareImageData={shareImageData}
-        onClose={() => { setShareNote(null); setShareImageData(null); }}
-      />
+      {(shareNote || shareImageData) && (
+        <Suspense fallback={null}>
+          <ShareImageModal
+            shareNote={shareNote}
+            shareImageData={shareImageData}
+            onClose={() => { setShareNote(null); setShareImageData(null); }}
+          />
+        </Suspense>
+      )}
       {isRecording && (
         <RecordingIndicator voiceTranscript={voiceTranscript} onStop={() => toggleRecording()} />
       )}
@@ -521,13 +527,15 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
         </div>
 
         {showCreateForm && (
-          <CreateNoteForm
+          <Suspense fallback={null}>
+            <CreateNoteForm
             newNote={newNote}
             setNewNote={setNewNote}
             onSubmit={handleCreateNote}
             isFormRecording={isFormRecording}
             onToggleRecording={() => toggleRecording(true)}
-          />
+            />
+          </Suspense>
         )}
 
         <NotesToolbar
@@ -585,21 +593,29 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
         </button>
       </div>
 
-      <DeleteConfirmModal
-        deleteConfirmId={deleteConfirmId}
-        onConfirm={handleDeleteNote}
-        onCancel={() => setDeleteConfirmId(null)}
-      />
+      {deleteConfirmId && (
+        <Suspense fallback={null}>
+          <DeleteConfirmModal
+            deleteConfirmId={deleteConfirmId}
+            onConfirm={handleDeleteNote}
+            onCancel={() => setDeleteConfirmId(null)}
+          />
+        </Suspense>
+      )}
 
-      <AssignNoteModal
-        assignNote={assignNote}
-        assignSearch={assignSearch}
-        setAssignSearch={setAssignSearch}
-        orgUsers={orgUsers}
-        userId={userId}
-        onClose={() => setAssignNote(null)}
-        onSend={handleSendToUser}
-      />
+      {assignNote && (
+        <Suspense fallback={null}>
+          <AssignNoteModal
+            assignNote={assignNote}
+            assignSearch={assignSearch}
+            setAssignSearch={setAssignSearch}
+            orgUsers={orgUsers}
+            userId={userId}
+            onClose={() => setAssignNote(null)}
+            onSend={handleSendToUser}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
