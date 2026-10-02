@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Bell, ChevronDown, SlidersHorizontal, CalendarDays, Sparkles } from 'lucide-react';
 import { MeetingsDashboard } from '../components/MeetingsDashboard';
 import { MeetingCard } from '../components/MeetingCard';
-import { PendingMeetingsModal } from '../components/MeetingCard/PendingMeetingsModal';
 import { checkPermission } from '../../permissions';
 import type { MeetingsPageProps } from '../types/meetingsPage';
+
+const PendingMeetingsModal = lazy(() =>
+  import('../components/MeetingCard/PendingMeetingsModal').then((m) => ({ default: m.PendingMeetingsModal })),
+);
 
 export function MeetingsPage(props: MeetingsPageProps) {
   const {
@@ -13,7 +16,7 @@ export function MeetingsPage(props: MeetingsPageProps) {
     priorityFilter, setPriorityFilter,
     showPendingMeetingsModal, setShowPendingMeetingsModal,
     setActivePage, setPendingSchedule,
-    isAdmin, userPermissions,
+    isAdmin, userPermissions, currentUserId,
   } = props;
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [focusMeetingId, setFocusMeetingId] = useState<string | null>(() => new URL(window.location.href).searchParams.get('meetingFocus'));
@@ -203,6 +206,7 @@ export function MeetingsPage(props: MeetingsPageProps) {
               <MeetingCard
                 key={meeting.id}
                 meeting={meeting}
+                currentUserId={currentUserId}
                 onUpdate={fetchMeetings}
                 onScheduleInCalendar={(m) => {
                   setPendingSchedule({ meetingId: m.id, meeting: m });
@@ -215,13 +219,15 @@ export function MeetingsPage(props: MeetingsPageProps) {
       </div>
 
       {showPendingMeetingsModal && (
-        <PendingMeetingsModal
+        <Suspense fallback={null}>
+          <PendingMeetingsModal
           onClose={() => setShowPendingMeetingsModal(false)}
           onUpdate={() => {
             void fetchMeetings();
             void fetchPendingMeetingsCount();
           }}
-        />
+          />
+        </Suspense>
       )}
     </>
   );
