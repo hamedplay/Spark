@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { getStartupSystemConfig } from '../../lib/startupSystemConfig';
 
 interface AppRuntimeConfig {
   maintenanceMode: boolean;
@@ -41,16 +42,17 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
     };
 
     const load = async () => {
-      const { data, error } = await supabase
-        .from('system_config')
-        .select('section,key,value')
-        .in('section', ['security', 'spark'])
-        .in('key', ['maintenance_mode', 'spark_visible']);
+      let rows: RuntimeConfigRow[];
+      try {
+        rows = await getStartupSystemConfig();
+      } catch {
+        return;
+      }
 
-      if (cancelled || error) return;
+      if (cancelled) return;
 
       const next: AppRuntimeConfig = { ...INITIAL_CONFIG };
-      for (const row of data || []) {
+      for (const row of rows) {
         if (row.section === 'security' && row.key === 'maintenance_mode') {
           next.maintenanceMode = row.value === 'true';
         } else if (row.section === 'spark' && row.key === 'spark_visible') {
