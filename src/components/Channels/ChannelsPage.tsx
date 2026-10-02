@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import { Hash, Plus, Users } from 'lucide-react';
 import { ChannelSidebar } from './ChannelSidebar';
-import { ChannelConversationView } from './ChannelConversationView';
-import { CreateChannelModal } from './CreateChannelModal';
-import { ChannelActionsPanel } from './ChannelActionsPanel';
-import { ChatSettingsPage } from '../Chat/ChatSettingsPage';
 import { Channel, ChannelType, ChannelWithMeta, ChannelProfile, GroupTask } from './types';
 import { usePermissions } from '../../context/PermissionsContext';
+
+const ChannelConversationView = lazy(() => import('./ChannelConversationView').then((m) => ({ default: m.ChannelConversationView })));
+const CreateChannelModal = lazy(() => import('./CreateChannelModal').then((m) => ({ default: m.CreateChannelModal })));
+const ChannelActionsPanel = lazy(() => import('./ChannelActionsPanel').then((m) => ({ default: m.ChannelActionsPanel })));
+const ChatSettingsPage = lazy(() => import('../Chat/ChatSettingsPage').then((m) => ({ default: m.ChatSettingsPage })));
+
 
 interface Props {
   currentUserId: string | null;
@@ -79,7 +81,6 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
   }, [currentUserId]);
 
   useEffect(() => {
-    fetchProfiles();
     fetchChannels();
     if (!currentUserId) return;
     const sub = supabase.channel(`channels-list-rt-${Date.now()}`)
@@ -89,6 +90,12 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
       .subscribe();
     return () => { supabase.removeChannel(sub); };
   }, [currentUserId, fetchChannels]);
+
+  useEffect(() => {
+    if (selectedChannel || sidebarPanel === 'actions') {
+      void fetchProfiles();
+    }
+  }, [selectedChannel, sidebarPanel, fetchProfiles]);
 
   const handleCreate = async (data: { name: string; description: string; type: ChannelType; is_private: boolean }) => {
     if (!currentUserId) return;
@@ -151,9 +158,12 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
     >
       <div className={`${showConversation ? 'hidden md:flex' : 'flex'} h-full w-full flex-shrink-0 flex-col border-l border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-950 md:w-[300px] xl:w-[330px]`}>
         {sidebarPanel === 'settings' ? (
-          <ChatSettingsPage onClose={() => setSidebarPanel(null)} />
+          <Suspense fallback={null}>
+            <ChatSettingsPage onClose={() => setSidebarPanel(null)} />
+          </Suspense>
         ) : sidebarPanel === 'actions' ? (
-          <ChannelActionsPanel
+          <Suspense fallback={null}>
+            <ChannelActionsPanel
             currentUserId={currentUserId!}
             channelId={selectedChannel?.id}
             channelName={selectedChannel?.name}
@@ -165,7 +175,8 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
               setSidebarPanel(null);
               setShowConversation(true);
             }}
-          />
+            />
+          </Suspense>
         ) : (
           <ChannelSidebar
             channels={channels}
@@ -187,7 +198,8 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
 
       <div className={`min-w-0 flex-1 flex-col overflow-hidden bg-slate-50/50 dark:bg-slate-950 ${!showConversation && !selectedChannel ? 'hidden md:flex' : 'flex'}`}>
         {selectedChannel ? (
-          <ChannelConversationView
+          <Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-slate-400">در حال آماده‌سازی گفتگو...</div>}>
+            <ChannelConversationView
             key={selectedChannel.id}
             channel={selectedChannel}
             currentUserId={currentUserId}
@@ -198,7 +210,8 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
             onScrollHandled={() => setScrollToMessageId(null)}
             onNavigateToTasks={onNavigateToTasks}
             onOpenDirectChat={onOpenDirectChat}
-          />
+            />
+          </Suspense>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-gradient-to-br from-white via-slate-50 to-indigo-50/40 px-6 text-center dark:from-slate-950 dark:via-slate-950 dark:to-indigo-950/15">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-100 bg-indigo-50 text-indigo-500 shadow-sm dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300">
@@ -224,11 +237,13 @@ export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpen
       </div>
 
       {showCreate && (
-        <CreateChannelModal
+        <Suspense fallback={null}>
+          <CreateChannelModal
           type={createType}
           onClose={() => setShowCreate(false)}
           onCreate={handleCreate}
-        />
+          />
+        </Suspense>
       )}
     </div>
   );
