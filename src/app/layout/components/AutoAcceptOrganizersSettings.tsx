@@ -10,7 +10,7 @@ export function AutoAcceptOrganizersSettings() {
   const [search, setSearch] = useState('');
   const [loadingSelection, setLoadingSelection] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
-  const { allUsers, loading: usersLoading } = useOrgUsers(currentUserId || undefined);
+  const { allUsers, loading: usersLoading } = useOrgUsers(currentUserId);
 
   useEffect(() => {
     let cancelled = false;
@@ -54,11 +54,9 @@ export function AutoAcceptOrganizersSettings() {
         if (!query) return true;
         return [
           user.full_name,
-          user.username,
           user.position,
           user.position_title,
           user.unit_name,
-          user.employee_id,
           ...user.assignments.flatMap(assignment => [assignment.positionTitle, assignment.unitName]),
         ]
           .filter((value): value is string => typeof value === 'string' && value.length > 0)
@@ -126,7 +124,7 @@ export function AutoAcceptOrganizersSettings() {
             <div className="space-y-1.5">
               {selectedIds.map(id => {
                 const user = usersById.get(id);
-                const name = user?.full_name?.trim() || user?.username || 'کاربر سازمانی';
+                const name = user?.full_name?.trim() || user?.email || 'کاربر سازمانی';
                 const sub = [user?.position_title || user?.position, user?.unit_name].filter(Boolean).join(' · ');
                 return (
                   <div key={id} className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 dark:border-gray-700">
@@ -164,7 +162,7 @@ export function AutoAcceptOrganizersSettings() {
               {candidates.length === 0 ? (
                 <p className="py-4 text-center text-xs text-gray-400">کاربری یافت نشد</p>
               ) : candidates.map(user => {
-                const name = user.full_name?.trim() || user.username || 'کاربر سازمانی';
+                const name = user.full_name?.trim() || user.email || 'کاربر سازمانی';
                 const sub = [user.position_title || user.position, user.unit_name].filter(Boolean).join(' · ');
                 return (
                   <button
