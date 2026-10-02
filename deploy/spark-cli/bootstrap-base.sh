@@ -178,6 +178,7 @@ bootstrap-airgap.sh
   lib/application.sh
   lib/application-maintenance.sh
   lib/linux-system.sh
+  lib/installation-universal.sh
   lib/database.sh
   lib/same-origin.sh
   lib/studio-session.sh
