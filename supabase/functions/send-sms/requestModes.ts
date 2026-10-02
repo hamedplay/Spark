@@ -62,7 +62,7 @@ function tehranParts(date: Date): { year: number; month: number; day: number; ho
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   }).formatToParts(date);
   const map = new Map(parts.map((part) => [part.type, part.value]));
   return {
