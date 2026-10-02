@@ -124,7 +124,7 @@ export function LayoutSidebar({
       {useMobileNavigation && !isMobileMenuOpen && (
         <button
           onClick={() => onMobileMenuOpenChange(true)}
-          className="fixed z-50 flex p-1.5 bg-white dark:bg-gray-800 rounded-xl shadow-lg"
+          className="fixed z-[200] flex h-10 w-10 items-center justify-center bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 touch-manipulation"
           style={{
             top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
             right: 'max(0.75rem, env(safe-area-inset-right))',
