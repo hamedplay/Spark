@@ -48,6 +48,7 @@ const ALLOWED_TABLES = new Set([
 
 const TABLE_PK: Record<string, string> = {
   user_preferences: "user_id",
+  user_auto_accept_organizers: "user_id",
   bale_link_tokens: "token",
   telegram_link_tokens: "token",
   notification_event_registry: "event_key",
