@@ -147,7 +147,7 @@ CATEGORIES: List[Tuple[str, List[Action]]] = [
     ]),
     ("Node / npm", [
         Action("npm-versions", "Node / npm versions", "Show installed Node and npm versions."),
-        Action("npm-update", "Update npm 11", "Update global npm within the supported major version.", "controlled"),
+        Action("npm-update", "Update npm 12.2", "Update global npm to the Spark-supported npm 12.2 baseline.", "controlled"),
         Action("npm-ci", "npm ci", "Clean dependency install in /opt/spark.", "controlled"),
         Action("npm-audit", "npm audit", "Run the full dependency security audit."),
         Action("npm-audit-prod", "npm audit --omit=dev", "Audit production dependencies only."),
