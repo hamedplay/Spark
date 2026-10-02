@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import '../management-dashboard-theme.css';
 import {
   Activity,
   AlertTriangle,
