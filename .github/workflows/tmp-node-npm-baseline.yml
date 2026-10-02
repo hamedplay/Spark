@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 deploy/spark-cli/tests/application/test_m43_static_build_deploy.py
+          PYTHONPATH=deploy/spark-cli python3 deploy/spark-cli/tests/application/test_m43_static_build_deploy.py
           grep -Fq '>=24.21.0 <25' package.json
           grep -Fq '>=12.2.0 <13' package.json
           grep -Fq '"packageManager": "npm@12.2.0"' package.json
