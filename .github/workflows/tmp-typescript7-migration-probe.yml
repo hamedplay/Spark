@@ -1,0 +1,48 @@
+name: Temporary TypeScript 7 migration probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-typescript7-migration-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compiler-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - run: npm ci
+      - name: Force TypeScript 7 only for compiler compatibility probe
+        run: npm install --save-dev --force typescript@7.0.2
+      - name: Type-check and build with TypeScript 7
+        env:
+          VITE_SUPABASE_URL: https://example.invalid
+          VITE_SUPABASE_ANON_KEY: test-anon-key
+        run: npm run build
+
+  canary-eslint-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - run: rm -rf node_modules package-lock.json
+      - name: Install TypeScript 7 with typescript-eslint canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --save-dev             typescript@7.0.2             typescript-eslint@8.71.1-alpha.5             @typescript-eslint/parser@8.71.1-alpha.5             @typescript-eslint/eslint-plugin@8.71.1-alpha.5
+      - name: Build with TypeScript 7 + canary lint stack
+        env:
+          VITE_SUPABASE_URL: https://example.invalid
+          VITE_SUPABASE_ANON_KEY: test-anon-key
+        run: npm run build
