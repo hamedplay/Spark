@@ -141,7 +141,31 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
 
   }, [providedCurrentUserId, currentUserId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+    let idleId: number | null = null;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    const run = () => {
+      if (!cancelled) void fetchData();
+    };
+
+    if (idleWindow.requestIdleCallback) {
+      idleId = idleWindow.requestIdleCallback(run, { timeout: 1400 });
+    } else {
+      timer = window.setTimeout(run, 900);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      if (idleId !== null) idleWindow.cancelIdleCallback?.(idleId);
+    };
+  }, [fetchData]);
 
   // Auto-refresh when meeting_inbox changes (new invites from organizers)
   useEffect(() => {
