@@ -42,7 +42,7 @@ const ALLOWED_TABLES = new Set([
   "user_bale_mapping", "org_organizations", "org_units", "org_positions", "org_position_members",
   "org_level_definitions", "org_level_permissions", "org_position_permissions", "system_config", "spark_config",
   "spark_ai_settings", "spark_field_keywords", "spark_memory", "spark_assistant_logs", "social_channel_configs",
-  "sms_providers", "sms_templates", "sms_group_rules", "sms_dispatch_logs", "daily_report_config",
+  "sms_providers", "sms_templates", "sms_delivery_policies", "sms_group_rules", "sms_dispatch_logs", "daily_report_config",
   "rahyab_settings", "rahyab_inbox", "bale_link_tokens", "telegram_link_tokens", "hr_sso_config", "audit_log",
 ]);
 
@@ -52,6 +52,7 @@ const TABLE_PK: Record<string, string> = {
   bale_link_tokens: "token",
   telegram_link_tokens: "token",
   notification_event_registry: "event_key",
+  sms_delivery_policies: "category",
 };
 
 Deno.serve(async (req: Request) => {
