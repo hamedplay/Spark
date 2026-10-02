@@ -213,22 +213,36 @@ application_node_update() {
   title
   new_log "node-update-app"
   command -v node >/dev/null 2>&1 || { fail "Node.js is not installed."; return 1; }
+  command -v npm >/dev/null 2>&1 || { fail "npm is not installed."; return 1; }
   [[ -f "${SPARK_ROOT}/package.json" ]] || { fail "Application package.json not found."; return 1; }
 
-  local before after
-  before="$(node --version)"
-  info "Current Node.js: $before"
+  local node_before node_after npm_before npm_after
+  node_before="$(node --version)"
+  npm_before="$(npm --version)"
+  info "Current Node.js: $node_before"
+  info "Current npm    : $npm_before"
+
   run_logged "Refresh Linux package metadata for Node.js" apt-get update || return 1
   run_logged "Update Node.js package" apt-get install -y --only-upgrade nodejs || return 1
 
-  if ! node -e 'const [M,m,p]=process.versions.node.split(".").map(Number); if (!(M===24 && (m>18 || (m===18 && p>=1)))) process.exit(1)'; then
-    fail "Updated Node.js does not satisfy Spark engine >=24.18.1 <25."
+  if ! node -e 'const [M,m,p]=process.versions.node.split(".").map(Number); if (!(M===24 && (m>21 || (m===21 && p>=0)))) process.exit(1)'; then
+    fail "Updated Node.js does not satisfy Spark engine >=24.21.0 <25."
     node --version | tee -a "$CURRENT_LOG"
     return 1
   fi
-  after="$(node --version)"
-  ok "Node.js application runtime updated and validated."
-  printf 'Before: %s\nAfter : %s\n' "$before" "$after"
+
+  run_logged "Update npm CLI to 12.2.0" npm install -g npm@12.2.0 || return 1
+  if ! npm --version | awk -F. '{ exit !(($1 == 12 && ($2 > 2 || ($2 == 2 && $3 >= 0))) && $1 < 13) }'; then
+    fail "Updated npm does not satisfy Spark npm engine >=12.2.0 <13."
+    npm --version | tee -a "$CURRENT_LOG"
+    return 1
+  fi
+
+  node_after="$(node --version)"
+  npm_after="$(npm --version)"
+  ok "Node.js and npm application runtimes updated and validated."
+  printf 'Node before: %s\nNode after : %s\nnpm before : %s\nnpm after  : %s\n' \
+    "$node_before" "$node_after" "$npm_before" "$npm_after"
 }
 
 application_npm_outdated() {
