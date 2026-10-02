@@ -86,6 +86,9 @@ jobs:
           grep -Fq 'allowed.includes("same-origin")' supabase/functions/auth-health-check/index.ts
           grep -Fq 'const avatarUrl = `/storage/v1/object/public/' supabase/functions/avatar-upload/index.ts
           ! grep -Fq 'api.shahrmeeting.ir' netlify.toml
+          grep -Fq '"GOTRUE_HOOK_SEND_SMS_URI":"http://host.docker.internal:8000/functions/v1/auth-send-sms-hook"' deploy/spark-cli/lib/repair-override.sh
+          grep -Fq 'host.docker.internal:host-gateway' deploy/spark-cli/lib/repair-override.sh
+          ! grep -Fq 'API_DOMAIN_ENV' deploy/spark-cli/lib/repair-override.sh
 
       - name: Commit regenerated lockfile
         shell: bash
