@@ -1,0 +1,87 @@
+name: Temporary informee detail action patch
+
+on:
+  push:
+    paths:
+      - '.github/workflows/temporary-informee-detail-action.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch meeting detail informee action
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/Calendar/MeetingDetailModal.tsx')
+          text = path.read_text()
+
+          def replace_once(old: str, new: str, label: str):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "import { MeetingShareDialog } from '../../features/meetings/components/MeetingCard/MeetingShareDialog';\n",
+              "import { MeetingShareDialog } from '../../features/meetings/components/MeetingCard/MeetingShareDialog';\nimport { InformeeAddParticipantModal } from '../../features/meetings/components/InformeeAddParticipantModal';\n",
+              'import modal',
+          )
+
+          replace_once(
+              "  const canEdit = isOwner || isManager;\n  const cal = [...calendars, ...subscribedCalendars].find(c => c.id === m.calendar_id);\n",
+              "  const canEdit = isOwner || isManager;\n  const isInformee = Boolean(currentUserId && ((m.notify_users || []) as string[]).includes(currentUserId));\n  const cal = [...calendars, ...subscribedCalendars].find(c => c.id === m.calendar_id);\n",
+              'informee predicate',
+          )
+
+          replace_once(
+              "  const [shareLoading, setShareLoading] = useState(false);\n  const [showOwnerDelegate, setShowOwnerDelegate] = useState(false);\n",
+              "  const [shareLoading, setShareLoading] = useState(false);\n  const [showOwnerDelegate, setShowOwnerDelegate] = useState(false);\n  const [showInformeeParticipantModal, setShowInformeeParticipantModal] = useState(false);\n  const [informeeAddedParticipantIds, setInformeeAddedParticipantIds] = useState<string[]>([]);\n",
+              'informee state',
+          )
+
+          replace_once(
+              "  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);\n\n  // Minutes access state — checked via RPC, not frontend-only\n",
+              "  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);\n\n  useEffect(() => {\n    setShowInformeeParticipantModal(false);\n    setInformeeAddedParticipantIds([]);\n  }, [m.id]);\n\n  // Minutes access state — checked via RPC, not frontend-only\n",
+              'reset state per meeting',
+          )
+
+          replace_once(
+              "          <button onClick={() => onGoogleCalendar(m)} className=\"flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors\">\n            <ExternalLink className=\"w-4 h-4\" />گوگل کلندر\n          </button>\n",
+              "          <button onClick={() => onGoogleCalendar(m)} className=\"flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors\">\n            <ExternalLink className=\"w-4 h-4\" />گوگل کلندر\n          </button>\n          {isInformee && currentUserId && (\n            <button\n              onClick={() => setShowInformeeParticipantModal(true)}\n              className=\"flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors\"\n              title=\"افزودن شرکت‌کننده به همین جلسه\"\n            >\n              <UserPlus className=\"w-4 h-4\" />افزودن شرکت‌کننده\n            </button>\n          )}\n",
+              'detail action button',
+          )
+
+          replace_once(
+              "      {showOwnerDelegate && currentUserId && (\n        <MeetingOwnerDelegateModal\n",
+              "      {showInformeeParticipantModal && isInformee && currentUserId && (\n        <InformeeAddParticipantModal\n          meetingId={m.id}\n          currentUserId={currentUserId}\n          organizerId={m.user_id}\n          existingParticipantIds={Array.from(new Set([...(m.participant_user_ids || []), ...informeeAddedParticipantIds]))}\n          onClose={() => setShowInformeeParticipantModal(false)}\n          onSuccess={(participantUserId) => {\n            setInformeeAddedParticipantIds(prev => prev.includes(participantUserId) ? prev : [...prev, participantUserId]);\n            setShowInformeeParticipantModal(false);\n          }}\n        />\n      )}\n\n      {showOwnerDelegate && currentUserId && (\n        <MeetingOwnerDelegateModal\n",
+              'detail modal',
+          )
+
+          path.write_text(text)
+          PY
+
+      - name: Validate wiring
+        run: |
+          grep -Fq "const isInformee = Boolean(currentUserId" src/components/Calendar/MeetingDetailModal.tsx
+          grep -Fq "setShowInformeeParticipantModal(true)" src/components/Calendar/MeetingDetailModal.tsx
+          grep -Fq "<InformeeAddParticipantModal" src/components/Calendar/MeetingDetailModal.tsx
+          ! grep -Fq "InformeeParticipantAccess" src/app/layout/AppShell.tsx
+
+      - name: Commit patch
+        run: |
+          git config user.name "spark-automation"
+          git config user.email "spark-automation@users.noreply.github.com"
+          git add src/components/Calendar/MeetingDetailModal.tsx
+          git commit -m "fix(meetings): show informee add action in meeting details"
+          git push origin HEAD:main
