@@ -24,6 +24,7 @@ export interface MeetingsPageProps {
 }
 
 export interface CreateMeetingPageProps {
+  currentUserId: string | null;
   prefillData: SparkMeetingPrefill | null;
   setActivePage: (page: MeetingsPageId) => void;
   setSparkMeetingPrefill: (v: SparkMeetingPrefill | null) => void;
