@@ -68,7 +68,7 @@ export const TABS = [
   { key: 'groups',    label: 'گروه‌بندی اعلان',   icon: GroupIcon },
   { key: 'templates', label: 'قالب اعلان‌ها',     icon: FileText },
   { key: 'schedule',  label: 'زمان‌بندی مصوبات',  icon: Clock3 },
-  { key: 'meeting-sms-window', label: 'بازه پیامک جلسات', icon: Clock4 },
+  { key: 'sms-policy', label: 'زمان‌بندی پیامک', icon: Clock4 },
   { key: 'logs',      label: 'گزارش اعلان‌ها',    icon: BarChart2 },
 ];
 
