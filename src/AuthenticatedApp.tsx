@@ -6,7 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import { Wrench } from 'lucide-react';
 import { useUserPreferences, UserPreferencesProvider } from './features/user-preferences';
 import { useAuthSession, useSessionHeartbeat } from './features/auth';
-import { useMeetingsData } from './features/meetings';
+import { useMeetingsData } from './features/meetings/hooks/useMeetingsData';
 import { FirstRunOnboardingGate } from './features/onboarding';
 import { useAppRuntimeConfig } from './app/hooks/useAppRuntimeConfig';
 import { useNavigation, useAdminPathGuard } from './app/navigation/useNavigation';
