@@ -62,7 +62,7 @@ export function DayView(p: CalendarViewProps) {
               {JALAALI_WEEKDAYS[weekdayIdx]}
             </div>
             <div className={`mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-xl text-xl font-bold ${isToday(selectedJy, selectedJm, selectedJd)
-              ? 'bg-violet-600 text-white shadow-sm dark:bg-violet-500'
+              ? 'bg-violet-700 text-white shadow-sm dark:bg-violet-600'
               : 'bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-white'}`}>
               {selectedJd}
             </div>
@@ -89,7 +89,7 @@ export function DayView(p: CalendarViewProps) {
                   ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300'
                   : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {ev.title}
-                <button type="button" onClick={async () => { await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70">
+                <button type="button" aria-label="حذف رویداد تمام‌روز" onClick={async () => { await supabase.from('all_day_events').delete().eq('id', ev.id); fetchAllDayEvents(); }} className="hover:opacity-70">
                   <X className="h-2.5 w-2.5" />
                 </button>
               </span>
