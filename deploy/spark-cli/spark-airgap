@@ -58,6 +58,9 @@ if [[ -r "$module_path" ]]; then
 fi
 unset module module_path
 
+# Final installation contract must load after all Air-Gap IP/DNSless overrides.
+source "${SCRIPT_DIR}/lib/installation-universal.sh"
+
 spark_airgap_supabase_clone() {
   local destination="${@: -1}" attempt rc=1
   local -a reference_args=()
