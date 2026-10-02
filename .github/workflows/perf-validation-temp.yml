@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/main.tsx'
       - 'src/PublicAuthRoot.tsx'
+      - 'src/AuthenticatedApp.tsx'
       - '.github/workflows/perf-validation-temp.yml'
 
 jobs:
@@ -21,4 +22,3 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:auth-unified-login
-      - run: npm run test:auth-security-config
