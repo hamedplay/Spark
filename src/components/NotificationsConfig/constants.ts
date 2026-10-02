@@ -1,4 +1,4 @@
-import { Group as GroupIcon, FileText, ChartBar as BarChart2, Clock3, Clock4 } from 'lucide-react';
+import { Group as GroupIcon, FileText, ChartBar as BarChart2, Clock3 } from 'lucide-react';
 
 export const NOTIFICATION_TYPES = [
   { key: 'meeting_invite',    label: 'دعوت به جلسه',           category: 'جلسات' },
@@ -68,7 +68,6 @@ export const TABS = [
   { key: 'groups',    label: 'گروه‌بندی اعلان',   icon: GroupIcon },
   { key: 'templates', label: 'قالب اعلان‌ها',     icon: FileText },
   { key: 'schedule',  label: 'زمان‌بندی مصوبات',  icon: Clock3 },
-  { key: 'sms-policy', label: 'زمان‌بندی پیامک', icon: Clock4 },
   { key: 'logs',      label: 'گزارش اعلان‌ها',    icon: BarChart2 },
 ];
 
