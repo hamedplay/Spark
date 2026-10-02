@@ -13,7 +13,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
     insertNotification, isRefreshing, meetings, monthDayPopup, monthDayPopupRef, previewMeeting,
     previewRef, providedUserId, resolveName, setAllDayEvents, setCalendarForm, setCalendars,
     setCurrentUserId, setDeleteMeetingDialog, setDetailMeeting, setEditingCalendar, setEnabledCalendarIds, setIsRefreshing,
-    setMeetings, setMonthDayPopup, setPrefillData, setPreviewMeeting, setPreviewPos, setRepeatEditDialog,
+    setMeetings, setMonthDayPopup, setOccasionsEnabled, setPrefillData, setPreviewMeeting, setPreviewPos, setRepeatEditDialog,
     setShowCalendarList, setShowCreateCalendar, setShowMeetingForm, setShowSubscriptionsModal, setSubSearch, setSubscribedCalendars,
     setSubscriptions, setSubscriptionsCalendar, subPermission, subscriptions, subscriptionsCalendar, usersById
   } = scope;
@@ -210,6 +210,8 @@ export function useCalendarDataActions(scope: Record<string, any>) {
       const { data: own } = await supabase.from('calendars').select('*').eq('user_id', userId).order('created_at', { ascending: false });
       const ownCals = (own || []) as CalendarEntry[];
       setCalendars(ownCals);
+      const occasionsCalendar = ownCals.find((calendar) => calendar.is_occasions);
+      if (occasionsCalendar) setOccasionsEnabled(occasionsCalendar.is_active);
       const { data: subs } = await supabase.from('calendar_subscriptions').select('calendar_id, calendars(*)').eq('user_id', userId);
       const subCals = subs ? (subs.map((s: any) => s.calendars).filter(Boolean) as CalendarEntry[]) : [];
       setSubscribedCalendars(subCals);
