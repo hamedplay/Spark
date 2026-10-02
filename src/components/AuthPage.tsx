@@ -661,7 +661,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
           <div className="spark-reference-form-inner">
             <div className="spark-reference-brand">
               <div className="spark-reference-brand-mark">
-                <img src="/logo_spark.png" alt="Spark" />
+                <img src="/logo_spark.png" alt="Spark" width={58} height={58} />
                 <span className="spark-reference-brand-halo" aria-hidden="true" />
               </div>
               <div className="spark-reference-wordmark" dir="ltr">Spark</div>
@@ -963,7 +963,7 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
               <div className="spark-reference-platform-layer layer-one" />
               <div className="spark-reference-platform-layer layer-two" />
               <div className="spark-reference-platform-layer layer-three" />
-              <div className="spark-reference-core"><img src="/logo_spark.png" alt="" /></div>
+              <div className="spark-reference-core"><img src="/logo_spark.png" alt="" width={55} height={55} /></div>
             </div>
           </div>
         </section>
