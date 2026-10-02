@@ -157,7 +157,7 @@ export function CalendarToolbar(props: {
   const todayButton = (
     <button
       onClick={goToToday}
-      className={`${compactToolbar ? 'h-7 px-2 text-[11px]' : 'h-8 px-3 text-xs'} flex-shrink-0 rounded-lg bg-violet-600 font-bold text-white shadow-sm transition-colors hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-400`}
+      className={`${compactToolbar ? 'h-7 px-2 text-[11px]' : 'h-8 px-3 text-xs'} flex-shrink-0 rounded-lg bg-violet-700 font-bold text-white shadow-sm transition-colors hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500`}
     >
       امروز
     </button>
