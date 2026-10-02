@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import '../notes-theme.css';
 import { Plus, Mic } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
