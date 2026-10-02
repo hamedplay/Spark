@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '../lib/supabase';
+import { getStartupSystemConfig, findStartupSystemConfigValue } from '../lib/startupSystemConfig';
 
 export type Theme = 'light' | 'dark';
 
@@ -141,21 +141,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     let cancelled = false;
 
     const hydrateGlobalAccent = async () => {
-      const { data, error } = await supabase
-        .from('system_config')
-        .select('value')
-        .eq('section', 'appearance')
-        .eq('key', 'primary_color')
-        .maybeSingle();
-
-      if (cancelled) return;
-      if (error) {
-        console.error('[ThemeContext] failed to load global primary_color', error);
+      let rows;
+      try {
+        rows = await getStartupSystemConfig();
+      } catch (error) {
+        if (!cancelled) console.error('[ThemeContext] failed to load global primary_color', error);
         return;
       }
 
+      if (cancelled) return;
+
       const normalized = normalizeHexColor(
-        typeof data?.value === 'string' ? data.value : null
+        findStartupSystemConfigValue(rows, 'appearance', 'primary_color')
       );
       if (!normalized) return;
 
