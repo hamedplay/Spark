@@ -171,9 +171,10 @@ export function AuthPage({ onSuccess, initialAuthBootstrap = null }: AuthPagePro
   const invokeEdgeFunctionWithTimeout = useCallback(async <T,>(
     functionName: string,
     body: Record<string, unknown>,
+    timeoutMs?: number,
   ): Promise<T> => {
     const helper = await import('../lib/invokeEdgeFunction');
-    return helper.invokeEdgeFunctionWithTimeout<T>(functionName, body);
+    return helper.invokeEdgeFunctionWithTimeout<T>(functionName, body, timeoutMs);
   }, []);
 
   const loadAuthConfig = useCallback(async () => {
