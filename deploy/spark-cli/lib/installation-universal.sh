@@ -106,8 +106,9 @@ spark_install_latest_connected_packages() {
   info "Latest Node.js release track detected: ${node_major}.x"
 
   run_logged "Update Linux package indexes" apt-get update || return 1
-  run_logged "Upgrade installed Linux packages" apt-get -y full-upgrade || return 1
-  run_logged "Install latest base packages" apt-get install -y \
+  # Full OS upgrades belong to Linux System maintenance. Installation only
+  # installs/upgrades the packages Spark actually requires so first startup is fast.
+  run_logged "Install latest required base packages" apt-get install -y \
     ca-certificates curl git gnupg jq openssl ufw rsync python3 python3-yaml nginx certbot coturn || return 1
 
   run_logged "Configure latest Docker repository" bash -c '
@@ -349,7 +350,6 @@ spark_universal_auth_health() {
 }
 
 spark_universal_test_nginx() {
-  nginx -t || return 1
   systemctl is-active --quiet nginx || return 1
   curl --noproxy '*' -fIsS --connect-timeout 5 --max-time 10 \
     -H 'Host: arbitrary.spark.example' http://127.0.0.1/ >/dev/null || return 1
@@ -376,10 +376,17 @@ install_step_13() {
 install_step_14() {
   title
   new_log "install-14-host-agnostic-nginx"
-  spark_universal_write_nginx || return 1
-  run_logged "Nginx syntax" nginx -t || return 1
-  run_logged "Reload Nginx" systemctl reload nginx || return 1
-  if run_logged "Validate wildcard-host same-origin routing" spark_universal_test_nginx; then mark_step 14; else unmark_step 14; return 1; fi
+  # Step 12 already writes, syntax-checks, reloads and smoke-tests the same
+  # host-agnostic configuration. Do not repeat that work in the normal chain.
+  if [[ -f "${STEP_DIR}/12.ok" ]]; then
+    mark_step 14
+    ok "Host-agnostic Nginx was already activated and validated in step 12."
+    return 0
+  fi
+
+  # Standalone execution still self-heals by running the authoritative step.
+  install_step_12 || return 1
+  mark_step 14
 }
 
 install_step_16() {
