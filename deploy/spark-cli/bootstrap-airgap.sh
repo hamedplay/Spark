@@ -181,7 +181,7 @@ version_output="$($CLI_PATH --version)"
 "$CLI_PATH" --ui-self-test
 
 # Import persists the verified bundle under /opt/spark-airgap and loads images.
-"$AIRGAP_CLI_PATH" --backend-action airgap-import "$root"
+SPARK_AIRGAP_SHA256_PREVERIFIED=1 "$AIRGAP_CLI_PATH" --backend-action airgap-import "$root"
 
 echo
 printf 'Spark Server Manager %s installed for air-gapped operation.\n' "$EXPECTED_VERSION"
