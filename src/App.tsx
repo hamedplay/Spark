@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import type { PublicAuthBootstrapPromise } from './components/AuthPage';
 import SparkLoader from './components/ui/SparkLoader';
 import { isKnownSparkPath, isStandaloneConferencePath } from './app/navigation/rootPath';
 
@@ -11,6 +12,7 @@ type RootAuthState = 'checking' | 'public' | 'authenticated';
 
 function StandardApplication() {
   const [authState, setAuthState] = useState<RootAuthState>('checking');
+  const publicAuthBootstrapRef = useRef<PublicAuthBootstrapPromise | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -23,14 +25,40 @@ function StandardApplication() {
       .then(({ supabase }) => {
         if (!active) return;
 
+        const showPublicAuth = () => {
+          if (!active) return;
+
+          if (!publicAuthBootstrapRef.current) {
+            // Start the public configuration requests before AuthPage mounts.
+            // PublicAuthRoot is also prefetched in parallel so neither request
+            // waits for the lazy component waterfall seen in mobile Lighthouse.
+            publicAuthBootstrapRef.current = Promise.all([
+              supabase.rpc('get_public_auth_config'),
+              supabase.rpc('get_public_login_methods'),
+            ]);
+            void import('./PublicAuthRoot');
+          }
+
+          setAuthState('public');
+        };
+
+        const showAuthenticated = () => {
+          publicAuthBootstrapRef.current = null;
+          if (active) setAuthState('authenticated');
+        };
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-          if (active) setAuthState(session ? 'authenticated' : 'public');
+          if (!active) return;
+          if (session) showAuthenticated();
+          else showPublicAuth();
         });
         unsubscribe = () => subscription.unsubscribe();
 
         return supabase.auth.getSession()
           .then(({ data: { session } }) => {
-            if (active) setAuthState(session ? 'authenticated' : 'public');
+            if (!active) return;
+            if (session) showAuthenticated();
+            else showPublicAuth();
           });
       })
       .catch(() => {
@@ -50,7 +78,10 @@ function StandardApplication() {
   if (authState === 'public') {
     return (
       <Suspense fallback={<SparkLoader message="در حال بارگذاری صفحه ورود..." />}>
-        <PublicAuthRoot onSessionEstablished={() => setAuthState('authenticated')} />
+        <PublicAuthRoot
+          onSessionEstablished={() => setAuthState('authenticated')}
+          initialAuthBootstrap={publicAuthBootstrapRef.current}
+        />
       </Suspense>
     );
   }
