@@ -74,7 +74,8 @@ export function CalendarPage({
   const [showSubscriptionsModal, setShowSubscriptionsModal] = useState(false);
   const [subscriptionsCalendar, setSubscriptionsCalendar] = useState<CalendarEntry | null>(null);
   const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([]);
-  const { usersById, allUsers, loading: orgUsersLoading } = useOrgUsers(currentUserId);
+  const [orgUsersEnabled, setOrgUsersEnabled] = useState(false);
+  const { usersById, allUsers, loading: orgUsersLoading } = useOrgUsers(currentUserId, orgUsersEnabled);
   const resolveName = useCallback((uid: string) =>
     resolveUserDisplay(usersById, uid, undefined, orgUsersLoading),
   [usersById, orgUsersLoading]);
@@ -100,6 +101,17 @@ export function CalendarPage({
   const [showMeetingForm, setShowMeetingForm] = useState(false);
   const [prefillData, setPrefillData] = useState<any>(null);
   const [activePendingSchedule, setActivePendingSchedule] = useState<PendingSchedule | null>(null);
+
+  useEffect(() => {
+    if (
+      showCalendarList ||
+      showSubscriptionsModal ||
+      showMeetingForm ||
+      detailMeeting !== null
+    ) {
+      setOrgUsersEnabled(true);
+    }
+  }, [showCalendarList, showSubscriptionsModal, showMeetingForm, detailMeeting]);
 
   // Move meeting drag
   const [dragMoveMeeting, setDragMoveMeeting] = useState<MeetingData | null>(null);
@@ -254,13 +266,6 @@ export function CalendarPage({
     supabase.from('calendar_occasions').select('id,title,calendar_type,month,day,is_holiday,is_celebration')
       .eq('is_active', true).then(({ data }) => { if (data) setOccasions(data as any); });
   }, []);
-
-  // Load occasions enabled state from user's occasions calendar is_active field
-  useEffect(() => {
-    if (!currentUserId) return;
-    supabase.from('calendars').select('id,is_active').eq('user_id', currentUserId).eq('is_occasions', true).maybeSingle()
-      .then(({ data }) => { if (data) setOccasionsEnabled(data.is_active); });
-  }, [currentUserId]);
 
   const handleToggleOccasions = useCallback(async () => {
     const next = !occasionsEnabled;
@@ -593,7 +598,7 @@ export function CalendarPage({
     insertNotification, isRefreshing, meetings, monthDayPopup, monthDayPopupRef, previewMeeting,
     previewRef, providedUserId, resolveName, setAllDayEvents, setCalendarForm, setCalendars,
     setCurrentUserId, setDeleteMeetingDialog, setDetailMeeting, setEditingCalendar, setEnabledCalendarIds, setIsRefreshing,
-    setMeetings, setMonthDayPopup, setPrefillData, setPreviewMeeting, setPreviewPos, setRepeatEditDialog,
+    setMeetings, setMonthDayPopup, setOccasionsEnabled, setPrefillData, setPreviewMeeting, setPreviewPos, setRepeatEditDialog,
     setShowCalendarList, setShowCreateCalendar, setShowMeetingForm, setShowSubscriptionsModal, setSubSearch, setSubscribedCalendars,
     setSubscriptions, setSubscriptionsCalendar, subPermission, subscriptions, subscriptionsCalendar, usersById
   });
