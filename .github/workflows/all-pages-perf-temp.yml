@@ -14,6 +14,8 @@ on:
       - 'src/components/TasksPage.tsx'
       - 'src/components/NotesPage.tsx'
       - 'src/components/Channels/**'
+      - 'src/components/PortalConfigPage.tsx'
+      - 'src/components/UserManagementPanel.tsx'
       - '.github/workflows/all-pages-perf-temp.yml'
 
 jobs:
@@ -35,7 +37,7 @@ jobs:
       - name: Validate performance wiring
         run: |
           grep -Fq "currentUserId={props.currentUserId}" src/app/navigation/PageRenderer.tsx
-          grep -Fq "useMeetingCardReadModel(meeting, currentUserId)" src/features/meetings/components/MeetingCard/MeetingCardMain.tsx
+          grep -Fq "useMeetingCardReadModel(meeting, currentUserId, prefetchedReadModel)" src/features/meetings/components/MeetingCard/MeetingCardMain.tsx
           grep -Fq "useOrgUsers(userId, assignNote !== null)" src/components/NotesPage.tsx
           grep -Fq "orgDirectoryNeeded" src/components/TasksPage.tsx
           grep -Fq "lazy(() => import('./ChannelConversationView')" src/components/Channels/ChannelsPage.tsx
@@ -43,3 +45,7 @@ jobs:
           grep -Fq "import('../../features/meetings/pages/MeetingsPage')" src/app/navigation/PageRenderer.tsx
           grep -Fq "immediate: activePage === 'minutes-followup' || activePage === 'minutes-hub'" src/AuthenticatedApp.tsx
           grep -Fq "requestIdleCallback" src/app/hooks/useMinutesFollowupAccess.ts
+          grep -Fq "useMeetingCardsBatchReadModel" src/features/meetings/pages/MeetingsPage.tsx
+          grep -Fq "lazy(() => import('./UserManagement/UserProfileForm')" src/components/UserManagementPanel.tsx
+          grep -Fq "lazy(() => import('./PortalConfig/PhoneAuthCard')" src/components/PortalConfigPage.tsx
+          grep -Fq "lazy(() => import('./ChatConversationView')" src/components/Chat/ChatPage.tsx
