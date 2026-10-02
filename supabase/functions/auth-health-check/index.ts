@@ -13,11 +13,36 @@ const responseHeaders = createJsonResponseHeaders(baseCorsHeaders);
 function allowedOrigin(req: Request): string | null {
   const origin = req.headers.get("Origin");
   if (!origin) return null;
+
   const allowed = (Deno.env.get("PHONE_LOGIN_ALLOWED_ORIGINS") ?? "")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
-  return allowed.includes(origin) ? origin : null;
+
+  if (allowed.includes(origin)) return origin;
+
+  // Host-agnostic installations use a same-origin sentinel instead of a
+  // deployment-specific DNS allowlist. Trust the reverse proxy's forwarded
+  // origin and require the browser Origin to match it exactly.
+  if (allowed.includes("same-origin")) {
+    try {
+      const parsed = new URL(origin);
+      const forwardedHost = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "")
+        .split(",")[0]
+        .trim();
+      const forwardedProto = (req.headers.get("x-forwarded-proto") ?? parsed.protocol.replace(":", ""))
+        .split(",")[0]
+        .trim()
+        .replace(/:$/, "");
+      if (forwardedHost && `${parsed.protocol}//${parsed.host}` === `${forwardedProto}://${forwardedHost}`) {
+        return origin;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }
 
 const json = (body: unknown, status = 200, origin: string | null = null) =>
