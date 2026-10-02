@@ -99,7 +99,7 @@ EOF
   ' || return 1
 
   run_logged "Installation Docker and Node.js" bash -c 'apt update && apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin nodejs' || return 1
-  run_logged "Installation npm 11" npm install -g 'npm@^11.6.2' || return 1
+  run_logged "Installation npm 12.2" npm install -g 'npm@12.2.0' || return 1
   run_logged "Activation Docker and Nginx" systemctl enable --now docker nginx || return 1
   if run_logged "test packageha and versions" test_base_packages; then
     mark_step 2
