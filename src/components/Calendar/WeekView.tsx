@@ -57,7 +57,7 @@ export function WeekView(p: CalendarViewProps) {
               {weekDays.map(d => {
                 const hasHol = getOccasionsForDay(d.jy, d.jm, d.jd).some((o: any) => o.is_holiday);
                 return (
-                  <div key={d.weekday} className={`border-r border-slate-100 py-1.5 text-center dark:border-slate-800 sm:py-2 ${(d.weekday === 6 || hasHol) ? 'text-rose-500 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                  <div key={d.weekday} className={`border-r border-slate-100 py-1.5 text-center dark:border-slate-800 sm:py-2 ${(d.weekday === 6 || hasHol) ? 'text-rose-700 dark:text-rose-300' : 'text-slate-700 dark:text-slate-300'}`}>
                     <div className="text-[10px] sm:text-[11px]">{JALAALI_WEEKDAYS[d.weekday]}</div>
                     <div
                       className={`mt-0.5 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg text-sm font-bold transition-colors sm:h-8 sm:w-8 sm:text-base ${isToday(d.jy, d.jm, d.jd)
