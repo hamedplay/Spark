@@ -32,7 +32,7 @@ const CLEANUP_RECLAIM_INTERVAL_MS = 60000;
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const MAX_DIMENSION = 8192;
 const MAX_PIXELS = 40000000;
-const OUTPUT_SIZE = 512;
+const OUTPUT_SIZE = 256;
 const OUTPUT_QUALITY = 82;
 
 let lastPollAt = 0;
@@ -145,7 +145,7 @@ async function uploadOutput(userId, jobId, buf) {
     .upload(outputPath, buf, {
       contentType: "image/webp",
       upsert: false,
-      cacheControl: "3600",
+      cacheControl: "31536000",
     });
   if (error) throw error;
   return outputPath;
