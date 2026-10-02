@@ -42,7 +42,7 @@ jobs:
             react-hot-toast@latest \
             uuid@latest
           npm uninstall @types/react-datepicker
-          rm -rf node_modules
+          rm -rf node_modules package-lock.json
 
       - name: Upgrade development dependencies to latest
         shell: bash
