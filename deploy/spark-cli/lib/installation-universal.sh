@@ -10,6 +10,10 @@
 eval "$(declare -f install_step_2 | sed '1s/install_step_2/install_step_2_universal_base/')"
 eval "$(declare -f install_step_6 | sed '1s/install_step_6/install_step_6_universal_base/')"
 eval "$(declare -f install_step_11 | sed '1s/install_step_11/install_step_11_universal_base/')"
+eval "$(declare -f install_step_19 | sed '1s/install_step_19/install_step_19_universal_base/')"
+eval "$(declare -f install_step_20 | sed '1s/install_step_20/install_step_20_universal_base/')"
+eval "$(declare -f install_step_21 | sed '1s/install_step_21/install_step_21_universal_base/')"
+eval "$(declare -f install_step_22 | sed '1s/install_step_22/install_step_22_universal_base/')"
 eval "$(declare -f installation_step_probe | sed '1s/installation_step_probe/installation_step_probe_universal_base/')"
 
 spark_universal_local_ipv4() {
@@ -448,14 +452,44 @@ spark_universal_deferred_video_step() {
   ok "Video-conference provisioning is intentionally deferred while the feature is disabled; no DNS/TLS dependency was introduced."
 }
 
-install_step_19() { spark_universal_deferred_video_step 19; }
-install_step_20() { spark_universal_deferred_video_step 20; }
-install_step_21() { spark_universal_deferred_video_step 21; }
-install_step_22() { spark_universal_deferred_video_step 22; }
+install_step_19() {
+  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+    install_step_19_universal_base
+  else
+    spark_universal_deferred_video_step 19
+  fi
+}
+install_step_20() {
+  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+    install_step_20_universal_base
+  else
+    spark_universal_deferred_video_step 20
+  fi
+}
+install_step_21() {
+  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+    install_step_21_universal_base
+  else
+    spark_universal_deferred_video_step 21
+  fi
+}
+install_step_22() {
+  if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+    install_step_22_universal_base
+  else
+    spark_universal_deferred_video_step 22
+  fi
+}
 
 installation_step_probe() {
   case "$1" in
-    19|20|21|22) [[ -f "${STEP_DIR}/$1.ok" ]] ;;
+    19|20|21|22)
+      if declare -F airgap_is_active >/dev/null 2>&1 && airgap_is_active; then
+        installation_step_probe_universal_base "$1"
+      else
+        [[ -f "${STEP_DIR}/$1.ok" ]]
+      fi
+      ;;
     *) installation_step_probe_universal_base "$1" ;;
   esac
 }
