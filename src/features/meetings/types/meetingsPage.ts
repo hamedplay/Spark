@@ -20,6 +20,7 @@ export interface MeetingsPageProps {
   setPendingSchedule: (v: { meetingId: string; meeting: Meeting } | null) => void;
   isAdmin: boolean;
   userPermissions: Record<string, boolean> | null | undefined;
+  currentUserId: string | null;
 }
 
 export interface CreateMeetingPageProps {
