@@ -1,22 +1,24 @@
 import { useState } from 'react';
-import { MessageSquare, Globe, Group as GroupIcon, FileText, FlaskConical, ChartBar as BarChart2 } from 'lucide-react';
+import { MessageSquare, Globe, Group as GroupIcon, FileText, FlaskConical, ChartBar as BarChart2, Clock3 } from 'lucide-react';
 
 import { ProvidersTab } from './SmsConfig/ProvidersTab';
 import { GroupsTab } from './SmsConfig/GroupsTab';
 import { TemplatesTab } from './SmsConfig/TemplatesTab';
 import { TestTab } from './SmsConfig/TestTab';
 import { ReportsTab } from './SmsConfig/ReportsTab';
+import { SmsDeliveryPolicyTab } from './NotificationsConfig/SmsDeliveryPolicyTab';
 
 const TABS = [
   { key: 'providers',  label: 'سرویس‌دهندگان',    icon: Globe },
   { key: 'groups',     label: 'گروه‌بندی پیامک',  icon: GroupIcon },
   { key: 'templates',  label: 'قالب پیام‌ها',     icon: FileText },
   { key: 'test',       label: 'تست سامانه',        icon: FlaskConical },
+  { key: 'schedule',   label: 'زمان‌بندی ارسال',   icon: Clock3 },
   { key: 'reports',    label: 'گزارش ارسال',       icon: BarChart2 },
 ];
 
 export function SmsConfigPanel() {
-  const [tab, setTab] = useState<'providers' | 'groups' | 'templates' | 'test' | 'reports'>('providers');
+  const [tab, setTab] = useState<'providers' | 'groups' | 'templates' | 'test' | 'schedule' | 'reports'>('providers');
 
   return (
     <div className="space-y-4" dir="rtl">
@@ -37,6 +39,7 @@ export function SmsConfigPanel() {
       {tab === 'groups'     && <GroupsTab />}
       {tab === 'templates'  && <TemplatesTab />}
       {tab === 'test'       && <TestTab />}
+      {tab === 'schedule'   && <SmsDeliveryPolicyTab />}
       {tab === 'reports'    && <ReportsTab />}
     </div>
   );
