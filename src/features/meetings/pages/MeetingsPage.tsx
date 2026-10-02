@@ -4,6 +4,7 @@ import { MeetingsDashboard } from '../components/MeetingsDashboard';
 import { MeetingCard } from '../components/MeetingCard';
 import { checkPermission } from '../../permissions';
 import type { MeetingsPageProps } from '../types/meetingsPage';
+import { useMeetingCardsBatchReadModel } from '../hooks/useMeetingCardsBatchReadModel';
 
 const PendingMeetingsModal = lazy(() =>
   import('../components/MeetingCard/PendingMeetingsModal').then((m) => ({ default: m.PendingMeetingsModal })),
@@ -21,6 +22,9 @@ export function MeetingsPage(props: MeetingsPageProps) {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [focusMeetingId, setFocusMeetingId] = useState<string | null>(() => new URL(window.location.href).searchParams.get('meetingFocus'));
   const [dashboardMeetingView] = useState<string | null>(() => new URL(window.location.href).searchParams.get('meetingView'));
+
+  const { byMeetingId: meetingCardReadModels } =
+    useMeetingCardsBatchReadModel(meetings, currentUserId);
 
   useEffect(() => {
     if (!focusMeetingId && dashboardMeetingView !== 'open') return;
@@ -207,6 +211,7 @@ export function MeetingsPage(props: MeetingsPageProps) {
                 key={meeting.id}
                 meeting={meeting}
                 currentUserId={currentUserId}
+                prefetchedReadModel={meetingCardReadModels[meeting.id]}
                 onUpdate={fetchMeetings}
                 onScheduleInCalendar={(m) => {
                   setPendingSchedule({ meetingId: m.id, meeting: m });
