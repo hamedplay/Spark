@@ -139,7 +139,7 @@ trap - EXIT
 source_dir="${SPARK_ROOT}/deploy/spark-cli"
 for path in \
   spark spark-airgap spark-ui.py spark-ui-core.py spark-migrate \
-  lib/airgap.sh lib/airgap-build.sh lib/airgap-runtime.sh \
+  lib/airgap.sh lib/airgap-build.sh lib/airgap-runtime.sh lib/installation-universal.sh \
   lib/airgap-edge-functions.sh lib/airgap-edge-functions-runtime-fix.sh lib/airgap-edge-final.sh \
   lib/airgap-observability-quiet.sh lib/airgap-observability-quiet-base.sh; do
   [[ -f "${source_dir}/${path}" ]] || { echo "Bundled Spark control plane is missing: ${path}" >&2; exit 1; }
