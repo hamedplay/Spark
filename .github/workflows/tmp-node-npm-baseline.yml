@@ -22,27 +22,30 @@ jobs:
           node-version: '24.21.0'
           cache: npm
 
-      - name: Upgrade npm runtime and declare project baseline
+      - name: Declare project baseline and refresh lockfile with bundled npm
         shell: bash
         run: |
           set -euo pipefail
-          npm install -g npm@12.2.0
           test "$(node --version)" = "v24.21.0"
-          test "$(npm --version)" = "12.2.0"
 
           npm pkg set engines.node='>=24.21.0 <25'
           npm pkg set engines.npm='>=12.2.0 <13'
           npm pkg set packageManager='npm@12.2.0'
-
-          rm -f package-lock.json
           npm install --package-lock-only --ignore-scripts
+
+      - name: Upgrade npm runtime to 12.2.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install -g npm@12.2.0
+          test "$(npm --version)" = "12.2.0"
 
       - name: Clean install with Node 24.21 and npm 12.2
         shell: bash
         run: |
           set -euo pipefail
-          node --version
-          npm --version
+          test "$(node --version)" = "v24.21.0"
+          test "$(npm --version)" = "12.2.0"
           npm ci
 
       - name: Production build
