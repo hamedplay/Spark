@@ -1,0 +1,46 @@
+name: Temporary calendar startup optimization validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/lib/useOrgUsers.ts'
+      - 'src/components/CalendarPageCore.tsx'
+      - 'src/components/Calendar/useCalendarDataActions.ts'
+      - 'src/components/MeetingInboxButton.tsx'
+      - 'src/features/notifications/hooks/useNotificationBell.ts'
+      - 'src/features/notifications/components/NotificationBell.tsx'
+      - 'src/app/layout/components/LayoutTopBar.tsx'
+      - 'src/app/layout/components/ProfileDropdown.tsx'
+      - 'src/components/Layout.tsx'
+      - 'src/app/layout/AppShell.tsx'
+      - 'src/features/onboarding/FirstRunOnboardingGate.tsx'
+      - 'src/components/Calendar/**'
+      - 'src/app/layout/components/LayoutSidebar.tsx'
+      - '.github/workflows/calendar-startup-perf-temp.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:calendar-url
+      - run: npm run test:notification-lifecycle
+      - run: npm run test:notification-model
+      - run: npm run test:layout-presence
+      - run: npm run test:user-preferences-lifecycle
+      - name: Validate startup optimization contracts
+        run: |
+          grep -Fq "useOrgUsers(currentUserId, orgUsersEnabled)" src/components/CalendarPageCore.tsx
+          grep -Fq "onRealtimeSubscribed: (reconnected)" src/features/notifications/hooks/useNotificationBell.ts
+          grep -Fq "if (!reconnected) return;" src/features/notifications/hooks/useNotificationBell.ts
+          grep -Fq "<main" src/components/Layout.tsx
+          grep -Fq "width={36}" src/app/layout/components/ProfileDropdown.tsx
+          grep -Fq "aria-label=\"ویرایش جلسه\"" src/components/Calendar/CalendarViewShared.tsx
