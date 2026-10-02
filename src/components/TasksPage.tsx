@@ -88,10 +88,6 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [createInitialDescription, setCreateInitialDescription] = useState('');
   const [createSourceMessageId, setCreateSourceMessageId] = useState<string | null>(null);
 
-  const orgDirectoryNeeded = Boolean(showCreateDrawer || editingTaskId || referTask);
-  const { groups: orgGroups, allUsers: finalAllUsers } = useOrgUsers(userId, orgDirectoryNeeded);
-  const userSelectorGroups = orgGroups.map(g => ({ label: g.unit_name, users: g.users }));
-
   const [workflowTask, setWorkflowTask] = useState<ActionTask | null>(null);
   const [workflowSteps, setWorkflowSteps] = useState<TaskWorkflowStep[]>([]);
   const [referTask, setReferTask] = useState<ActionTask | null>(null);
@@ -99,6 +95,10 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [deleteConfirmTask, setDeleteConfirmTask] = useState<ActionTask | null>(null);
   const [editDueDate, setEditDueDate] = useState<Date | null>(null);
   const [editAssigneeId, setEditAssigneeId] = useState('');
+
+  const orgDirectoryNeeded = Boolean(showCreateDrawer || editingTaskId || referTask);
+  const { groups: orgGroups, allUsers: finalAllUsers } = useOrgUsers(userId, orgDirectoryNeeded);
+  const userSelectorGroups = orgGroups.map(g => ({ label: g.unit_name, users: g.users }));
 
   const fetchUsers = async () => {
     const { data, error } = await supabase
