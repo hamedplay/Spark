@@ -65,7 +65,7 @@ jobs:
             postcss@latest \
             tailwindcss@latest \
             tsx@latest \
-            typescript@latest \
+            typescript@6.0.3 \
             typescript-eslint@latest \
             vite@latest
 
