@@ -38,7 +38,7 @@ const ALLOWED_TABLES = new Set([
   "conference_breakout_rooms", "conference_reactions", "room_mod_actions", "pending_approvals", "banned_users",
   "conference_whiteboard", "conference_waiting_room", "conference_quality_metrics", "notifications",
   "notification_event_registry", "notification_templates", "notification_group_rules", "broadcast_messages",
-  "broadcast_recipients", "user_preferences", "user_groups", "user_group_members", "user_access_relations",
+  "broadcast_recipients", "user_preferences", "user_auto_accept_organizers", "user_groups", "user_group_members", "user_access_relations",
   "user_bale_mapping", "org_organizations", "org_units", "org_positions", "org_position_members",
   "org_level_definitions", "org_level_permissions", "org_position_permissions", "system_config", "spark_config",
   "spark_ai_settings", "spark_field_keywords", "spark_memory", "spark_assistant_logs", "social_channel_configs",
