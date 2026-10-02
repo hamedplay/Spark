@@ -238,6 +238,38 @@ application_npm_outdated() {
   run_report "Application npm outdated" bash -c "cd '$SPARK_ROOT' && npm outdated"
 }
 
+application_npm_audit_production() {
+  title
+  new_log "npm-audit-production"
+  [[ -f "${SPARK_ROOT}/package-lock.json" ]] || { fail "Application package-lock.json not found."; return 1; }
+  run_report "Application npm audit production" \
+    bash -c "cd '$SPARK_ROOT' && npm audit --omit=dev"
+}
+
+application_npm_audit_all() {
+  title
+  new_log "npm-audit-all"
+  [[ -f "${SPARK_ROOT}/package-lock.json" ]] || { fail "Application package-lock.json not found."; return 1; }
+  run_report "Application npm audit all" \
+    bash -c "cd '$SPARK_ROOT' && npm audit"
+}
+
+application_npm_list() {
+  title
+  new_log "npm-list-app"
+  [[ -f "${SPARK_ROOT}/package.json" ]] || { fail "Application package.json not found."; return 1; }
+  run_report "Application npm list" \
+    bash -c "cd '$SPARK_ROOT' && npm list --depth=0"
+}
+
+application_npm_doctor() {
+  title
+  new_log "npm-doctor-app"
+  [[ -f "${SPARK_ROOT}/package.json" ]] || { fail "Application package.json not found."; return 1; }
+  run_report "Application npm doctor" \
+    bash -c "cd '$SPARK_ROOT' && npm doctor"
+}
+
 application_active_version() {
   title
   new_log "application-active-version"
