@@ -131,7 +131,7 @@ git -C "$SPARK_ROOT" remote set-url origin https://github.com/hamedplay/Spark.gi
 git -C "$SPARK_ROOT" update-ref refs/remotes/origin/main "$spark_commit"
 
 source_dir="$SPARK_ROOT/deploy/spark-cli"
-for path in spark spark-airgap spark-ui.py spark-ui-core.py spark-migrate lib/airgap.sh lib/airgap-build.sh lib/airgap-runtime.sh lib/airgap-dnsless-runtime.sh; do
+for path in spark spark-airgap spark-ui.py spark-ui-core.py spark-migrate lib/airgap.sh lib/airgap-build.sh lib/airgap-runtime.sh lib/airgap-dnsless-runtime.sh lib/installation-universal.sh; do
   [[ -f "$source_dir/$path" ]] || { echo "Air-gap capable Spark source is missing: $path" >&2; exit 1; }
 done
 [[ -d "$SPARK_ROOT/deploy/spark-cli/livekit" ]] || { echo 'Spark LiveKit deployment assets are missing.' >&2; exit 1; }
