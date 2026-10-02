@@ -156,6 +156,7 @@ export function renderContent(props: PageRendererProps): ReactNode {
       />;
     case 'create-meeting':
       return modernPage(<CreateMeetingPage
+        currentUserId={currentUserId}
         prefillData={sparkMeetingPrefill}
         setActivePage={navigate}
         setSparkMeetingPrefill={setSparkMeetingPrefill}
