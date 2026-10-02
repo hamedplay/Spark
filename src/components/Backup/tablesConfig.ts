@@ -108,7 +108,7 @@ export const TABLES: TableConfig[] = [
   { key: 'social_channel_configs', label: 'تنظیمات شبکه اجتماعی', icon: Shield, color: 'text-teal-600', description: 'پیکربندی بات‌های پیام‌رسان' },
   { key: 'sms_providers', label: 'تنظیمات پیامک', icon: FileText, color: 'text-green-600', description: 'پیکربندی ارائه‌دهنده SMS' },
   { key: 'sms_templates', label: 'قالب‌های پیامک', icon: FileText, color: 'text-green-500', description: 'قالب‌های متن پیامک' },
-  { key: 'sms_delivery_policies', label: 'سیاست زمان‌بندی پیامک', icon: FileText, color: 'text-green-450', description: 'حالت ارسال، بازه و ساعت ثابت برای رویدادهای پیامکی' },
+  { key: 'sms_delivery_policies', label: 'سیاست زمان‌بندی پیامک', icon: FileText, color: 'text-green-400', description: 'حالت ارسال، بازه و ساعت ثابت برای رویدادهای پیامکی' },
   { key: 'sms_group_rules', label: 'قوانین گروهی پیامک', icon: FileText, color: 'text-green-400', description: 'قوانین ارسال پیامک به گروه‌ها' },
   { key: 'sms_dispatch_logs', label: 'لاگ ارسال پیامک', icon: FileText, color: 'text-green-300', description: 'تاریخچه پیامک‌های ارسال‌شده' },
   { key: 'daily_report_config', label: 'پیکربندی گزارش روزانه', icon: FileText, color: 'text-lime-600', description: 'تنظیمات گزارش روزانه' },
