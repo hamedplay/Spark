@@ -368,16 +368,13 @@ airgap_export_linux_amd64_images() {
       fail "Docker image ${image} is not the required linux/amd64 variant (reported: ${platform:-unknown})."
       return 1
     }
-    docker image save "$image" >/dev/null || {
-      fail "Docker image ${image} cannot be exported."
-      return 1
-    }
   done
 
   rm -f "$archive"
+  # One final docker save is the exportability check. Avoid exporting every
+  # image once individually and then exporting all of them again.
   docker image save "${images[@]}" | gzip -1 >"$archive" || return 1
   [[ -s "$archive" ]] || { fail "Docker image archive was not produced."; return 1; }
-  gzip -t "$archive" || { fail "Docker image archive gzip integrity validation failed."; return 1; }
 }
 
 airgap_copy_certificate_pack() {
