@@ -156,6 +156,44 @@ async function queueDeferredMeetingSms(params: {
   actorUserId: string | null;
   context: Record<string, unknown>;
   availableAt: Date;
+}): Promise<"queued" | "duplicate"> {
+  const actorPart = params.actorUserId || "system";
+  const entityPart = params.meetingId || "no-meeting";
+  const idempotencyKey = params.eventKey
+    ? "meeting-sms-window:event:" + params.eventKey + ":recipient:" + params.targetUserId
+    : "meeting-sms-window:" + entityPart + ":" + params.eventType + ":" + params.targetUserId + ":" + actorPart;
+
+  const { error } = await params.supabase
+    .from("notification_outbox")
+    .insert({
+      event_key: params.eventType,
+      meeting_id: params.meetingId,
+      recipient_id: params.targetUserId,
+      channel: "sms",
+      event_type: params.eventType,
+      audience: params.audience,
+      payload: {
+        context: {
+          ...params.context,
+          sms_window_deferred_delivery: true,
+        },
+        sms_supported: true,
+      },
+      status: "pending",
+      category: "meeting",
+      entity_type: "meeting",
+      entity_id: params.meetingId,
+      actor_user_id: params.actorUserId,
+      idempotency_key: idempotencyKey,
+      available_at: params.availableAt.toISOString(),
+      next_attempt_at: params.availableAt.toISOString(),
+      notification_status: "sent",
+      sms_status: "pending",
+    });
+
+  if (!error) return "queued";
+  if (error.code === "23505") return "duplicate";
+  throw error;
 }
 
 async function queueDeferredExternalMeetingSms(params: {
@@ -191,45 +229,6 @@ async function queueDeferredExternalMeetingSms(params: {
       idempotency_key: idempotencyKey,
       available_at: params.availableAt.toISOString(),
       status: "pending",
-    });
-
-  if (!error) return "queued";
-  if (error.code === "23505") return "duplicate";
-  throw error;
-}
-): Promise<"queued" | "duplicate"> {
-  const actorPart = params.actorUserId || "system";
-  const entityPart = params.meetingId || "no-meeting";
-  const idempotencyKey = params.eventKey
-    ? "meeting-sms-window:event:" + params.eventKey + ":recipient:" + params.targetUserId
-    : "meeting-sms-window:" + entityPart + ":" + params.eventType + ":" + params.targetUserId + ":" + actorPart;
-
-  const { error } = await params.supabase
-    .from("notification_outbox")
-    .insert({
-      event_key: params.eventType,
-      meeting_id: params.meetingId,
-      recipient_id: params.targetUserId,
-      channel: "sms",
-      event_type: params.eventType,
-      audience: params.audience,
-      payload: {
-        context: {
-          ...params.context,
-          sms_window_deferred_delivery: true,
-        },
-        sms_supported: true,
-      },
-      status: "pending",
-      category: "meeting",
-      entity_type: "meeting",
-      entity_id: params.meetingId,
-      actor_user_id: params.actorUserId,
-      idempotency_key: idempotencyKey,
-      available_at: params.availableAt.toISOString(),
-      next_attempt_at: params.availableAt.toISOString(),
-      notification_status: "sent",
-      sms_status: "pending",
     });
 
   if (!error) return "queued";
