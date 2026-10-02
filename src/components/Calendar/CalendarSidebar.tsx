@@ -76,13 +76,13 @@ export function CalendarSidebar({
         {miniCalOpen && (
           <div className="px-3 pb-3">
             <div className="mb-1.5 flex items-center justify-between rounded-lg bg-slate-50 p-1 dark:bg-slate-900">
-              <button onClick={onSidebarPrev} className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-violet-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-violet-300">
+              <button onClick={onSidebarPrev} aria-label="ماه قبل" className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-violet-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-violet-300">
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
               <button onClick={onSidebarMonthClick} className="text-xs font-bold text-slate-700 transition-colors hover:text-violet-600 dark:text-slate-200 dark:hover:text-violet-300">
                 {JALAALI_MONTHS[sidebarJm - 1]} {sidebarJy}
               </button>
-              <button onClick={onSidebarNext} className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-violet-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-violet-300">
+              <button onClick={onSidebarNext} aria-label="ماه بعد" className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-violet-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-violet-300">
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
             </div>
