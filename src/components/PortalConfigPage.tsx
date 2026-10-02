@@ -20,12 +20,12 @@ const AuditLogPage = lazy(() => import('./AuditLogPage').then(m => ({ default: m
 const BackupPanel = lazy(() => import('./BackupPanel').then(m => ({ default: m.BackupPanel })));
 const IceTesterPanel = lazy(() => import('./VideoConference/IceTesterPanel').then(m => ({ default: m.IceTesterPanel })));
 const SecuritySettingsConsole = lazy(() => import('../features/security-settings').then(m => ({ default: m.SecuritySettingsConsole })));
+const PhoneAuthCard = lazy(() => import('./PortalConfig/PhoneAuthCard').then(m => ({ default: m.PhoneAuthCard })));
+const IdentityRepairCard = lazy(() => import('./PortalConfig/IdentityRepairCard').then(m => ({ default: m.IdentityRepairCard })));
 
 import { NAV_ITEMS, VISIBLE_SECURITY_CONFIG_KEYS } from './PortalConfig/constants';
 import { ConfigField } from './PortalConfig/ConfigField';
 import { SectionCard } from './PortalConfig/SectionCard';
-import { PhoneAuthCard } from './PortalConfig/PhoneAuthCard';
-import { IdentityRepairCard } from './PortalConfig/IdentityRepairCard';
 import type { ConfigEntry, Profile, Props } from './PortalConfig/types';
 import { usePermissions } from '../context/PermissionsContext';
 import { canAccessConfigSection, getFirstVisibleConfigSection, getVisibleConfigNavigationItems } from '../features/permissions';
@@ -375,9 +375,11 @@ export function PortalConfigPage({ currentUserId }: Props) {
                 وضعیت تعمیر و نگهداری فقط توسط مدیر سامانه قابل تغییر است. تنظیمات امنیتی تخصصی پایین‌تر همچنان بر اساس سطح دسترسی Security Admin کنترل می‌شوند.
               </div>
             )}
-            <PhoneAuthCard />
-            <IdentityRepairCard />
-            <SecuritySettingsConsole />
+            <Suspense fallback={<div className="py-8 text-center text-xs text-slate-400">در حال آماده‌سازی تنظیمات امنیتی...</div>}>
+              <PhoneAuthCard />
+              <IdentityRepairCard />
+              <SecuritySettingsConsole />
+            </Suspense>
           </div>
         );
 
