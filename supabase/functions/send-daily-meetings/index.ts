@@ -638,8 +638,8 @@ Deno.serve(async (req: Request) => {
               category: "daily_report",
               eventType: "daily_meetings",
               audience: "all",
-              context: { report_date: tehranDate },
-              eventKey: "daily_meetings:" + tehranDate + ":" + userId,
+              context: { report_date: tehranNow.date },
+              eventKey: "daily_meetings:" + tehranNow.date + ":" + report.user_id,
             }),
           });
 
