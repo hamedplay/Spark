@@ -165,9 +165,9 @@ application_update_offline() (
   printf 'Log               : %s\n' "$CURRENT_LOG"
 )
 
-application_npm_update() (
+application_packages_update() (
   title
-  new_log "npm-update-app"
+  new_log "packages-update-app"
 
   [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository not found."; return 1; }
   [[ -f "${SPARK_ROOT}/package.json" && -f "${SPARK_ROOT}/package-lock.json" ]] || {
@@ -176,7 +176,7 @@ application_npm_update() (
   }
   [[ -f "${SUPABASE_ROOT}/.env" ]] || { fail "Supabase environment is required only to read the existing frontend ANON_KEY."; return 1; }
   if [[ -n "$(git -C "$SPARK_ROOT" status --porcelain)" ]]; then
-    fail "Spark source has uncommitted changes; npm update app stopped."
+    fail "Spark source has uncommitted changes; Update App Packages stopped."
     git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
     return 1
   fi
@@ -204,7 +204,7 @@ application_npm_update() (
   application_activate_dist "$stage" || return 1
 
   application_record_active_version "npm-update" "$sha"
-  ok "npm update app completed in staging and deployed. Source package.json/package-lock.json were not modified."
+  ok "Update App Packages completed in staging and deployed. Source package.json/package-lock.json were not modified."
   printf 'Application commit: %s\n' "$sha"
   printf 'Log: %s\n' "$CURRENT_LOG"
 )
@@ -214,35 +214,106 @@ application_node_update() {
   new_log "node-update-app"
   command -v node >/dev/null 2>&1 || { fail "Node.js is not installed."; return 1; }
   command -v npm >/dev/null 2>&1 || { fail "npm is not installed."; return 1; }
-  [[ -f "${SPARK_ROOT}/package.json" ]] || { fail "Application package.json not found."; return 1; }
 
-  local node_before node_after npm_before npm_after
+  local node_before node_after npm_before npm_after candidate installed_pkg
   node_before="$(node --version)"
   npm_before="$(npm --version)"
   info "Current Node.js: $node_before"
-  info "Current npm    : $npm_before"
+  info "Preserved npm  : $npm_before"
 
   run_logged "Refresh Linux package metadata for Node.js" apt-get update || return 1
-  run_logged "Update Node.js package" apt-get install -y --only-upgrade nodejs || return 1
+  candidate="$(apt-cache policy nodejs 2>/dev/null | awk '/Candidate:/ {print $2; exit}')"
+  [[ -n "$candidate" && "$candidate" != "(none)" ]] || {
+    fail "No Node.js package candidate is available from configured APT repositories."
+    return 1
+  }
+  if [[ ! "$candidate" =~ (^|:)24\. ]]; then
+    fail "Configured Node.js candidate is outside the supported Node 24.x track: $candidate"
+    return 1
+  fi
 
-  if ! node -e 'const [M,m,p]=process.versions.node.split(".").map(Number); if (!(M===24 && (m>21 || (m===21 && p>=0)))) process.exit(1)'; then
-    fail "Updated Node.js does not satisfy Spark engine >=24.21.0 <25."
+  info "Latest Node.js package candidate: $candidate"
+  run_logged "Update Node.js to latest available 24.x package" \
+    apt-get install -y --only-upgrade nodejs || return 1
+
+  node_after="$(node --version)"
+  if ! node -e 'const [M]=process.versions.node.split(".").map(Number); if (M !== 24) process.exit(1)'; then
+    fail "Updated Node.js left the supported Node 24.x track."
     node --version | tee -a "$CURRENT_LOG"
     return 1
   fi
 
-  run_logged "Update npm CLI to 12.2.0" npm install -g npm@12.2.0 || return 1
-  if ! npm --version | awk -F. '{ exit !(($1 == 12 && ($2 > 2 || ($2 == 2 && $3 >= 0))) && $1 < 13) }'; then
-    fail "Updated npm does not satisfy Spark npm engine >=12.2.0 <13."
-    npm --version | tee -a "$CURRENT_LOG"
+  installed_pkg="$(dpkg-query -W -f='${Version}' nodejs 2>/dev/null || true)"
+  if [[ -n "$installed_pkg" ]] && ! dpkg --compare-versions "$installed_pkg" ge "$candidate"; then
+    fail "Node.js package did not reach the latest configured candidate: installed=$installed_pkg candidate=$candidate"
     return 1
   fi
 
-  node_after="$(node --version)"
   npm_after="$(npm --version)"
-  ok "Node.js and npm application runtimes updated and validated."
-  printf 'Node before: %s\nNode after : %s\nnpm before : %s\nnpm after  : %s\n' \
-    "$node_before" "$node_after" "$npm_before" "$npm_after"
+  if [[ "$npm_after" != "$npm_before" ]]; then
+    warn "The Node.js package changed bundled npm ($npm_before -> $npm_after); restoring the previous npm version to preserve action separation."
+    run_logged "Restore npm version after Node-only update" npm install -g "npm@${npm_before}" || return 1
+    npm_after="$(npm --version)"
+  fi
+  [[ "$npm_after" == "$npm_before" ]] || {
+    fail "Node update changed npm unexpectedly: before=$npm_before after=$npm_after"
+    return 1
+  }
+
+  ok "Node.js updated to the latest available supported 24.x version; npm was preserved."
+  printf 'Node before: %s\nNode after : %s\nnpm         : %s (unchanged)\n' \
+    "$node_before" "$node_after" "$npm_after"
+}
+
+application_npm_update() {
+  title
+  new_log "npm-update-app"
+  command -v node >/dev/null 2>&1 || { fail "Node.js is not installed."; return 1; }
+  command -v npm >/dev/null 2>&1 || { fail "npm is not installed."; return 1; }
+  command -v python3 >/dev/null 2>&1 || { fail "python3 is required to resolve the latest npm release."; return 1; }
+
+  local node_before node_after npm_before npm_after latest
+  node_before="$(node --version)"
+  npm_before="$(npm --version)"
+  info "Preserved Node.js: $node_before"
+  info "Current npm      : $npm_before"
+
+  latest="$(npm view 'npm@12' version --json 2>>"$CURRENT_LOG" | python3 -c '
+import json, re, sys
+data=json.load(sys.stdin)
+if isinstance(data, str):
+    data=[data]
+versions=[]
+for value in data:
+    m=re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-+].*)?", value)
+    if m and int(m.group(1)) == 12:
+        versions.append((tuple(map(int, m.groups()[:3])), value))
+if not versions:
+    raise SystemExit(1)
+print(max(versions)[1])
+')" || {
+    fail "Unable to resolve the latest npm 12.x release from the npm registry."
+    return 1
+  }
+
+  info "Latest supported npm release: $latest"
+  run_logged "Update npm CLI to latest 12.x" npm install -g "npm@${latest}" || return 1
+
+  npm_after="$(npm --version)"
+  [[ "$npm_after" == "$latest" ]] || {
+    fail "npm did not reach the resolved latest release: expected=$latest actual=$npm_after"
+    return 1
+  }
+
+  node_after="$(node --version)"
+  [[ "$node_after" == "$node_before" ]] || {
+    fail "npm update changed Node.js unexpectedly: before=$node_before after=$node_after"
+    return 1
+  }
+
+  ok "npm updated to the latest supported 12.x release; Node.js was preserved."
+  printf 'npm before : %s\nnpm after  : %s\nNode.js    : %s (unchanged)\n' \
+    "$npm_before" "$npm_after" "$node_after"
 }
 
 application_npm_outdated() {
