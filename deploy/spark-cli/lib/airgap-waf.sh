@@ -130,6 +130,21 @@ server {
     root /var/www/spark;
     index index.html;
 
+    # Compress textual frontend assets. Hashed JS/CSS dominate mobile transfer
+    # size; fonts/images are already compressed and intentionally excluded.
+    gzip on;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_types
+        text/css
+        text/plain
+        application/javascript
+        application/json
+        application/manifest+json
+        image/svg+xml;
+
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
