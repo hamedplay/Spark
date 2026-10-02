@@ -34,6 +34,7 @@ jobs:
           npm pkg set engines.npm='>=12.2.0 <13'
           npm pkg set packageManager='npm@12.2.0'
 
+          rm -f package-lock.json
           npm install --package-lock-only --ignore-scripts
 
       - name: Clean install with Node 24.21 and npm 12.2
