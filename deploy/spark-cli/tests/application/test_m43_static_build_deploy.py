@@ -17,7 +17,7 @@ application:
   type: static
 runtime:
   node:
-    requirement: ">=24.18.1 <25"
+    requirement: ">=24.21.0 <25"
     package_manager: npm
 install:
   command: [npm, ci]
@@ -44,7 +44,7 @@ health:
 
 
 class FakeBuildRunner:
-    def __init__(self, node="v24.18.1", fail_build=False):
+    def __init__(self, node="v24.21.0", fail_build=False):
         self.node = node
         self.fail_build = fail_build
         self.calls = []
