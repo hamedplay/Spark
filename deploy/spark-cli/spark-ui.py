@@ -123,7 +123,7 @@ def _application_actions(_actions):
         core.Action("app-npm-update", "npm update app",
                     "Refresh application dependencies within package constraints in a temporary worktree, build, and deploy without dirtying source package files.", "controlled"),
         core.Action("app-node-update", "node update app",
-                    "Update the host Node.js 24 package used to build/maintain the application and validate the Spark Node engine.", "controlled"),
+                    "Update and validate the Spark application runtime baseline: Node.js >=24.21.0 <25 and npm >=12.2.0 <13.", "controlled"),
         core.Action("app-npm-outdated", "npm outdated app",
                     "Report outdated application npm dependencies without modifying the source or deployment."),
         core.Action("app-npm-audit-production", "npm audit production",
