@@ -136,6 +136,8 @@ def _application_actions(_actions):
                     "Show the installed top-level npm dependency tree for the application."),
         core.Action("app-npm-doctor", "npm doctor app",
                     "Run npm environment health checks for registry access, cache, permissions, Node.js and npm."),
+        core.Action("app-nginx-gzip", "Optimize Nginx Gzip",
+                    "Apply Spark's safe gzip profile to Nginx, validate syntax, reload Nginx and verify effective CSS/JavaScript compression settings.", "controlled"),
         core.Action("app-active-version", "Active version",
                     "Show active application commit, deployment mode/time, package version, Node/npm versions and frontend timestamp."),
     ]
