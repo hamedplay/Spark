@@ -6,7 +6,7 @@ import { GroupsTab } from './SmsConfig/GroupsTab';
 import { TemplatesTab } from './SmsConfig/TemplatesTab';
 import { TestTab } from './SmsConfig/TestTab';
 import { ReportsTab } from './SmsConfig/ReportsTab';
-import { SmsDeliveryPolicyTab } from './NotificationsConfig/SmsDeliveryPolicyTab';
+import { SmsDeliveryPolicyTab } from './SmsConfig/SmsDeliveryPolicyTab';
 
 const TABS = [
   { key: 'providers',  label: 'سرویس‌دهندگان',    icon: Globe },
@@ -26,10 +26,10 @@ export function SmsConfigPanel() {
         <MessageSquare className="w-5 h-5 text-green-500" />تنظیمات پیامک
       </h3>
 
-      <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 gap-1">
+      <div className="flex bg-gray-100 dark:bg-gray-700 rounded-xl p-1 gap-1 overflow-x-auto">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key as any)}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === key ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+            className={`min-w-max flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${tab === key ? 'bg-white dark:bg-gray-800 text-gray-800 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
             <Icon className="w-4 h-4" />{label}
           </button>
         ))}
