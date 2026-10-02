@@ -35,6 +35,7 @@ jobs:
           export STATE_DIR=/tmp/spark-state
           export STEP_DIR=/tmp/spark-state/steps
           export LOG_DIR=/tmp/spark-logs
+          export SCRIPT_DIR="$PWD/deploy/spark-cli"
           export C_GREEN='' C_RED='' C_YELLOW='' C_BLUE='' C_CYAN='' C_WHITE='' C_BOLD='' C_DIM='' C_RESET=''
           mkdir -p "$BACKUP_DIR" "$STEP_DIR" "$LOG_DIR"
           source deploy/spark-cli/lib/core.sh
