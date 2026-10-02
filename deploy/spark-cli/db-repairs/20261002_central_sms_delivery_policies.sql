@@ -178,6 +178,178 @@ set delivery_mode='immediate',
 where category='auth'
   and event_type in ('login_otp','registration_phone_otp');
 
+-- Migrate the short-lived meeting-only policy keys if they exist.
+with legacy_events(event_type) as (
+  values
+    ('meeting_created'),
+    ('invite'),
+    ('meeting_confirmed'),
+    ('meeting_declined'),
+    ('change'),
+    ('cancel'),
+    ('reminder'),
+    ('meeting_representative_assigned')
+),
+legacy_values as (
+  select
+    e.event_type,
+    max(sc.value) filter(where sc.key='meeting_sms_window_'||e.event_type||'_enabled') as enabled_raw,
+    max(sc.value) filter(where sc.key='meeting_sms_window_'||e.event_type||'_start') as start_raw,
+    max(sc.value) filter(where sc.key='meeting_sms_window_'||e.event_type||'_end') as end_raw
+  from legacy_events e
+  left join public.system_config sc
+    on sc.section='notifications'
+   and sc.key in (
+     'meeting_sms_window_'||e.event_type||'_enabled',
+     'meeting_sms_window_'||e.event_type||'_start',
+     'meeting_sms_window_'||e.event_type||'_end'
+   )
+  group by e.event_type
+)
+update public.sms_delivery_policies p
+set delivery_mode=case
+      when lower(coalesce(v.enabled_raw,''))='true' then 'window'
+      when lower(coalesce(v.enabled_raw,''))='false' then 'immediate'
+      else p.delivery_mode
+    end,
+    window_start=case
+      when coalesce(v.start_raw,'') ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]
+
+create function public.claim_deferred_sms_queue(p_limit integer default 50)
+returns table(
+  id uuid,
+  delivery_mode text,
+  target_user_id uuid,
+  target_phones text[],
+  category text,
+  event_type text,
+  audience text,
+  context jsonb,
+  meeting_id uuid,
+  actor_user_id uuid,
+  event_key text,
+  raw_message text,
+  provider_id uuid,
+  attempt_count integer
+)
+language plpgsql
+security definer
+set search_path=''
+as $function$
+declare
+  v_ids uuid[];
+begin
+  select array_agg(q.id)
+  into v_ids
+  from (
+    select d.id
+    from public.deferred_sms_queue d
+    where d.status in ('pending','failed')
+      and d.available_at<=now()
+    order by d.available_at,d.created_at
+    limit least(greatest(p_limit,1),100)
+    for update skip locked
+  ) q;
+
+  if v_ids is null then return; end if;
+
+  update public.deferred_sms_queue d
+  set status='processing',
+      attempt_count=d.attempt_count+1,
+      last_error=null
+  where d.id=any(v_ids);
+
+  return query
+  select d.id,d.delivery_mode,d.target_user_id,d.target_phones,d.category,d.event_type,
+         d.audience,d.context,d.meeting_id,d.actor_user_id,d.event_key,d.raw_message,
+         d.provider_id,d.attempt_count
+  from public.deferred_sms_queue d
+  where d.id=any(v_ids)
+  order by d.available_at,d.created_at;
+end;
+$function$;
+
+revoke all on function public.claim_deferred_sms_queue(integer) from public,anon,authenticated;
+grant execute on function public.claim_deferred_sms_queue(integer) to service_role;
+
+notify pgrst,'reload schema';
+ then v.start_raw::time
+      else p.window_start
+    end,
+    window_end=case
+      when coalesce(v.end_raw,'') ~ '^(?:[01][0-9]|2[0-3]):[0-5][0-9]
+
+create function public.claim_deferred_sms_queue(p_limit integer default 50)
+returns table(
+  id uuid,
+  delivery_mode text,
+  target_user_id uuid,
+  target_phones text[],
+  category text,
+  event_type text,
+  audience text,
+  context jsonb,
+  meeting_id uuid,
+  actor_user_id uuid,
+  event_key text,
+  raw_message text,
+  provider_id uuid,
+  attempt_count integer
+)
+language plpgsql
+security definer
+set search_path=''
+as $function$
+declare
+  v_ids uuid[];
+begin
+  select array_agg(q.id)
+  into v_ids
+  from (
+    select d.id
+    from public.deferred_sms_queue d
+    where d.status in ('pending','failed')
+      and d.available_at<=now()
+    order by d.available_at,d.created_at
+    limit least(greatest(p_limit,1),100)
+    for update skip locked
+  ) q;
+
+  if v_ids is null then return; end if;
+
+  update public.deferred_sms_queue d
+  set status='processing',
+      attempt_count=d.attempt_count+1,
+      last_error=null
+  where d.id=any(v_ids);
+
+  return query
+  select d.id,d.delivery_mode,d.target_user_id,d.target_phones,d.category,d.event_type,
+         d.audience,d.context,d.meeting_id,d.actor_user_id,d.event_key,d.raw_message,
+         d.provider_id,d.attempt_count
+  from public.deferred_sms_queue d
+  where d.id=any(v_ids)
+  order by d.available_at,d.created_at;
+end;
+$function$;
+
+revoke all on function public.claim_deferred_sms_queue(integer) from public,anon,authenticated;
+grant execute on function public.claim_deferred_sms_queue(integer) to service_role;
+
+notify pgrst,'reload schema';
+ then v.end_raw::time
+      else p.window_end
+    end,
+    updated_at=now()
+from legacy_values v
+where p.category='meeting'
+  and p.event_type=v.event_type
+  and v.enabled_raw is not null;
+
+delete from public.system_config
+where section='notifications'
+  and key like 'meeting_sms_window_%';
+
 drop function if exists public.claim_deferred_sms_queue(integer);
 
 create function public.claim_deferred_sms_queue(p_limit integer default 50)
