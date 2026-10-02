@@ -3,7 +3,7 @@ application:
   type: static
 runtime:
   node:
-    requirement: ">=24.18.1 <25"
+    requirement: ">=24.21.0 <25"
     package_manager: npm
 install:
   command:
