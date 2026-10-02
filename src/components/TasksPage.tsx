@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Loader as Loader2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
@@ -9,11 +9,7 @@ import { usePermissions } from '../context/PermissionsContext';
 import { useOrgUsers } from '../lib/useOrgUsers';
 import { type UserProfile, type TasksPageProps } from './Tasks/types';
 import { toJalali, sendTaskNotification, getTaskRecipients } from './Tasks/utils';
-import { AddNoteModal } from './Tasks/AddNoteModal';
-import { WorkflowModal } from './Tasks/WorkflowModal';
-import { ReferModal } from './Tasks/ReferModal';
 import { TaskCard, type ActionTask } from './Tasks/TaskCard';
-import { DeleteTaskModal } from './Tasks/DeleteTaskModal';
 import {
   TasksWorkspaceHeader,
   TaskMetricCards,
@@ -28,14 +24,19 @@ import {
   type TaskViewMode,
 } from './Tasks/taskPageSelectors';
 import { ActionListView, ActionKanbanBoard } from './Tasks/ActionWorkspaceViews';
-import {
-  ActionCreateDrawer,
-  type ActionCreatePayload,
-  type ManagementProjectOption,
-} from './Tasks/ActionCreateDrawer';
-import { ActionDetailDrawer } from './Tasks/ActionDetailDrawer';
-import { ActionEditDrawer, type ActionEditPayload } from './Tasks/ActionEditDrawer';
-import { PersonalTaskProjects, type PersonalTaskProject } from './Tasks/PersonalTaskProjects';
+import type { ActionCreatePayload, ManagementProjectOption } from './Tasks/ActionCreateDrawer';
+import type { ActionEditPayload } from './Tasks/ActionEditDrawer';
+import type { PersonalTaskProject } from './Tasks/PersonalTaskProjects';
+
+const AddNoteModal = lazy(() => import('./Tasks/AddNoteModal').then((m) => ({ default: m.AddNoteModal })));
+const WorkflowModal = lazy(() => import('./Tasks/WorkflowModal').then((m) => ({ default: m.WorkflowModal })));
+const ReferModal = lazy(() => import('./Tasks/ReferModal').then((m) => ({ default: m.ReferModal })));
+const DeleteTaskModal = lazy(() => import('./Tasks/DeleteTaskModal').then((m) => ({ default: m.DeleteTaskModal })));
+const ActionCreateDrawer = lazy(() => import('./Tasks/ActionCreateDrawer').then((m) => ({ default: m.ActionCreateDrawer })));
+const ActionDetailDrawer = lazy(() => import('./Tasks/ActionDetailDrawer').then((m) => ({ default: m.ActionDetailDrawer })));
+const ActionEditDrawer = lazy(() => import('./Tasks/ActionEditDrawer').then((m) => ({ default: m.ActionEditDrawer })));
+const PersonalTaskProjects = lazy(() => import('./Tasks/PersonalTaskProjects').then((m) => ({ default: m.PersonalTaskProjects })));
+
 
 type DashboardTaskView = 'all' | 'today' | 'in_progress' | 'completed' | 'overdue' | 'urgent';
 const DASHBOARD_TASK_VIEWS = new Set<DashboardTaskView>(['all', 'today', 'in_progress', 'completed', 'overdue', 'urgent']);
@@ -87,7 +88,8 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [createInitialDescription, setCreateInitialDescription] = useState('');
   const [createSourceMessageId, setCreateSourceMessageId] = useState<string | null>(null);
 
-  const { groups: orgGroups, allUsers: finalAllUsers } = useOrgUsers(userId);
+  const orgDirectoryNeeded = Boolean(showCreateDrawer || editingTaskId || referTask);
+  const { groups: orgGroups, allUsers: finalAllUsers } = useOrgUsers(userId, orgDirectoryNeeded);
   const userSelectorGroups = orgGroups.map(g => ({ label: g.unit_name, users: g.users }));
 
   const [workflowTask, setWorkflowTask] = useState<ActionTask | null>(null);
@@ -709,7 +711,8 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
       )}
 
       {showCreateDrawer && (
-        <ActionCreateDrawer
+        <Suspense fallback={null}>
+          <ActionCreateDrawer
           users={users}
           groups={userSelectorGroups}
           tasks={tasks}
@@ -721,11 +724,13 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
           onClose={() => setShowCreateDrawer(false)}
           onCreate={payload => { void handleCreateAction(payload); }}
           onManagePersonalProjects={() => setShowPersonalProjects(true)}
-        />
+          />
+        </Suspense>
       )}
 
       {editingTask && (
-        <ActionEditDrawer
+        <Suspense fallback={null}>
+          <ActionEditDrawer
           task={editingTask}
           users={users}
           groups={userSelectorGroups}
@@ -736,39 +741,47 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
           onClose={() => { setEditingTaskId(null); setEditingTask(null); }}
           onSave={payload => { void handleModernEditSave(payload); }}
           onManagePersonalProjects={() => setShowPersonalProjects(true)}
-        />
+          />
+        </Suspense>
       )}
 
       {showPersonalProjects && (
-        <PersonalTaskProjects
+        <Suspense fallback={null}>
+          <PersonalTaskProjects
           userId={userId}
           onClose={() => setShowPersonalProjects(false)}
           onChanged={() => { void fetchPersonalProjects(userId); }}
-        />
+          />
+        </Suspense>
       )}
 
       {detailTask && (
-        <ActionDetailDrawer
+        <Suspense fallback={null}>
+          <ActionDetailDrawer
           task={detailTask}
           users={users}
           onClose={() => setDetailTask(null)}
           onEdit={openTaskForEdit}
           onAddNote={task => { setDetailTask(null); setAddNoteTask(task); }}
           onRefer={task => { setDetailTask(null); setReferTask(task); }}
-        />
+          />
+        </Suspense>
       )}
 
       {workflowTask && (
-        <WorkflowModal
+        <Suspense fallback={null}>
+          <WorkflowModal
           task={workflowTask}
           steps={workflowSteps}
           users={users}
           onClose={() => { setWorkflowTask(null); setWorkflowSteps([]); }}
-        />
+          />
+        </Suspense>
       )}
 
       {referTask && (
-        <ReferModal
+        <Suspense fallback={null}>
+          <ReferModal
           task={referTask}
           users={users}
           groups={userSelectorGroups}
@@ -777,26 +790,31 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
           actorAvatarUrl={users.find(user => user.user_id === userId)?.avatar_url}
           onClose={() => setReferTask(null)}
           onReferred={() => { void fetchTasks(); }}
-        />
+          />
+        </Suspense>
       )}
 
       {addNoteTask && (
-        <AddNoteModal
+        <Suspense fallback={null}>
+          <AddNoteModal
           task={addNoteTask}
           userId={userId}
           actorName={users.find(user => user.user_id === userId)?.full_name || 'کاربر'}
           actorAvatarUrl={users.find(user => user.user_id === userId)?.avatar_url}
           onClose={() => setAddNoteTask(null)}
           onSaved={() => { void fetchTasks(); }}
-        />
+          />
+        </Suspense>
       )}
 
       {deleteConfirmTask && (
-        <DeleteTaskModal
+        <Suspense fallback={null}>
+          <DeleteTaskModal
           task={deleteConfirmTask}
           onConfirm={() => { void handleDeleteTask(deleteConfirmTask); }}
           onCancel={() => setDeleteConfirmTask(null)}
-        />
+          />
+        </Suspense>
       )}
     </div>
   );
