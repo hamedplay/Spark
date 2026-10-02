@@ -1,0 +1,22 @@
+name: Temporary initial JS validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/App.tsx'
+      - '.github/workflows/perf-initial-js-temp.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:auth-unified-login
