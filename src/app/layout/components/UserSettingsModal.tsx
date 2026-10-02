@@ -25,6 +25,7 @@ import {
 import {
   useUserPreferences,
 } from '../../../features/user-preferences';
+import { AutoAcceptOrganizersSettings } from './AutoAcceptOrganizersSettings';
 
 const HALF_HOUR_OPTION_ELEMENTS = Array.from(
                         { length: 48 },
@@ -373,6 +374,12 @@ export function UserSettingsModal({
               </div>
             </div>
           </div>
+
+          <div className="border-t border-gray-100 dark:border-gray-700" />
+
+          <AutoAcceptOrganizersSettings />
+
+          <div className="border-t border-gray-100 dark:border-gray-700" />
 
           {/* ── Default landing page */}
           <div>
