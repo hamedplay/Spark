@@ -8,6 +8,7 @@ import { toPng } from 'html-to-image';
 import { normalizeMeetingDate, normalizeClockTime } from '../../lib/minutesDate';
 import { MeetingOwnerDelegateModal } from './MeetingOwnerDelegateModal';
 import { MeetingShareDialog } from '../../features/meetings/components/MeetingCard/MeetingShareDialog';
+import { InformeeAddParticipantModal } from '../../features/meetings/components/InformeeAddParticipantModal';
 
 interface AgendaItem {
   id: string;
@@ -41,6 +42,7 @@ export function MeetingDetailModal({
   const isOwner = m.user_id === currentUserId;
   const isManager = m.meeting_manager === currentUserId;
   const canEdit = isOwner || isManager;
+  const isInformee = Boolean(currentUserId && ((m.notify_users || []) as string[]).includes(currentUserId));
   const cal = [...calendars, ...subscribedCalendars].find(c => c.id === m.calendar_id);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -49,6 +51,8 @@ export function MeetingDetailModal({
   const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [showOwnerDelegate, setShowOwnerDelegate] = useState(false);
+  const [showInformeeParticipantModal, setShowInformeeParticipantModal] = useState(false);
+  const [informeeAddedParticipantIds, setInformeeAddedParticipantIds] = useState<string[]>([]);
   const [myDelegate, setMyDelegate] = useState<{
     userId: string;
     name: string;
@@ -65,6 +69,11 @@ export function MeetingDetailModal({
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, 'pending' | 'accepted' | 'declined' | 'delegated'>>({});
 
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
+
+  useEffect(() => {
+    setShowInformeeParticipantModal(false);
+    setInformeeAddedParticipantIds([]);
+  }, [m.id]);
 
   // Minutes access state — checked via RPC, not frontend-only
   const [minutesAccess, setMinutesAccess] = useState<{
@@ -793,6 +802,15 @@ const getJalaliDate = (): string => {
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
             <ExternalLink className="w-4 h-4" />گوگل کلندر
           </button>
+          {isInformee && currentUserId && (
+            <button
+              onClick={() => setShowInformeeParticipantModal(true)}
+              className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+              title="افزودن شرکت‌کننده به همین جلسه"
+            >
+              <UserPlus className="w-4 h-4" />افزودن شرکت‌کننده
+            </button>
+          )}
           {isOwner && currentUserId && (!myDelegate || myDelegate.status === 'declined') && (
             <button onClick={() => setShowOwnerDelegate(true)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
               <UserCheck className="w-4 h-4" />{myDelegate?.status === 'declined' ? 'انتخاب جانشین جدید' : 'انتخاب جانشین'}
@@ -861,6 +879,20 @@ const getJalaliDate = (): string => {
           onClose={() => setShareImageUrl(null)}
           onShare={handleNativeShareImage}
           onDownload={handleDownloadShareImage}
+        />
+      )}
+
+      {showInformeeParticipantModal && isInformee && currentUserId && (
+        <InformeeAddParticipantModal
+          meetingId={m.id}
+          currentUserId={currentUserId}
+          organizerId={m.user_id}
+          existingParticipantIds={Array.from(new Set([...(m.participant_user_ids || []), ...informeeAddedParticipantIds]))}
+          onClose={() => setShowInformeeParticipantModal(false)}
+          onSuccess={(participantUserId) => {
+            setInformeeAddedParticipantIds(prev => prev.includes(participantUserId) ? prev : [...prev, participantUserId]);
+            setShowInformeeParticipantModal(false);
+          }}
         />
       )}
 
