@@ -146,7 +146,7 @@ deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node
 EOF_NODE
 apt-get -o APT::Update::Error-Mode=any update
 apt-get install -y nodejs
-npm install -g 'npm@^11.6.2'
+npm install -g 'npm@12.2.0'
 mkdir -p /work/frontend
 cp /src/package.json /src/package-lock.json /work/frontend/
 cd /work/frontend
@@ -199,7 +199,7 @@ while IFS= read -r package; do
 done </payload/apt/requested-packages.txt
 python3 -c 'import yaml'
 docker compose version
-node -e 'const [a,b,c]=process.versions.node.split(".").map(Number); if (!(a===24 && (b>18 || (b===18 && c>=1)))) process.exit(1)'
+node -e 'const [a,b,c]=process.versions.node.split(".").map(Number); if (!(a===24 && (b>21 || (b===21 && c>=0)))) process.exit(1)'
 npm install --offline --no-audit --no-fund -g /payload/npm/npm-*.tgz
 mkdir -p /work/frontend
 tar -C /src --exclude=.git --exclude=node_modules --exclude=dist -cf - . | tar -C /work/frontend -xf -
