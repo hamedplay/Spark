@@ -29,7 +29,6 @@ jobs:
           npm install --save \
             @react-oauth/google@latest \
             @supabase/supabase-js@latest \
-            @types/react-datepicker@latest \
             docx@latest \
             exceljs@latest \
             html-to-image@latest \
@@ -42,6 +41,8 @@ jobs:
             react-dom@latest \
             react-hot-toast@latest \
             uuid@latest
+          npm uninstall @types/react-datepicker
+          rm -rf node_modules
 
       - name: Upgrade development dependencies to latest
         shell: bash
