@@ -12,9 +12,10 @@ export interface MeetingCardPrefetchedReadModel {
 interface BatchReadModelState {
   byMeetingId: Record<string, MeetingCardPrefetchedReadModel>;
   loading: boolean;
+  failed: boolean;
 }
 
-const EMPTY_MODEL: MeetingCardPrefetchedReadModel = {
+export const EMPTY_MEETING_CARD_READ_MODEL: MeetingCardPrefetchedReadModel = {
   agendaItems: [],
   participantStatuses: {},
   delegateNames: {},
@@ -32,7 +33,7 @@ export function useMeetingCardsBatchReadModel(
   meetings: Meeting[],
   currentUserId: string | null,
 ): BatchReadModelState {
-  const [state, setState] = useState<BatchReadModelState>({ byMeetingId: {}, loading: false });
+  const [state, setState] = useState<BatchReadModelState>({ byMeetingId: {}, loading: false, failed: false });
 
   const meetingIdsKey = meetings.map((meeting) => meeting.id).filter(Boolean).join(',');
   const creatorMeetingIdsKey = meetings
@@ -40,8 +41,8 @@ export function useMeetingCardsBatchReadModel(
       Boolean(
         currentUserId &&
         meeting.user_id === currentUserId &&
-        Array.isArray(meeting.participant_user_ids) &&
-        meeting.participant_user_ids.length > 0,
+        Array.isArray((meeting as Meeting & { participant_user_ids?: string[] }).participant_user_ids) &&
+        ((meeting as Meeting & { participant_user_ids?: string[] }).participant_user_ids?.length ?? 0) > 0,
       ))
     .map((meeting) => meeting.id)
     .join(',');
@@ -51,12 +52,12 @@ export function useMeetingCardsBatchReadModel(
     const creatorMeetingIds = creatorMeetingIdsKey ? creatorMeetingIdsKey.split(',') : [];
 
     if (meetingIds.length === 0) {
-      setState({ byMeetingId: {}, loading: false });
+      setState({ byMeetingId: {}, loading: false, failed: false });
       return;
     }
 
     let cancelled = false;
-    setState((current) => ({ ...current, loading: true }));
+    setState((current) => ({ ...current, loading: true, failed: false }));
 
     void (async () => {
       try {
@@ -85,7 +86,7 @@ export function useMeetingCardsBatchReadModel(
 
         const next: Record<string, MeetingCardPrefetchedReadModel> = {};
         for (const id of meetingIds) {
-          next[id] = { ...EMPTY_MODEL, agendaItems: [], participantStatuses: {}, delegateNames: {} };
+          next[id] = { ...EMPTY_MEETING_CARD_READ_MODEL, agendaItems: [], participantStatuses: {}, delegateNames: {} };
         }
 
         for (const result of agendaResults) {
@@ -139,15 +140,12 @@ export function useMeetingCardsBatchReadModel(
           model.delegateNames = relevantDelegateNames;
         }
 
-        if (!cancelled) setState({ byMeetingId: next, loading: false });
+        if (!cancelled) setState({ byMeetingId: next, loading: false, failed: false });
       } catch {
         if (!cancelled) {
-          // Keep cards functional with empty supplementary data instead of
-          // falling back to an N+1 request pattern.
-          const empty = Object.fromEntries(
-            meetingIds.map((id) => [id, { agendaItems: [], participantStatuses: {}, delegateNames: {} }]),
-          );
-          setState({ byMeetingId: empty, loading: false });
+          // Preserve resilience: if the batch request itself fails, cards may
+          // fall back to their legacy per-card reads instead of losing data.
+          setState({ byMeetingId: {}, loading: false, failed: true });
         }
       }
     })();
