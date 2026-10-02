@@ -59,3 +59,57 @@ values
   ('notifications','meeting_sms_window_meeting_representative_assigned_start','06:00','time','شروع بازه پیامک انتخاب جانشین'),
   ('notifications','meeting_sms_window_meeting_representative_assigned_end','20:00','time','پایان بازه پیامک انتخاب جانشین')
 on conflict(section,key) do nothing;
+
+
+create or replace function public.claim_deferred_sms_queue(p_limit integer default 50)
+returns table(
+  id uuid,
+  target_user_id uuid,
+  target_phones text[],
+  category text,
+  event_type text,
+  audience text,
+  context jsonb,
+  meeting_id uuid,
+  actor_user_id uuid,
+  event_key text,
+  attempt_count integer
+)
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_ids uuid[];
+begin
+  select array_agg(q.id)
+    into v_ids
+  from (
+    select d.id
+    from public.deferred_sms_queue d
+    where d.status in ('pending','failed')
+      and d.available_at <= now()
+    order by d.available_at, d.created_at
+    limit least(greatest(p_limit,1),100)
+    for update skip locked
+  ) q;
+
+  if v_ids is null then return; end if;
+
+  update public.deferred_sms_queue d
+     set status='processing',
+         attempt_count=d.attempt_count+1,
+         last_error=null
+   where d.id=any(v_ids);
+
+  return query
+  select d.id,d.target_user_id,d.target_phones,d.category,d.event_type,d.audience,
+         d.context,d.meeting_id,d.actor_user_id,d.event_key,d.attempt_count
+  from public.deferred_sms_queue d
+  where d.id=any(v_ids)
+  order by d.available_at,d.created_at;
+end;
+$function$;
+
+revoke all on function public.claim_deferred_sms_queue(integer) from public, anon, authenticated;
+grant execute on function public.claim_deferred_sms_queue(integer) to service_role;
