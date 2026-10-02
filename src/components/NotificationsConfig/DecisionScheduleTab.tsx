@@ -130,7 +130,7 @@ export function DecisionScheduleTab() {
     <div className="space-y-4">
       <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-300">
         <div className="flex items-center gap-2 font-semibold"><Clock3 className="h-4 w-4" />منطقه زمانی: تهران (Asia/Tehran)</div>
-        <p className="mt-1 text-xs leading-6">زمان‌بندی هر دسته مستقل است. یادآور دستی که کاربر ساعت آن را مشخص می‌کند تحت تأثیر این تنظیمات نیست. مقدار پیش‌فرض ساعت ۰۹:۰۰ و تمام روزهای هفته است.</p>
+        <p className="mt-1 text-xs leading-6">این بخش زمان ایجاد و اجرای رویدادهای خودکار مصوبات را کنترل می‌کند؛ زمان تحویل SMS آن رویدادها از تب «زمان‌بندی پیامک» مدیریت می‌شود. یادآور دستی کاربر مستقل است.</p>
       </div>
 
       {(Object.keys(META) as ScheduleKey[]).map(key => {
@@ -150,7 +150,7 @@ export function DecisionScheduleTab() {
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[180px_1fr]">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">ساعت ارسال</label>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">ساعت اجرای رویداد</label>
                 <input type="time" value={value.time} onChange={event => update(key, { time: event.target.value })}
                   className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-white" />
               </div>
