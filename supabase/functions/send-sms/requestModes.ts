@@ -156,7 +156,48 @@ async function queueDeferredMeetingSms(params: {
   actorUserId: string | null;
   context: Record<string, unknown>;
   availableAt: Date;
+}
+
+async function queueDeferredExternalMeetingSms(params: {
+  supabase: SmsClient;
+  eventType: string;
+  mobiles: string[];
+  audience: string;
+  meetingId: string | null;
+  eventKey: string | null;
+  actorUserId: string | null;
+  context: Record<string, unknown>;
+  availableAt: Date;
 }): Promise<"queued" | "duplicate"> {
+  const phones = [...params.mobiles].sort();
+  const entityPart = params.meetingId || "no-meeting";
+  const actorPart = params.actorUserId || "system";
+  const idempotencyKey = params.eventKey
+    ? "meeting-external-sms-window:event:" + params.eventKey + ":phones:" + phones.join(",")
+    : "meeting-external-sms-window:" + entityPart + ":" + params.eventType + ":" + actorPart + ":" + phones.join(",");
+
+  const { error } = await params.supabase
+    .from("deferred_sms_queue")
+    .insert({
+      target_user_id: null,
+      target_phones: phones,
+      category: "meeting",
+      event_type: params.eventType,
+      audience: params.audience,
+      context: params.context,
+      meeting_id: params.meetingId,
+      actor_user_id: params.actorUserId,
+      event_key: params.eventKey,
+      idempotency_key: idempotencyKey,
+      available_at: params.availableAt.toISOString(),
+      status: "pending",
+    });
+
+  if (!error) return "queued";
+  if (error.code === "23505") return "duplicate";
+  throw error;
+}
+): Promise<"queued" | "duplicate"> {
   const actorPart = params.actorUserId || "system";
   const entityPart = params.meetingId || "no-meeting";
   const idempotencyKey = params.eventKey
@@ -529,6 +570,40 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
 
   if (!validMobiles.length) {
     return json({ ok: false, errorCode: "INVALID_TARGET_PHONE", error: `شماره موبایل معتبری یافت نشد. نامعتبر: ${invalidMobiles.join(", ")}` }, 400);
+  }
+
+  const isDeferredDelivery = context.sms_window_deferred_delivery === true;
+  if (category === "meeting" && MEETING_SMS_WINDOW_EVENTS.has(eventType) && !isDeferredDelivery) {
+    try {
+      const window = await getMeetingSmsWindow(supabase, eventType);
+      const decision = meetingSmsWindowDecision(window);
+      if (!decision.allowedNow && decision.nextAllowedAt) {
+        const queueResult = await queueDeferredExternalMeetingSms({
+          supabase,
+          eventType,
+          mobiles: validMobiles,
+          audience,
+          meetingId,
+          eventKey,
+          actorUserId: dbTriggeredBy,
+          context,
+          availableAt: decision.nextAllowedAt,
+        });
+        return json({
+          ok: true,
+          status: "skipped",
+          reason: queueResult === "queued" ? "DEFERRED_TO_SMS_WINDOW" : "DUPLICATE_DEFERRED_SMS",
+          deferredUntil: decision.nextAllowedAt.toISOString(),
+        });
+      }
+    } catch (windowError) {
+      return json({
+        ok: false,
+        status: "failed",
+        errorCode: "SMS_WINDOW_CONFIG_ERROR",
+        error: windowError instanceof Error ? windowError.message : String(windowError),
+      }, 500);
+    }
   }
 
   const rendered = await renderSystemSmsTemplate({
