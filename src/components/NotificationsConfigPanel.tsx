@@ -5,10 +5,9 @@ import { GroupsTab } from './NotificationsConfig/GroupsTab';
 import { TemplatesTab } from './NotificationsConfig/TemplatesTab';
 import { LogsTab } from './NotificationsConfig/LogsTab';
 import { DecisionScheduleTab } from './NotificationsConfig/DecisionScheduleTab';
-import { SmsDeliveryPolicyTab } from './NotificationsConfig/SmsDeliveryPolicyTab';
 import { TABS } from './NotificationsConfig/constants';
 
-type NotificationsConfigTab = 'groups' | 'templates' | 'schedule' | 'sms-policy' | 'logs';
+type NotificationsConfigTab = 'groups' | 'templates' | 'schedule' | 'logs';
 
 export function NotificationsConfigPanel() {
   const [tab, setTab] = useState<NotificationsConfigTab>('groups');
@@ -31,7 +30,6 @@ export function NotificationsConfigPanel() {
       {tab === 'groups'    && <GroupsTab />}
       {tab === 'templates' && <TemplatesTab />}
       {tab === 'schedule'  && <DecisionScheduleTab />}
-      {tab === 'sms-policy' && <SmsDeliveryPolicyTab />}
       {tab === 'logs'      && <LogsTab />}
     </div>
   );
