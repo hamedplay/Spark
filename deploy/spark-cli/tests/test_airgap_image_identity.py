@@ -151,7 +151,7 @@ airgap_build_bundle <<<' '
 [[ "$(cat "$WORK/edge-pulls")" == digest ]]
 mkdir "$WORK/extracted"
 archive=("$WORK/output/"*.tar.gz)
-(cd "$WORK/output" && sha256sum -c ./*.sha256)
+[[ ! -e "${archive[0]}.sha256" ]]
 root="$(airgap_extract_bundle_archive "${archive[0]}" "$WORK/extracted")"
 airgap_validate_bundle_dir "$root"
 [[ "$(airgap_meta_from "$root" UBUNTU_VERSION)" == "$TARGET_RELEASE" ]]
