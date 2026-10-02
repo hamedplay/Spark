@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 import type { Meeting, AgendaItem } from '../../../types';
 import type { ParticipantStatusEntry } from '../types/meetingCard';
+import type { MeetingCardPrefetchedReadModel } from './useMeetingCardsBatchReadModel';
 
 type MeetingWithParticipantIds = Meeting & {
   participant_user_ids?: string[];
@@ -16,13 +17,22 @@ interface UseMeetingCardReadModelResult {
   isCreator: boolean;
 }
 
-export function useMeetingCardReadModel(meeting: Meeting, providedCurrentUserId: string | null = null): UseMeetingCardReadModelResult {
+export function useMeetingCardReadModel(
+  meeting: Meeting,
+  providedCurrentUserId: string | null = null,
+  prefetchedReadModel?: MeetingCardPrefetchedReadModel,
+): UseMeetingCardReadModelResult {
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, ParticipantStatusEntry>>({});
   const [delegateNames, setDelegateNames] = useState<Record<string, string>>({});
   const currentUserId = providedCurrentUserId;
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
 
+  const effectiveAgendaItems = prefetchedReadModel?.agendaItems ?? agendaItems;
+  const effectiveParticipantStatuses = prefetchedReadModel?.participantStatuses ?? participantStatuses;
+  const effectiveDelegateNames = prefetchedReadModel?.delegateNames ?? delegateNames;
+
   useEffect(() => {
+    if (prefetchedReadModel) return;
     if (!meeting.id) return;
     supabase
       .from('meeting_agenda_items')
@@ -30,7 +40,7 @@ export function useMeetingCardReadModel(meeting: Meeting, providedCurrentUserId:
       .eq('meeting_id', meeting.id)
       .order('sort_order')
       .then(({ data }) => { if (data) setAgendaItems(data as AgendaItem[]); });
-  }, [meeting.id]);
+  }, [meeting.id, prefetchedReadModel]);
 
   const meetingWithParticipantIds = meeting as MeetingWithParticipantIds;
   const participantUserIds = meetingWithParticipantIds.participant_user_ids ?? [];
@@ -39,6 +49,7 @@ export function useMeetingCardReadModel(meeting: Meeting, providedCurrentUserId:
   const { id: meetingId, user_id: meetingUserId } = meeting;
 
   useEffect(() => {
+    if (prefetchedReadModel) return;
     const isCreator = meetingUserId && currentUserId && meetingUserId === currentUserId;
     if (!isCreator || !meetingId) return;
     if (!hasParticipantUserIds) return;
@@ -66,16 +77,16 @@ export function useMeetingCardReadModel(meeting: Meeting, providedCurrentUserId:
           });
         }
       });
-  }, [meetingId, meetingUserId, currentUserId, participantUserIdsKey, hasParticipantUserIds]);
+  }, [meetingId, meetingUserId, currentUserId, participantUserIdsKey, hasParticipantUserIds, prefetchedReadModel]);
 
   const isCreator = !!(meetingUserId && currentUserId && meetingUserId === currentUserId);
 
   return {
     currentUserId,
-    agendaItems,
+    agendaItems: effectiveAgendaItems,
     participantUserIds,
-    participantStatuses,
-    delegateNames,
+    participantStatuses: effectiveParticipantStatuses,
+    delegateNames: effectiveDelegateNames,
     isCreator,
   };
 }
