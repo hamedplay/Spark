@@ -1,4 +1,4 @@
-name: Temporary fast installation validation
+name: Temporary fast installation validation # rerun
 
 on:
   push:
