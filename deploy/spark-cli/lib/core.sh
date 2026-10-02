@@ -250,6 +250,15 @@ PY_NGINX_GZIP
 
   cat "$tmp" >"$file"
   rm -f "$tmp"
+
+  if [[ "$file" == "/etc/nginx/nginx.conf" ]] && command -v nginx >/dev/null 2>&1; then
+    if ! nginx -t >/dev/null 2>&1; then
+      cp -a "$backup" "$file"
+      fail "Rendered Nginx gzip profile failed nginx -t; original nginx.conf restored."
+      return 1
+    fi
+  fi
+
   info "Nginx gzip performance profile applied (backup: $backup)"
 }
 
