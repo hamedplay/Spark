@@ -355,6 +355,30 @@ application_npm_doctor() {
     bash -c "cd '$SPARK_ROOT' && npm doctor"
 }
 
+application_optimize_nginx_gzip() {
+  title
+  new_log "application-nginx-gzip"
+
+  command -v nginx >/dev/null 2>&1 || {
+    fail "Nginx is not installed."
+    return 1
+  }
+
+  run_logged "Apply Nginx gzip performance profile" spark_apply_nginx_gzip_profile || return 1
+  run_logged "Validate Nginx configuration" nginx -t || return 1
+  run_logged "Reload Nginx" systemctl reload nginx || return 1
+
+  if ! run_logged "Verify effective Nginx gzip profile" spark_nginx_gzip_profile_present; then
+    fail "Nginx reloaded, but the expected gzip profile is not active."
+    return 1
+  fi
+
+  ok "Nginx gzip optimization is active for text-based frontend assets."
+  printf 'Compressed types: HTML(default), CSS, JavaScript, JSON, XML, SVG, web manifest\n'
+  printf 'Excluded       : PNG/JPEG/WebP/WOFF2 (already compressed formats)\n'
+  printf 'Log            : %s\n' "$CURRENT_LOG"
+}
+
 application_active_version() {
   title
   new_log "application-active-version"
