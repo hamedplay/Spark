@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import moment from 'moment-jalaali';
-import { Bell, Users, Check, Loader as Loader2, RefreshCw, CircleCheck as CheckCircle, Clock, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Bell, Users, Check, Loader as Loader2, RefreshCw, CircleCheck as CheckCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -22,6 +22,7 @@ export function LogsTab() {
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   const PAGE_SIZE = 20;
 
@@ -67,6 +68,32 @@ export function LogsTab() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(0); }, [filterType, filterRead, filterDate, filterEventType]);
+
+  const clearAllNotifications = async () => {
+    if (clearing) return;
+    const confirmed = window.confirm('تمام اعلان‌ها حذف شوند؟ این عملیات قابل بازگشت نیست.');
+    if (!confirmed) return;
+
+    setClearing(true);
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .not('id', 'is', null);
+
+      if (error) throw error;
+
+      setLogs([]);
+      setTotalCount(0);
+      setExpandedId(null);
+      setPage(0);
+      toast.success('تمام اعلان‌ها حذف شدند');
+    } catch (error: any) {
+      toast.error(error?.message || 'حذف اعلان‌ها ناموفق بود');
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -154,8 +181,22 @@ export function LogsTab() {
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">تاریخ</label>
           <JalaliDateFilter value={filterDate} onChange={setFilterDate} />
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => load()} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors">
+        <div className="flex items-center gap-2">
+          <span className="hidden lg:inline text-[11px] text-gray-400">نگهداری خودکار: ۷ روز</span>
+          <button
+            type="button"
+            onClick={clearAllNotifications}
+            disabled={clearing || totalCount === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-40 text-xs font-medium transition-colors"
+          >
+            {clearing
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Trash2 className="w-4 h-4" />}
+            خالی کردن اعلان‌ها
+          </button>
+          <button onClick={() => load()}
+            className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors"
+            aria-label="بارگذاری مجدد اعلان‌ها">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
