@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import '../../management-dashboard-theme.css';
 import type { ElementType } from 'react';
 import {
   LayoutDashboard,
