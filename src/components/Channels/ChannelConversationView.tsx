@@ -13,8 +13,7 @@ import { ChannelInputBar } from './ChannelInputBar';
 import { ChannelMembersModal } from './ChannelMembersModal';
 import { WorkTopicsPanel } from './WorkTopicsPanel';
 import { ChannelSettingsModal } from './ChannelSettingsModal';
-import { loadChatTheme } from '../Chat/ChatSettingsPage';
-import type { ChatThemeSettings } from '../Chat/ChatSettingsPage';
+import { loadChatTheme, type ChatThemeSettings } from '../Chat/chatTheme';
 
 import { GroupTaskModal } from './Conversation/GroupTaskModal';
 import { PinnedPopup, StarredPanel, ChannelMentionsBar } from './Conversation/Panels';
