@@ -25,7 +25,7 @@ class StaticApplicationBuilder:
         if not match:
             return False, raw
         version = tuple(map(int, match.groups()))
-        return ((24, 18, 1) <= version < (25, 0, 0), raw) if requirement == ">=24.18.1 <25" else (False, raw)
+        return ((24, 21, 0) <= version < (25, 0, 0), raw) if requirement == ">=24.21.0 <25" else (False, raw)
 
     def _verify_artifacts(self, release: Path, required: tuple[str, ...]) -> None:
         for value in required:
