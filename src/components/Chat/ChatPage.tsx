@@ -5,11 +5,11 @@ import toast from 'react-hot-toast';
 
 import { ChatSidebar } from './ChatSidebar';
 import type { SidebarTab } from './ChatSidebar';
-import { ChatConversationView } from './ChatConversationView';
 import type { ConversationWithProfile, UserProfile } from './types';
 import { useGlobalCall } from '../../context/GlobalCallContext';
 import { getPendingE2EERing, subscribeE2EERing } from '../../lib/globalE2EERing';
 
+const ChatConversationView = lazy(() => import('./ChatConversationView').then((m) => ({ default: m.ChatConversationView })));
 const ChatActionsPanel = lazy(() => import('./ChatActionsPanel').then((m) => ({ default: m.ChatActionsPanel })));
 const ChatSettingsPage = lazy(() => import('./ChatSettingsPage').then((m) => ({ default: m.ChatSettingsPage })));
 const CallHistoryPage = lazy(() => import('./CallHistoryPage').then((m) => ({ default: m.CallHistoryPage })));
@@ -457,7 +457,8 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
         {/* Conversation view */}
         {sidebarTab === 'chats' && (
           activeConv ? (
-            <ChatConversationView
+            <Suspense fallback={<div className="flex flex-1 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>}>
+              <ChatConversationView
               key={activeConv.id}
               conversation={activeConv}
               currentUserId={currentUserId}
@@ -483,7 +484,8 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
                 setShowSidebar(false);
                 setSidebarTab('chats');
               }}
-            />
+              />
+            </Suspense>
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-gradient-to-br from-white via-slate-50 to-violet-50/40 px-6 text-center dark:from-slate-950 dark:via-slate-950 dark:to-violet-950/15">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-100 bg-violet-50 text-violet-500 shadow-sm dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300">
