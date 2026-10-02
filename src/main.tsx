@@ -12,6 +12,12 @@ import './corporate-theme.css';
 // references this stylesheet, but Vite de-duplicates the module; the important
 // part is that its position in the entry cascade is stable.
 import './auth-modern.css';
+// Public login styles are critical above-the-fold assets. Keep them in the
+// entry CSS so the browser can discover them immediately while PublicAuthRoot
+// itself remains lazy-loaded.
+import './auth-login-v2.css';
+import './auth-login-motion.css';
+import './auth-placeholder-theme.css';
 
 // Apply the persisted/system theme before React mounts so the branded loading
 // screen never flashes in the wrong color scheme while ThemeProvider is lazy-loaded.
