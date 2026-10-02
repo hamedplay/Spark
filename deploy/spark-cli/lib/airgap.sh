@@ -200,7 +200,11 @@ airgap_validate_bundle_dir() {
     fail "Unsupported air-gap bundle format: ${format:-missing}"
     return 1
   }
-  run_logged "Validate air-gap SHA256 manifest" airgap_validate_checksum_manifest "$root" || return 1
+  if [[ "${SPARK_AIRGAP_SHA256_PREVERIFIED:-0}" != "1" ]]; then
+    run_logged "Validate air-gap SHA256 manifest" airgap_validate_checksum_manifest "$root" || return 1
+  else
+    info "SHA256 payload integrity already verified by bootstrap; skipping duplicate full-file pass."
+  fi
   airgap_validate_image_manifest "$root" || return 1
   airgap_validate_payload_archives "$root" || return 1
   root="$(readlink -f "$root")"
