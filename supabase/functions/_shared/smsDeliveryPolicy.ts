@@ -169,35 +169,29 @@ export function evaluateSmsDeliveryPolicy(
 
   const [startHour, startMinute] = policy.windowStart.split(":").map(Number);
 
-  const eventInsideWindow = start < end
-    ? eventMinutes >= start && eventMinutes < end
-    : eventMinutes >= start || eventMinutes < end;
+  const nowInsideWindow = start < end
+    ? nowMinutes >= start && nowMinutes < end
+    : nowMinutes >= start || nowMinutes < end;
 
-  if (eventInsideWindow) {
+  if (nowInsideWindow) {
     return { sendNow: true, nextAllowedAt: null };
   }
 
-  let targetDate;
-  if (start < end) {
-    targetDate = eventMinutes < start ? localEvent : addDays(localEvent, 1);
-  } else {
-    targetDate = localEvent;
-  }
+  const targetDate = start < end
+    ? (nowMinutes < start ? localNow : addDays(localNow, 1))
+    : localNow;
 
-  const target = zonedToUtc(
-    targetDate.year,
-    targetDate.month,
-    targetDate.day,
-    startHour,
-    startMinute,
-    policy.timezone,
-  );
-
-  if (now.getTime() >= target.getTime()) {
-    return { sendNow: true, nextAllowedAt: null };
-  }
-
-  return { sendNow: false, nextAllowedAt: target };
+  return {
+    sendNow: false,
+    nextAllowedAt: zonedToUtc(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      startHour,
+      startMinute,
+      policy.timezone,
+    ),
+  };
 }
 
 export async function queueDeferredSms(
