@@ -138,23 +138,27 @@ export async function loadSmsDeliveryPolicy(
 export function evaluateSmsDeliveryPolicy(
   policy: SmsDeliveryPolicy,
   now = new Date(),
+  eventCreatedAt = now,
 ): { sendNow: boolean; nextAllowedAt: Date | null } {
   if (policy.lockedImmediate || policy.mode === "immediate") {
     return { sendNow: true, nextAllowedAt: null };
   }
 
-  const local = zonedParts(now, policy.timezone);
-  const current = local.hour * 60 + local.minute;
+  const localNow = zonedParts(now, policy.timezone);
+  const localEvent = zonedParts(eventCreatedAt, policy.timezone);
+  const nowMinutes = localNow.hour * 60 + localNow.minute;
+  const eventMinutes = localEvent.hour * 60 + localEvent.minute;
 
   if (policy.mode === "fixed_time") {
     const fixed = parseMinutes(policy.fixedTime);
     if (fixed == null) return { sendNow: true, nextAllowedAt: null };
     const [hour, minute] = policy.fixedTime.split(":").map(Number);
-    const date = current < fixed ? local : addDays(local, 1);
-    return {
-      sendNow: false,
-      nextAllowedAt: zonedToUtc(date.year, date.month, date.day, hour, minute, policy.timezone),
-    };
+    const eventDate = eventMinutes < fixed ? localEvent : addDays(localEvent, 1);
+    const target = zonedToUtc(eventDate.year, eventDate.month, eventDate.day, hour, minute, policy.timezone);
+    if (now.getTime() >= target.getTime()) {
+      return { sendNow: true, nextAllowedAt: null };
+    }
+    return { sendNow: false, nextAllowedAt: target };
   }
 
   const start = parseMinutes(policy.windowStart);
@@ -165,39 +169,35 @@ export function evaluateSmsDeliveryPolicy(
 
   const [startHour, startMinute] = policy.windowStart.split(":").map(Number);
 
-  if (start < end) {
-    if (current >= start && current < end) {
-      return { sendNow: true, nextAllowedAt: null };
-    }
-    const date = current < start ? local : addDays(local, 1);
-    return {
-      sendNow: false,
-      nextAllowedAt: zonedToUtc(
-        date.year,
-        date.month,
-        date.day,
-        startHour,
-        startMinute,
-        policy.timezone,
-      ),
-    };
-  }
+  const eventInsideWindow = start < end
+    ? eventMinutes >= start && eventMinutes < end
+    : eventMinutes >= start || eventMinutes < end;
 
-  if (current >= start || current < end) {
+  if (eventInsideWindow) {
     return { sendNow: true, nextAllowedAt: null };
   }
 
-  return {
-    sendNow: false,
-    nextAllowedAt: zonedToUtc(
-      local.year,
-      local.month,
-      local.day,
-      startHour,
-      startMinute,
-      policy.timezone,
-    ),
-  };
+  let targetDate;
+  if (start < end) {
+    targetDate = eventMinutes < start ? localEvent : addDays(localEvent, 1);
+  } else {
+    targetDate = localEvent;
+  }
+
+  const target = zonedToUtc(
+    targetDate.year,
+    targetDate.month,
+    targetDate.day,
+    startHour,
+    startMinute,
+    policy.timezone,
+  );
+
+  if (now.getTime() >= target.getTime()) {
+    return { sendNow: true, nextAllowedAt: null };
+  }
+
+  return { sendNow: false, nextAllowedAt: target };
 }
 
 export async function queueDeferredSms(
