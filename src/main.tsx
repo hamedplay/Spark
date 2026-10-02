@@ -12,16 +12,6 @@ import './corporate-theme.css';
 // references this stylesheet, but Vite de-duplicates the module; the important
 // part is that its position in the entry cascade is stable.
 import './auth-modern.css';
-// Public auth now has one authoritative visual layer instead of stacked
-// reference/fix/theme/performance overrides that competed in the cascade.
-import './auth-login-v2.css';
-// Motion is kept separate from layout/theme and is limited to compositor-safe
-// transform/opacity animations so the login remains animated without restoring
-// the previous paint-heavy performance regression.
-import './auth-login-motion.css';
-import './auth-placeholder-theme.css';
-import './auth-login-unified-tabs.ts';
-import './auth-pointer-glow.ts';
 
 // Apply the persisted/system theme before React mounts so the branded loading
 // screen never flashes in the wrong color scheme while ThemeProvider is lazy-loaded.
