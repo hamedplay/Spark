@@ -13,7 +13,7 @@ export function MonthView(p: CalendarViewProps) {
     <div className="mx-2 mb-2 mt-1 flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3">
       <div className="grid flex-shrink-0 grid-cols-7 border-b border-slate-200/80 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/70">
         {JALAALI_WEEKDAYS.map((d, i) => (
-          <div key={d} className={`py-2 text-center text-[10px] sm:text-[11px] ${i === 6 ? 'font-bold text-rose-500 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}>{d}</div>
+          <div key={d} className={`py-2 text-center text-[10px] sm:text-[11px] ${i === 6 ? 'font-bold text-rose-700 dark:text-rose-300' : 'text-slate-700 dark:text-slate-300'}`}>{d}</div>
         ))}
       </div>
 
