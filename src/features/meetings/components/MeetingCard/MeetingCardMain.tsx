@@ -1,9 +1,7 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Calendar as CalendarIcon } from 'lucide-react';
-import { DeleteMeetingModal } from './DeleteMeetingModal';
 import { MeetingDetails } from './MeetingDetails';
 import { ParticipantStatusPanel } from './ParticipantStatusPanel';
-import { MeetingShareDialog } from './MeetingShareDialog';
 import { MeetingShareCard } from './MeetingShareCard';
 import { MeetingCardHeader } from './MeetingCardHeader';
 import type { Meeting } from '../../../../types';
@@ -15,19 +13,24 @@ import { deleteMeetingPermanently } from '../../commands/deleteMeetingPermanentl
 import { buildGoogleCalendarEventUrl } from '../../builders/buildGoogleCalendarEventUrl';
 import { buildMeetingEditPrefill } from '../../builders/buildMeetingEditPrefill';
 import toast from 'react-hot-toast';
-import { ActionsSection } from './ActionsSection';
-import { UserSelectorModal } from './UserSelectorModal';
-import { CreateMeetingForm } from '../CreateMeetingForm';
 import { useMeetingCardReadModel } from '../../hooks/useMeetingCardReadModel';
 import { useMeetingCardSharing } from '../../hooks/useMeetingCardSharing';
+
+const DeleteMeetingModal = lazy(() => import('./DeleteMeetingModal').then((m) => ({ default: m.DeleteMeetingModal })));
+const MeetingShareDialog = lazy(() => import('./MeetingShareDialog').then((m) => ({ default: m.MeetingShareDialog })));
+const ActionsSection = lazy(() => import('./ActionsSection').then((m) => ({ default: m.ActionsSection })));
+const UserSelectorModal = lazy(() => import('./UserSelectorModal').then((m) => ({ default: m.UserSelectorModal })));
+const CreateMeetingForm = lazy(() => import('../CreateMeetingForm').then((m) => ({ default: m.CreateMeetingForm })));
+
 
 interface MeetingCardMainProps {
   meeting: Meeting;
   onUpdate: () => void;
   onScheduleInCalendar?: (meeting: Meeting) => void;
+  currentUserId?: string | null;
 }
 
-export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: MeetingCardMainProps) {
+export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar, currentUserId = null }: MeetingCardMainProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editPrefill, setEditPrefill] = useState<MeetingFormPrefillData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,7 +44,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
     participantStatuses,
     delegateNames,
     isCreator,
-  } = useMeetingCardReadModel(meeting);
+  } = useMeetingCardReadModel(meeting, currentUserId);
 
   const {
     cardRef,
@@ -150,11 +153,13 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
 
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <CreateMeetingForm
+        <Suspense fallback={<div className="flex min-h-40 items-center justify-center text-xs text-slate-500">در حال آماده‌سازی فرم ویرایش...</div>}>
+          <CreateMeetingForm
           onSuccess={handleEditFormSuccess}
           prefillData={prefill}
           onCancel={() => { setIsEditing(false); setEditPrefill(null); }}
-        />
+          />
+        </Suspense>
       </div>
     );
   }
@@ -229,39 +234,47 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar }: Mee
           </div>
           {showActions && (
             <div className="mt-2.5">
-              <ActionsSection meetingId={meeting.id} actions={meeting.actions} onUpdate={onUpdate} />
+              <Suspense fallback={null}>
+                <ActionsSection meetingId={meeting.id} actions={meeting.actions} onUpdate={onUpdate} />
+              </Suspense>
             </div>
           )}
         </div>
       )}
 
       {showDeleteModal && (
-        <DeleteMeetingModal
+        <Suspense fallback={null}>
+          <DeleteMeetingModal
           meeting={meeting}
           onClose={() => setShowDeleteModal(false)}
           onPermanentDelete={handlePermanentDelete}
           loading={loading}
-        />
+          />
+        </Suspense>
       )}
 
       {showUserSelector && (
-        <UserSelectorModal
+        <Suspense fallback={null}>
+          <UserSelectorModal
           meetingId={meeting.id}
           onClose={() => setShowUserSelector(false)}
           onSuccess={() => {
             setShowUserSelector(false);
             toast.success('درخواست جلسه با موفقیت ارسال شد');
           }}
-        />
+          />
+        </Suspense>
       )}
 
       {showShareDialog && shareImageUrl && (
-        <MeetingShareDialog
+        <Suspense fallback={null}>
+          <MeetingShareDialog
           imageUrl={shareImageUrl}
           onClose={closeShareDialog}
           onShare={handleNativeShareImage}
           onDownload={handleDownloadShareImage}
-        />
+          />
+        </Suspense>
       )}
 
       <MeetingShareCard ref={shareCardRef} meeting={meeting} agendaItems={agendaItems} />
