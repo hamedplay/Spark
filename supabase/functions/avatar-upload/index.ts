@@ -28,7 +28,7 @@ const MULTIPART_OVERHEAD = 64 * 1024;
 const MAX_REQUEST_SIZE = MAX_FILE_SIZE + MULTIPART_OVERHEAD;
 const MAX_DIMENSION = 8192;
 const MAX_PIXELS = 40_000_000;
-const OUTPUT_SIZE = 512;
+const OUTPUT_SIZE = 256;
 const OUTPUT_QUALITY = 82;
 const QUARANTINE_BUCKET = "avatar-quarantine";
 const AVATARS_BUCKET = "avatars";
@@ -421,7 +421,7 @@ Deno.serve(async (req: Request) => {
     .from(AVATARS_BUCKET)
     .upload(outputPath, processed, {
       contentType: "image/webp",
-      cacheControl: "3600",
+      cacheControl: "31536000",
       upsert: false,
     });
 
