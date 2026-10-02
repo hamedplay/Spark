@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
 
-const TIME_RE = /^(?:[01]\\d|2[0-3]):[0-5]\\d$/;
+const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 const EVENTS = [
   { key: 'meeting_created', label: 'ثبت جلسه' },
