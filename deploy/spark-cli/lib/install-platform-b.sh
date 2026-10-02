@@ -20,6 +20,7 @@ install_step_12() {
   title
   new_log "install-12-nginx-bootstrap"
   require_manager_values || return 1
+  spark_apply_nginx_gzip_profile || return 1
   mkdir -p /var/www/acme
   chown -R www-data:www-data /var/www/acme
   if [[ -L /etc/nginx/sites-enabled/spark ]]; then
@@ -322,6 +323,7 @@ install_step_14() {
   new_log "install-14-nginx-production"
   require_manager_values || return 1
   test_certificates >>"$CURRENT_LOG" 2>&1 || { fail "Certificateare not ready; stage 13 – TLS certificates run the."; return 1; }
+  spark_apply_nginx_gzip_profile || return 1
   local old=""
   if [[ -f /etc/nginx/sites-available/spark ]]; then
     old="$(mktemp)"
