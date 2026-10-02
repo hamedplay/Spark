@@ -14,6 +14,7 @@ import { buildGoogleCalendarEventUrl } from '../../builders/buildGoogleCalendarE
 import { buildMeetingEditPrefill } from '../../builders/buildMeetingEditPrefill';
 import toast from 'react-hot-toast';
 import { useMeetingCardReadModel } from '../../hooks/useMeetingCardReadModel';
+import type { MeetingCardPrefetchedReadModel } from '../../hooks/useMeetingCardsBatchReadModel';
 import { useMeetingCardSharing } from '../../hooks/useMeetingCardSharing';
 
 const DeleteMeetingModal = lazy(() => import('./DeleteMeetingModal').then((m) => ({ default: m.DeleteMeetingModal })));
@@ -28,9 +29,10 @@ interface MeetingCardMainProps {
   onUpdate: () => void;
   onScheduleInCalendar?: (meeting: Meeting) => void;
   currentUserId?: string | null;
+  prefetchedReadModel?: MeetingCardPrefetchedReadModel;
 }
 
-export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar, currentUserId = null }: MeetingCardMainProps) {
+export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar, currentUserId = null, prefetchedReadModel }: MeetingCardMainProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editPrefill, setEditPrefill] = useState<MeetingFormPrefillData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -44,7 +46,7 @@ export function MeetingCardMain({ meeting, onUpdate, onScheduleInCalendar, curre
     participantStatuses,
     delegateNames,
     isCreator,
-  } = useMeetingCardReadModel(meeting, currentUserId);
+  } = useMeetingCardReadModel(meeting, currentUserId, prefetchedReadModel);
 
   const {
     cardRef,
