@@ -1,0 +1,51 @@
+name: Temporary canonical DB migration validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-canonical-db-migration-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate canonical migration architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/spark-cli/apply-daily-report-scheduler.sh
+          bash -n deploy/spark-cli/lib/database.sh
+
+          test ! -e deploy/spark-cli/db-repairs
+          ! find deploy/spark-cli -maxdepth 1 -type f -name 'apply-*-repair.sh' -print -quit | grep -q .
+          ! grep -RFn 'deploy/spark-cli/db-repairs' deploy/spark-cli --exclude-dir=tests
+          ! find deploy/spark-cli -type f -name '*.sql' ! -path '*/tests/*' -print -quit | grep -q .
+
+          grep -Fq 'SPARK_MIGRATIONS_DIR="${SPARK_ROOT}/supabase/migrations"' deploy/spark-cli/lib/database.sh
+          grep -Fq 'Refusing SQL outside canonical migration directory' deploy/spark-cli/lib/database.sh
+
+      - name: Reject SQL outside canonical migration directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          export SPARK_ROOT="$tmp/spark"
+          export SUPABASE_ROOT="$tmp/supabase"
+          export CURRENT_LOG="$tmp/test.log"
+          mkdir -p "$SPARK_ROOT/supabase/migrations" "$SUPABASE_ROOT"
+          touch "$CURRENT_LOG"
+          fail() { printf '%s\n' "$*" >&2; }
+          compose() { cat >/dev/null; }
+          source deploy/spark-cli/lib/database.sh
+          printf 'select 1;\n' >"$tmp/outside.sql"
+          if spark_database_apply_migration_file "$tmp/outside.sql"; then
+            echo 'outside SQL was incorrectly accepted' >&2
+            exit 1
+          fi
+          echo CANONICAL_DB_PATH_PASS
