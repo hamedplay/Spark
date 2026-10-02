@@ -59,6 +59,9 @@ for module in core install-base install-platform-a install-platform-b install-pl
 done
 unset module module_path
 
+# Final installation contract: version-agnostic, host/domain-agnostic.
+source "${SCRIPT_DIR}/lib/installation-universal.sh"
+
 install_manager_from_dir() {
   local source_dir="$1"
   local stage backup module file
