@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowLeft,
   BarChart3,
@@ -24,8 +24,7 @@ import {
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { normalizeIranPhone } from '../lib/phoneNormalize';
-import { invokeEdgeFunctionWithTimeout } from '../lib/invokeEdgeFunction';
-import OtpCodeInput from '../features/auth/components/OtpCodeInput';
+const OtpCodeInput = lazy(() => import('../features/auth/components/OtpCodeInput'));
 
 type AuthMode = 'login' | 'register' | 'reset';
 type LoginTab = 'password' | 'phone_otp';
@@ -34,8 +33,19 @@ type PhoneOtpStep = 'phone' | 'otp';
 type PasswordRecoveryStep = 'phone' | 'otp' | 'new_password' | 'success';
 type RegistrationStep = 'details' | 'otp' | 'submitting';
 
+interface PublicRpcResult {
+  data: unknown;
+  error: unknown;
+}
+
+export type PublicAuthBootstrapPromise = Promise<[
+  PublicRpcResult,
+  PublicRpcResult,
+]>;
+
 interface AuthPageProps {
   onSuccess: () => void;
+  initialAuthBootstrap?: PublicAuthBootstrapPromise | null;
 }
 
 interface PublicAuthConfig {
@@ -106,7 +116,7 @@ function maskPhone(phone: string): string {
   return `${normalized.slice(0, 4)}${'*'.repeat(normalized.length - 7)}${normalized.slice(-3)}`;
 }
 
-export function AuthPage({ onSuccess }: AuthPageProps) {
+export function AuthPage({ onSuccess, initialAuthBootstrap = null }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>('login');
   const [loginTab, setLoginTab] = useState<LoginTab>('password');
   const [credentialMethod, setCredentialMethod] = useState<CredentialMethod>('username');
@@ -156,14 +166,28 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
   const [registrationCountdown, setRegistrationCountdown] = useState(0);
   const [registrationLoading, setRegistrationLoading] = useState(false);
   const registrationRequestRef = useRef(false);
+  const initialAuthBootstrapRef = useRef<PublicAuthBootstrapPromise | null>(initialAuthBootstrap);
+
+  const invokeEdgeFunctionWithTimeout = useCallback(async <T,>(
+    functionName: string,
+    body: Record<string, unknown>,
+  ): Promise<T> => {
+    const helper = await import('../lib/invokeEdgeFunction');
+    return helper.invokeEdgeFunctionWithTimeout<T>(functionName, body);
+  }, []);
 
   const loadAuthConfig = useCallback(async () => {
     setAuthConfigLoading(true);
     try {
-      const [authResult, methodsResult] = await Promise.all([
-        supabase.rpc('get_public_auth_config'),
-        supabase.rpc('get_public_login_methods'),
-      ]);
+      const bootstrap = initialAuthBootstrapRef.current;
+      initialAuthBootstrapRef.current = null;
+
+      const [authResult, methodsResult] = bootstrap
+        ? await bootstrap
+        : await Promise.all([
+            supabase.rpc('get_public_auth_config'),
+            supabase.rpc('get_public_login_methods'),
+          ]);
       const authValue = Array.isArray(authResult.data) ? authResult.data[0] : authResult.data;
       const methodsValue = Array.isArray(methodsResult.data) ? methodsResult.data[0] : methodsResult.data;
       const authRow = firstObject(authValue);
@@ -781,7 +805,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                     ) : (
                       <div className="spark-reference-form">
                         <p className="spark-reference-helper">کد تأیید برای <b dir="ltr">{maskPhone(phoneOtpPhone)}</b> ارسال شد.</p>
-                        <OtpCodeInput
+                        <Suspense fallback={<div className="spark-reference-inline-state"><LoaderCircle className="spark-spin" /> در حال آماده‌سازی ورود پیامکی...</div>}>
+                          <OtpCodeInput
                           value={phoneOtpCode}
                           onChange={nextValue => { setPhoneOtpCode(nextValue); if (phoneOtpError) setPhoneOtpError(''); }}
                           status={phoneOtpLoading ? 'checking' : phoneOtpError ? 'error' : 'idle'}
@@ -789,7 +814,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                           hint="کد ۶ رقمی ارسال‌شده به شماره موبایل را وارد کنید"
                           autoFocusKey={phoneOtpChallengeId ?? 'phone-login'}
                           disabled={phoneOtpLoading}
-                        />
+                          />
+                        </Suspense>
                         <p className="spark-reference-timer">زمان باقی‌مانده: {Math.floor(phoneOtpExpiresSeconds / 60)}:{String(phoneOtpExpiresSeconds % 60).padStart(2, '0')}</p>
                         <button type="button" className="spark-reference-submit" disabled={phoneOtpLoading || phoneOtpCode.length !== 6} onClick={handlePhoneOtpVerify}>
                           {phoneOtpLoading ? <LoaderCircle className="spark-spin" /> : <><span>تأیید و ورود</span><ArrowLeft /></>}
@@ -820,7 +846,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                   </>
                 ) : recoveryStep === 'otp' ? (
                   <>
-                    <OtpCodeInput
+                    <Suspense fallback={<div className="spark-reference-inline-state"><LoaderCircle className="spark-spin" /> در حال آماده‌سازی تأیید کد...</div>}>
+                      <OtpCodeInput
                       value={recoveryOtp}
                       onChange={nextValue => { setRecoveryOtp(nextValue); if (recoveryOtpError) setRecoveryOtpError(''); }}
                       status={recoveryLoading ? 'checking' : recoveryOtpError ? 'error' : 'idle'}
@@ -828,7 +855,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                       hint="کد ۶ رقمی بازیابی را وارد کنید"
                       autoFocusKey={recoveryChallengeId ?? 'password-recovery'}
                       disabled={recoveryLoading}
-                    />
+                      />
+                    </Suspense>
                     <button type="button" className="spark-reference-submit" disabled={recoveryLoading || recoveryOtp.length !== 6} onClick={() => void handleRecoveryVerify()}>{recoveryLoading ? <LoaderCircle className="spark-spin" /> : <><span>تأیید کد</span><ArrowLeft /></>}</button>
                     <button type="button" className="spark-reference-link spark-reference-center-link" disabled={recoveryCountdown > 0} onClick={() => void handleRecoveryRequest()}>{recoveryCountdown > 0 ? `ارسال مجدد پس از ${recoveryCountdown} ثانیه` : 'ارسال مجدد کد'}</button>
                   </>
@@ -911,7 +939,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                 ) : registrationStep === 'otp' ? (
                   <div className="spark-reference-form">
                     <p className="spark-reference-helper">کد تأیید ارسال‌شده را وارد کنید.</p>
-                    <OtpCodeInput
+                    <Suspense fallback={<div className="spark-reference-inline-state"><LoaderCircle className="spark-spin" /> در حال آماده‌سازی تأیید ثبت‌نام...</div>}>
+                      <OtpCodeInput
                       value={registrationOtp}
                       onChange={nextValue => { setRegistrationOtp(nextValue); if (registrationOtpError) setRegistrationOtpError(''); }}
                       status={registrationLoading ? 'checking' : registrationOtpError ? 'error' : 'idle'}
@@ -919,7 +948,8 @@ export function AuthPage({ onSuccess }: AuthPageProps) {
                       hint="کد ۶ رقمی ثبت‌نام را وارد کنید"
                       autoFocusKey={registrationChallengeId ?? 'registration'}
                       disabled={registrationLoading}
-                    />
+                      />
+                    </Suspense>
                     <button type="button" className="spark-reference-submit" disabled={registrationLoading || registrationOtp.length !== 6} onClick={() => void handleRegistrationVerify()}><span>تأیید و ثبت‌نام</span><ArrowLeft /></button>
                     <button type="button" className="spark-reference-link spark-reference-center-link" disabled={registrationLoading || registrationCountdown > 0} onClick={() => void handleRegistrationRequest()}>{registrationCountdown > 0 ? `ارسال مجدد پس از ${registrationCountdown} ثانیه` : 'ارسال مجدد کد'}</button>
                   </div>
