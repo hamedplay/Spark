@@ -137,6 +137,27 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const { data: scheduleRows, error: scheduleError } = await supabase
+      .from("system_config")
+      .select("key,value")
+      .eq("section", "minutes")
+      .in("key", ["decision_due_schedule_enabled", "periodic_followup_schedule_enabled"]);
+    const scheduleEnabled = new Map<string, boolean>(
+      (scheduleRows || []).map((row) => [row.key, String(row.value ?? "true").trim().toLowerCase() !== "false"]),
+    );
+
+    const decisionIds = Array.from(new Set(
+      claimed
+        .filter((row) => row.entity_type === "decision" && row.entity_id)
+        .map((row) => row.entity_id),
+    ));
+    const { data: decisionRows, error: decisionStatusError } = decisionIds.length
+      ? await supabase.from("minutes_decisions").select("id,status").in("id", decisionIds)
+      : { data: [], error: null };
+    const decisionStatusById = new Map<string, string>(
+      (decisionRows || []).map((row) => [row.id, row.status]),
+    );
+
     let notificationCount = 0;
     let smsSentCount = 0;
     let failedCount = 0;
@@ -153,6 +174,56 @@ Deno.serve(async (req: Request) => {
         const metadata = metadataById.get(row.id);
         const eventType = metadata?.event_type || row.event_key;
         const meetingId = metadata?.meeting_id || null;
+        const isPeriodicScheduled = eventType === "decision_followup_due" && context.periodic_followup === true;
+        const isDeadlineScheduled = eventType === "decision_due_soon" || eventType === "decision_overdue";
+        const isScheduledDecisionEvent = isPeriodicScheduled || isDeadlineScheduled;
+
+        if (isScheduledDecisionEvent && (scheduleError || decisionStatusError)) {
+          await supabase
+            .from("notification_outbox")
+            .update({
+              status: "partial",
+              last_error: scheduleError ? "SCHEDULE_CONFIG_UNAVAILABLE" : "DECISION_STATUS_UNAVAILABLE",
+              next_attempt_at: new Date(Date.now() + 60000).toISOString(),
+              processed_at: null,
+            })
+            .eq("id", row.id);
+          continue;
+        }
+
+        const scheduleDisabled =
+          (isPeriodicScheduled && scheduleEnabled.get("periodic_followup_schedule_enabled") === false) ||
+          (isDeadlineScheduled && scheduleEnabled.get("decision_due_schedule_enabled") === false);
+        const decisionStatus = row.entity_type === "decision"
+          ? decisionStatusById.get(row.entity_id)
+          : undefined;
+        const terminalDecision = isScheduledDecisionEvent &&
+          (decisionStatus === "completed" || decisionStatus === "stopped");
+
+        if (scheduleDisabled || terminalDecision) {
+          await supabase
+            .from("notification_outbox")
+            .update({
+              status: "processed",
+              processed_at: new Date().toISOString(),
+              next_attempt_at: null,
+              last_error: scheduleDisabled ? "SCHEDULE_DISABLED" : "DECISION_TERMINAL",
+            })
+            .eq("id", row.id);
+
+          if (reminderId) {
+            await supabase
+              .from("minutes_decision_reminders")
+              .update({
+                status: "cancelled",
+                cancelled_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", reminderId)
+              .in("status", ["pending", "processing", "queued", "partial", "failed"]);
+          }
+          continue;
+        }
 
         let notificationSent = row.notification_status === "sent";
         let notifAttemptCount = row.notification_attempt_count || 0;
