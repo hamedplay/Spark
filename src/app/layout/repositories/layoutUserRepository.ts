@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import { getStartupSystemConfig, findStartupSystemConfigValue } from '../../../lib/startupSystemConfig';
 import type {
   LayoutUserProfile,
   LayoutUserStatus,
@@ -13,16 +14,13 @@ export interface UpsertLayoutPresenceInput {
 
 export async function fetchSidebarDefaultCollapsed():
   Promise<boolean | null> {
-  const { data } = await supabase
-    .from('system_config')
-    .select('value')
-    .eq('section', 'ui')
-    .eq('key', 'sidebar_default_collapsed')
-    .maybeSingle();
-
-  return data
-    ? data.value !== 'false'
-    : null;
+  try {
+    const rows = await getStartupSystemConfig();
+    const value = findStartupSystemConfigValue(rows, 'ui', 'sidebar_default_collapsed');
+    return value === null ? null : value !== 'false';
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchLayoutUserProfile(
