@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { insertNotification } from '../../lib/notifications';
 import toast from 'react-hot-toast';
 import type { MessageWithMeta, ChannelProfile, MemberRole, ChannelMessage } from './types';
-import type { ChatThemeSettings } from '../Chat/ChatSettingsPage';
+import type { ChatThemeSettings } from '../Chat/chatTheme';
 import { useChatAttachmentUrl } from '../../lib/chatAttachments';
 
 export type MessageStatus = 'pending' | 'in_progress' | 'done' | null;
