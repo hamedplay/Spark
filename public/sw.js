@@ -7,7 +7,6 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/logo_spark.png',
   '/photo-1600880292203-757bb62b4baf.jpg',
-  '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
   '/fonts/Vazirmatn-Regular.woff2',
   '/fonts/Vazirmatn-Bold.woff2',
