@@ -40,7 +40,7 @@ linux_system_package_versions() {
   {
     echo "== Key package versions =="
     for package in nginx docker-ce docker-ce-cli containerd.io docker-compose-plugin nodejs git curl openssl ca-certificates; do
-      dpkg-query -W -f="${binary:Package}\t${Version}\n" "$package" 2>/dev/null || true
+      dpkg-query -W -f='${binary:Package}\t${Version}\n' "$package" 2>/dev/null || true
     done
     echo
     command -v docker >/dev/null && docker --version || true
@@ -73,7 +73,7 @@ linux_system_history_delete() {
 
   local user home
   for user in root "${SUDO_USER:-}"; do
-    [[ -n "$user" && "$user" != "root" || "$user" == "root" ]] || continue
+    [[ -n "$user" ]] || continue
     home="$(getent passwd "$user" 2>/dev/null | cut -d: -f6)"
     [[ -n "$home" && -d "$home" ]] || continue
     : >"${home}/.bash_history" 2>/dev/null || true
