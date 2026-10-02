@@ -164,6 +164,10 @@ spark_universal_env_valid() {
 }
 
 test_complete_supabase_env() {
+  if [[ "${SPARK_UNIVERSAL_ENV_BOOTSTRAP:-0}" == "1" ]]; then
+    test_extended_supabase_env_secrets_only
+    return
+  fi
   spark_universal_env_valid
 }
 
@@ -181,7 +185,7 @@ spark_universal_rewrite_public_env() {
 
 install_step_6() {
   spark_universal_apply_compat_values || return 1
-  install_step_6_universal_base || return 1
+  SPARK_UNIVERSAL_ENV_BOOTSTRAP=1 install_step_6_universal_base || return 1
   spark_universal_rewrite_public_env || return 1
   if run_logged "Validate host-agnostic Supabase environment" spark_universal_env_valid; then
     mark_step 6
