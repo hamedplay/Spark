@@ -3,6 +3,15 @@ import toast, { Toaster } from 'react-hot-toast';
 import { AuthPage } from './components/AuthPage';
 import { supabase } from './lib/supabase';
 
+// Login-only presentation/behavior is loaded with this lazy public-auth root
+// instead of the application entry bundle. This preserves the existing visual
+// cascade while avoiding login observers/styles on authenticated routes.
+import './auth-login-v2.css';
+import './auth-login-motion.css';
+import './auth-placeholder-theme.css';
+import './auth-login-unified-tabs.ts';
+import './auth-pointer-glow.ts';
+
 interface PublicAuthRootProps {
   onSessionEstablished: () => void;
 }
