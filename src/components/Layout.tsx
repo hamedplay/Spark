@@ -105,7 +105,7 @@ export function Layout({
         >
           <div className="w-full max-w-sm mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex items-center gap-2 sm:gap-3 pointer-events-auto min-w-0">
             <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0">
-              <img src="/logo_spark.png" alt="Spark" className="w-full h-full object-contain" />
+              <img src="/logo_spark.png" alt="Spark" width={40} height={40} decoding="async" className="w-full h-full object-contain" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-800 dark:text-white">نصب اپلیکیشن</p>
@@ -149,6 +149,7 @@ export function Layout({
         style={{ height: '100dvh' }}
       >
         <LayoutTopBar
+          currentUserId={currentUserId}
           userProfile={userProfile}
           onPageChange={handlePageChange}
           onLogout={handleLogout}
@@ -160,22 +161,22 @@ export function Layout({
         />
 
         {isFullHeightPage ? (
-          <div
+          <main
             className={`app-responsive-content flex-1 min-h-0 min-w-0 max-w-full ${
               isScrollableFullHeightPage ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'
             }`}
           >
             {children}
-          </div>
+          </main>
         ) : (
-          <div
+          <main
             className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 min-w-0 max-w-full"
             style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
             <div className="app-responsive-content max-w-[95rem] mx-auto px-2.5 sm:px-4 lg:px-6 w-full min-w-0 py-3 sm:py-6">
               <div className="min-w-0 max-w-full lg:pr-2">{children}</div>
             </div>
-          </div>
+          </main>
         )}
       </div>
     </div>
