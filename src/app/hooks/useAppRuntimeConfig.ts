@@ -41,10 +41,20 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
       }
     };
 
-    const load = async () => {
+    const load = async (useSharedStartup = false) => {
       let rows: RuntimeConfigRow[];
       try {
-        rows = await getStartupSystemConfig();
+        if (useSharedStartup) {
+          rows = await getStartupSystemConfig();
+        } else {
+          const { data, error } = await supabase
+            .from('system_config')
+            .select('section,key,value')
+            .in('section', ['security', 'spark'])
+            .in('key', ['maintenance_mode', 'spark_visible']);
+          if (error) return;
+          rows = (data ?? []) as RuntimeConfigRow[];
+        }
       } catch {
         return;
       }
@@ -62,7 +72,7 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
       setConfig(next);
     };
 
-    void load();
+    void load(true);
 
     const handleSparkVisibleEvent = (event: Event) => {
       const detail = (event as CustomEvent<{ visible?: boolean }>).detail;
