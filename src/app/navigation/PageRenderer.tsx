@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { PageId } from '../navigation/useNavigation';
 import { PAGE_PERMISSION_KEY, checkPermission, AccessDenied, canOpenPortalConfig } from '../../features/permissions';
 import type { PageRendererProps } from './pageRendererTypes';
+import { VIDEO_CONFERENCE_ENABLED } from '../../config/featureFlags';
 
 const ManagementDashboardPage = lazy(() => import('../../components/ManagementDashboardPage').then((m) => ({ default: m.ManagementDashboardPage })));
 const TasksPage = lazy(() => import('../../components/TasksPage').then((m) => ({ default: m.TasksPage })));
@@ -160,6 +161,7 @@ export function renderContent(props: PageRendererProps): ReactNode {
         fetchMeetings={fetchMeetings}
       />);
     case 'video-conference':
+      if (!VIDEO_CONFERENCE_ENABLED) { navigate('calendar'); return null; }
       return <VideoConferencePage />;
     case 'portal-config':
       return currentUserId && canOpenPortalConfig(isAdmin, userPermissions)
