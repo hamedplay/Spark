@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Activity, Search, RefreshCw, ChevronDown, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Check, Info, Zap, Loader as Loader2, ListFilter as Filter, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import toast from 'react-hot-toast';
 import type { AuditRow } from './types';
 
 export function GroupEventsPanel() {
@@ -39,6 +40,9 @@ export function GroupEventsPanel() {
       if (error) throw error;
 
       setLogs([]);
+      toast.success('تمام رخدادها حذف شدند');
+    } catch (error: any) {
+      toast.error(error?.message || 'حذف رخدادها ناموفق بود');
     } finally {
       setClearing(false);
     }
