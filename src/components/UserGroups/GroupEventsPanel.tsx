@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Activity, Search, RefreshCw, ChevronDown, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Check, Info, Zap, Loader as Loader2, ListFilter as Filter } from 'lucide-react';
+import { Activity, Search, RefreshCw, ChevronDown, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Check, Info, Zap, Loader as Loader2, ListFilter as Filter, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { AuditRow } from './types';
 
@@ -10,6 +10,7 @@ export function GroupEventsPanel() {
   const [severityFilter, setSeverityFilter] = useState('all');
   const [moduleFilter, setModuleFilter] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -22,6 +23,26 @@ export function GroupEventsPanel() {
   }, [severityFilter, moduleFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  const clearAuditLog = async () => {
+    if (clearing) return;
+    const confirmed = window.confirm('تمام رخدادهای ثبت‌شده حذف شوند؟ این عملیات قابل بازگشت نیست.');
+    if (!confirmed) return;
+
+    setClearing(true);
+    try {
+      const { error } = await supabase
+        .from('audit_log')
+        .delete()
+        .not('id', 'is', null);
+
+      if (error) throw error;
+
+      setLogs([]);
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const modules = Array.from(new Set(logs.map(l => l.module).filter(Boolean))) as string[];
   const filtered = logs.filter(l => !search || l.action.includes(search) || (l.user_name || '').includes(search) || (l.module || '').includes(search) || (l.details || '').includes(search));
@@ -50,7 +71,17 @@ export function GroupEventsPanel() {
           <Activity className="w-5 h-5 text-blue-500" />رخدادها
           <span className="text-sm font-normal text-gray-400">({filtered.length})</span>
         </h3>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="hidden xl:inline text-[11px] text-gray-400">نگهداری خودکار: ۱ ماه</span>
+          <button
+            type="button"
+            onClick={clearAuditLog}
+            disabled={clearing || logs.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-40 text-xs font-medium transition-colors"
+          >
+            {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            خالی کردن رخدادها
+          </button>
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="جستجو..."
