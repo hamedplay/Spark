@@ -2,6 +2,7 @@ import type {
   LayoutUserPermissions,
   PageId,
 } from './types';
+import { VIDEO_CONFERENCE_ENABLED } from '../../config/featureFlags';
 
 export interface LayoutNavigationItem {
   id: PageId;
@@ -68,6 +69,7 @@ export function getVisiblePrimaryNavigationItems(
   context: Pick<NavigationVisibilityContext, 'isAdmin' | 'sparkVisible' | 'userPermissions'> & { managementDashboardAllowed: boolean }
 ): LayoutNavigationItem[] {
   return PRIMARY_NAVIGATION_ITEMS.filter(item => {
+    if (item.id === 'video-conference' && !VIDEO_CONFERENCE_ENABLED) return false;
     if (item.requiresSparkVisible && !context.sparkVisible) return false;
     if (item.id === 'management-dashboard') return context.managementDashboardAllowed;
     if (context.isAdmin) return true;
