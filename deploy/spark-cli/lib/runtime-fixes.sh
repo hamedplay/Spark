@@ -186,6 +186,10 @@ source "${SCRIPT_DIR}/lib/same-origin.sh"
 # module so app-update cannot mutate PostgreSQL, Supabase runtime, Functions,
 # workers, schedulers or the Manager control plane.
 source "${SCRIPT_DIR}/lib/application.sh"
+source "${SCRIPT_DIR}/lib/application-maintenance.sh"
+
+# Linux host maintenance is kept separate from application/database operations.
+source "${SCRIPT_DIR}/lib/linux-system.sh"
 
 # Database migrations are a separate layer as well. Application updates never
 # source or call this updater; it is exposed only through the Database menu.
