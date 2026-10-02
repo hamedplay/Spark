@@ -1,0 +1,36 @@
+name: Temporary gzip validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/spark-cli/lib/install-platform-b.sh'
+      - 'deploy/spark-cli/lib/installation-universal.sh'
+      - 'deploy/spark-cli/lib/airgap-ip.sh'
+      - 'deploy/spark-cli/lib/airgap-waf.sh'
+      - '.github/workflows/perf-gzip-validation-temp.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell syntax
+        run: |
+          bash -n deploy/spark-cli/lib/install-platform-b.sh
+          bash -n deploy/spark-cli/lib/installation-universal.sh
+          bash -n deploy/spark-cli/lib/airgap-ip.sh
+          bash -n deploy/spark-cli/lib/airgap-waf.sh
+      - name: Validate gzip policy in all frontend nginx writers
+        run: |
+          for f in             deploy/spark-cli/lib/install-platform-b.sh             deploy/spark-cli/lib/installation-universal.sh             deploy/spark-cli/lib/airgap-ip.sh             deploy/spark-cli/lib/airgap-waf.sh
+          do
+            grep -Fq 'gzip on;' "$f"
+            grep -Fq 'gzip_comp_level 6;' "$f"
+            grep -Fq 'gzip_vary on;' "$f"
+            grep -Fq 'application/javascript' "$f"
+            grep -Fq 'text/css' "$f"
+          done
+      - name: Run Spark CLI baseline smoke test
+        run: python3 -m unittest deploy.spark-cli.tests.smoke.test_manager_baseline
