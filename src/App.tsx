@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import SparkLoader from './components/ui/SparkLoader';
 import { isKnownSparkPath, isStandaloneConferencePath } from './app/navigation/rootPath';
-import { supabase } from './lib/supabase';
 
 const PublicAuthRoot = lazy(() => import('./PublicAuthRoot'));
 const AuthenticatedRoot = lazy(() => import('./AuthenticatedRoot'));
@@ -15,22 +14,32 @@ function StandardApplication() {
 
   useEffect(() => {
     let active = true;
+    let unsubscribe: (() => void) | null = null;
 
-    void supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        if (active) setAuthState(session ? 'authenticated' : 'public');
+    // Keep the Supabase SDK out of the initial application entry. The branded
+    // loader can paint first on slower mobile CPUs while the auth client loads
+    // in parallel, after which the existing session flow continues unchanged.
+    void import('./lib/supabase')
+      .then(({ supabase }) => {
+        if (!active) return;
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          if (active) setAuthState(session ? 'authenticated' : 'public');
+        });
+        unsubscribe = () => subscription.unsubscribe();
+
+        return supabase.auth.getSession()
+          .then(({ data: { session } }) => {
+            if (active) setAuthState(session ? 'authenticated' : 'public');
+          });
       })
       .catch(() => {
         if (active) setAuthState('public');
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) setAuthState(session ? 'authenticated' : 'public');
-    });
-
     return () => {
       active = false;
-      subscription.unsubscribe();
+      unsubscribe?.();
     };
   }, []);
 
