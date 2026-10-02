@@ -21,7 +21,7 @@ $do$;
 
 select cron.schedule(
   'spark-sms-dispatch-log-retention-72h',
-  '17 * * * *',
+  '* * * * *',
   $cron$
     delete from public.sms_dispatch_logs
     where created_at < now() - interval '72 hours';
