@@ -193,7 +193,7 @@ export function MultiDayView(p: CalendarViewProps) {
                       ? 'bg-violet-50/45 dark:bg-violet-500/[0.06]'
                       : d.weekday % 2 === 0
                         ? 'bg-sky-100/65 dark:bg-sky-500/[0.08]'
-                        : 'bg-white dark:bg-slate-950'} ${holiday ? 'text-rose-500 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}
+                        : 'bg-white dark:bg-slate-950'} ${holiday ? 'text-rose-700 dark:text-rose-300' : 'text-slate-700 dark:text-slate-300'}`}
                   >
                     <div className="text-[10px] sm:text-[11px]">{JALAALI_WEEKDAYS[d.weekday]}</div>
                     <button
