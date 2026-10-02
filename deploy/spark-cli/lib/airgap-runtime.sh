@@ -68,7 +68,7 @@ install_step_2() {
   run_visible "Install bundled Ubuntu/Docker/Node packages" airgap_install_local_debs "$root" || return 1
   npm_tgz="$(find "${root}/npm" -maxdepth 1 -type f -name 'npm-*.tgz' | sort | tail -n1)"
   [[ -n "$npm_tgz" ]] || { fail "Bundled npm package missing."; return 1; }
-  run_visible "Install bundled npm 11" "$AIRGAP_REAL_NPM" install --offline --no-audit --no-fund -g "$npm_tgz" || return 1
+  run_visible "Install bundled npm 12.2" "$AIRGAP_REAL_NPM" install --offline --no-audit --no-fund -g "$npm_tgz" || return 1
   run_logged "Enable Docker and Nginx" systemctl enable --now docker nginx || return 1
   if run_logged "Validate offline base packages" test_base_packages; then mark_step 2; else unmark_step 2; return 1; fi
 }
