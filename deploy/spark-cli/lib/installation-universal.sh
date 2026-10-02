@@ -120,7 +120,7 @@ spark_install_latest_connected_packages() {
     printf "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu %s stable\n" "$codename" >/etc/apt/sources.list.d/docker.list
   ' || return 1
 
-  NODE_MAJOR="$node_major" run_logged "Configure latest NodeSource track" bash -c '
+  run_logged "Configure latest NodeSource track" env NODE_MAJOR="$node_major" bash -c '
     set -Eeuo pipefail
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
