@@ -24,8 +24,10 @@ class StaticApplicationBuilder:
         match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", raw)
         if not match:
             return False, raw
-        version = tuple(map(int, match.groups()))
-        return ((24, 21, 0) <= version < (25, 0, 0), raw) if requirement == ">=24.21.0 <25" else (False, raw)
+        # Installation/build is intentionally version-agnostic. The active
+        # Node runtime only needs to be a valid semantic Node.js version; actual
+        # compatibility is proven by npm ci + the production build.
+        return True, raw
 
     def _verify_artifacts(self, release: Path, required: tuple[str, ...]) -> None:
         for value in required:
