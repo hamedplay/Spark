@@ -74,66 +74,104 @@ spark_database_apply_migration_file() {
 
 spark_database_update_supabase() {
   title
-  new_log "database-update-supabase"
+  new_log "supabase-runtime-update"
 
-  require_dir "${SPARK_ROOT}/.git" || return 1
-  require_dir "${SPARK_ROOT}/supabase/migrations" || return 1
+  require_dir "${SUPABASE_SOURCE}/.git" || return 1
   require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
+  require_file "${SUPABASE_ROOT}/.env" || return 1
 
-  if ! run_logged "Check PostgreSQL" \
-    compose exec -T db psql -X -U postgres -d postgres -Atqc 'select 1'; then
+  if [[ -n "$(git -C "$SUPABASE_SOURCE" status --porcelain)" ]]; then
+    fail "Supabase source has uncommitted changes; runtime update stopped."
+    git -C "$SUPABASE_SOURCE" status --short | tee -a "$CURRENT_LOG"
     return 1
   fi
 
-  local pending=() file base total current=0 pending_file
-  pending_file="$(mktemp)"
-  if ! spark_database_pending_migrations >"$pending_file"; then
-    rm -f "$pending_file"
-    fail "Unable to determine pending migrations; database update stopped."
-    return 1
-  fi
-  mapfile -t pending <"$pending_file"
-  rm -f "$pending_file"
-  total="${#pending[@]}"
+  local current_ref latest_ref current_commit backup_dir old_source_commit
+  current_ref="$(spark_supabase_runtime_ref 2>/dev/null || true)"
+  old_source_commit="$(git -C "$SUPABASE_SOURCE" rev-parse HEAD)" || return 1
 
-  if (( total == 0 )); then
-    ok "Database schema is already current."
+  run_logged "Fetch latest stable Supabase releases" \
+    git -C "$SUPABASE_SOURCE" fetch origin --tags --prune || return 1
+
+  latest_ref="$(spark_supabase_stable_ref_from_source)"
+  [[ "$latest_ref" =~ ^self-hosted/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    fail "Unable to resolve latest stable Supabase self-hosted release."
+    return 1
+  }
+
+  info "Current Supabase runtime: ${current_ref:-unknown}"
+  info "Latest stable release    : $latest_ref"
+
+  if [[ "$current_ref" == "$latest_ref" ]]; then
+    ok "Supabase runtime is already on the latest stable release."
     return 0
   fi
 
-  info "Pending forward migrations: ${total}"
-  for file in "${pending[@]}"; do
-    current=$((current + 1))
-    base="$(basename "$file")"
-    info "[${current}/${total}] ${base}"
-    if ! run_logged "Apply ${base}" spark_database_apply_migration_file "$file"; then
-      fail "Database update stopped at ${base}. Later migrations were not attempted."
+  backup_dir="/var/backups/spark/supabase-runtime-update-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$backup_dir"
+  cp -a "${SUPABASE_ROOT}/.env" "$backup_dir/.env" || return 1
+  cp -a "${SUPABASE_ROOT}/docker-compose.yml" "$backup_dir/docker-compose.yml" || return 1
+  [[ -f "${SUPABASE_ROOT}/.supabase-version" ]] && cp -a "${SUPABASE_ROOT}/.supabase-version" "$backup_dir/.supabase-version" || true
+  tar -C "$SUPABASE_ROOT" \
+    --exclude='./volumes/db/data' \
+    --exclude='./volumes/storage' \
+    --exclude='./volumes/functions' \
+    -czf "$backup_dir/runtime-config.tgz" . >>"$CURRENT_LOG" 2>&1 || {
+      fail "Unable to create Supabase runtime configuration backup."
       return 1
-    fi
-  done
+    }
 
-  if ! run_logged "Reload PostgREST schema cache" \
+  run_logged "Checkout latest stable Supabase $latest_ref" \
+    git -C "$SUPABASE_SOURCE" checkout --detach "$latest_ref" || return 1
+
+  if ! run_logged "Validate latest Supabase Docker snapshot" \
+    bash -c "cd '${SUPABASE_SOURCE}/docker' && docker compose --env-file .env.example -f docker-compose.yml config --quiet"; then
+    git -C "$SUPABASE_SOURCE" checkout --detach "$old_source_commit" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  current_commit="$(git -C "$SUPABASE_SOURCE" rev-parse HEAD)" || return 1
+
+  # Stop API/runtime services while preserving the PostgreSQL container and data.
+  run_logged "Stop Supabase API/runtime services" bash -c \
+    "cd '$SUPABASE_ROOT' && docker compose stop functions api-gw auth rest realtime storage supavisor studio vector imgproxy 2>/dev/null || true"
+
+  if ! run_logged "Install latest Supabase runtime snapshot" \
+    cp -a "${SUPABASE_SOURCE}/docker/." "$SUPABASE_ROOT/"; then
+    fail "Runtime snapshot copy failed."
+    return 1
+  fi
+
+  # Preserve Spark deployment secrets and persisted data.
+  cp -a "$backup_dir/.env" "${SUPABASE_ROOT}/.env" || return 1
+  chmod 600 "${SUPABASE_ROOT}/.env"
+
+  cat >"${SUPABASE_ROOT}/.supabase-version" <<EOF_SUPABASE_VERSION
+# Supabase self-hosted version stamp. Managed by Spark Manager.
+ref=${latest_ref}
+EOF_SUPABASE_VERSION
+
+  SUPABASE_REF="$latest_ref"
+  SUPABASE_COMMIT="$current_commit"
+  save_config
+
+  # Re-apply Spark-owned environment, functions and compose hardening over the
+  # fresh official runtime snapshot. No Spark SQL migrations are executed here.
+  install_step_6 || return 1
+  install_step_7 || return 1
+  install_step_8 || return 1
+  install_step_9 || return 1
+  install_step_10 || return 1
+
+  run_logged "Reload PostgREST schema cache" \
     compose exec -T db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 \
-      -c "NOTIFY pgrst, 'reload schema';"; then
-    return 1
-  fi
+      -c "NOTIFY pgrst, 'reload schema';" || return 1
 
-  local remaining_file
-  remaining_file="$(mktemp)"
-  if ! spark_database_pending_migrations >"$remaining_file"; then
-    rm -f "$remaining_file"
-    fail "Post-update migration validation could not read migration history."
-    return 1
-  fi
-  if [[ -s "$remaining_file" ]]; then
-    cat "$remaining_file" >>"${CURRENT_LOG}"
-    rm -f "$remaining_file"
-    fail "Migration validation failed: forward migrations are still pending."
-    return 1
-  fi
-  rm -f "$remaining_file"
+  run_logged "Validate upgraded Supabase runtime" supabase_core_ready || return 1
 
-  ok "Supabase database schema updated successfully."
-  printf 'Applied migrations: %d\n' "$total"
-  printf 'Log: %s\n' "$CURRENT_LOG"
+  ok "Supabase runtime updated successfully."
+  printf 'Previous runtime: %s\n' "${current_ref:-unknown}"
+  printf 'Current runtime : %s\n' "$latest_ref"
+  printf 'Backup          : %s\n' "$backup_dir"
+  printf 'Log             : %s\n' "$CURRENT_LOG"
 }
