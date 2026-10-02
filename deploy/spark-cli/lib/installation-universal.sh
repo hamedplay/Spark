@@ -381,6 +381,7 @@ spark_universal_test_nginx() {
 install_step_12() {
   title
   new_log "install-12-host-agnostic-nginx"
+  spark_apply_nginx_gzip_profile || return 1
   spark_universal_write_nginx || return 1
   run_logged "Nginx syntax" nginx -t || return 1
   run_logged "Reload Nginx" systemctl reload nginx || return 1
@@ -401,8 +402,11 @@ install_step_14() {
   # Step 12 already writes, syntax-checks, reloads and smoke-tests the same
   # host-agnostic configuration. Do not repeat that work in the normal chain.
   if [[ -f "${STEP_DIR}/12.ok" ]]; then
+    spark_apply_nginx_gzip_profile || return 1
+    run_logged "Nginx syntax" nginx -t || return 1
+    run_logged "Reload Nginx" systemctl reload nginx || return 1
     mark_step 14
-    ok "Host-agnostic Nginx was already activated and validated in step 12."
+    ok "Host-agnostic Nginx and gzip profile are active."
     return 0
   fi
 
