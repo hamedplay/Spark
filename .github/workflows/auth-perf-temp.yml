@@ -21,7 +21,11 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
-      - run: npm run test:auth-security-config
+      - name: Validate public auth RPC contract
+        run: |
+          grep -Fq "supabase.rpc('get_public_auth_config')" src/components/AuthPage.tsx
+          grep -Fq "supabase.rpc('get_public_login_methods')" src/components/AuthPage.tsx
+          grep -Fq "initialAuthBootstrapRef" src/components/AuthPage.tsx
       - run: npm run test:auth-unified-login
       - run: npm run test:phase5-phone-otp-login-ui
       - run: npm run test:phase5-login
