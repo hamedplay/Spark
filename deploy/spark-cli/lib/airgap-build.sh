@@ -47,7 +47,7 @@ export DEBIAN_FRONTEND=noninteractive
 # Keep APT downloads available for the final complete dependency resolution.
 rm -f /etc/apt/apt.conf.d/docker-clean
 apt-get -o APT::Update::Error-Mode=any update
-apt-get install -y ca-certificates curl gnupg
+apt-get install -y ca-certificates curl gnupg python3
 
 . /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == "$TARGET_RELEASE" ]]
@@ -61,8 +61,13 @@ deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.
 EOF_DOCKER
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
 chmod a+r /etc/apt/keyrings/nodesource.gpg
-cat >/etc/apt/sources.list.d/nodesource.list <<'EOF_NODE'
-deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main
+latest_node_major="$(curl -fsSL https://nodejs.org/dist/index.json | python3 -c 'import json,sys,re; data=json.load(sys.stdin); 
+for item in data:
+ v=str(item.get("version","")); m=re.fullmatch(r"v(\\d+)\\.\\d+\\.\\d+",v)
+ if m: print(m.group(1)); break
+else: raise SystemExit(1)')"
+cat >/etc/apt/sources.list.d/nodesource.list <<EOF_NODE
+deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${latest_node_major}.x nodistro main
 EOF_NODE
 apt-get -o APT::Update::Error-Mode=any update
 packages=(
@@ -137,16 +142,21 @@ airgap_build_npm_payload() {
 set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get -o APT::Update::Error-Mode=any update
-apt-get install -y ca-certificates curl gnupg tar gzip
+apt-get install -y ca-certificates curl gnupg tar gzip python3
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
 chmod a+r /etc/apt/keyrings/nodesource.gpg
-cat >/etc/apt/sources.list.d/nodesource.list <<'EOF_NODE'
-deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_24.x nodistro main
+latest_node_major="$(curl -fsSL https://nodejs.org/dist/index.json | python3 -c 'import json,sys,re; data=json.load(sys.stdin); 
+for item in data:
+ v=str(item.get("version","")); m=re.fullmatch(r"v(\\d+)\\.\\d+\\.\\d+",v)
+ if m: print(m.group(1)); break
+else: raise SystemExit(1)')"
+cat >/etc/apt/sources.list.d/nodesource.list <<EOF_NODE
+deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${latest_node_major}.x nodistro main
 EOF_NODE
 apt-get -o APT::Update::Error-Mode=any update
 apt-get install -y nodejs
-npm install -g 'npm@12.2.0'
+npm install -g npm@latest
 mkdir -p /work/frontend
 cp /src/package.json /src/package-lock.json /work/frontend/
 cd /work/frontend
@@ -199,7 +209,8 @@ while IFS= read -r package; do
 done </payload/apt/requested-packages.txt
 python3 -c 'import yaml'
 docker compose version
-node -e 'const [a,b,c]=process.versions.node.split(".").map(Number); if (!(a===24 && (b>21 || (b===21 && c>=0)))) process.exit(1)'
+node --version
+npm --version
 npm install --offline --no-audit --no-fund -g /payload/npm/npm-*.tgz
 mkdir -p /work/frontend
 tar -C /src --exclude=.git --exclude=node_modules --exclude=dist -cf - . | tar -C /work/frontend -xf -
@@ -586,13 +597,9 @@ airgap_build_bundle() {
   airgap_prompt_default target_release "Destination Ubuntu release (not builder host)" "26.04"
   target_release="$(airgap_normalize_ubuntu_release "$target_release")" || return 1
   airgap_prompt_default output_root "Bundle output directory" "/var/backups/spark-airgap"
+  # Public DNS/TLS is external to Spark. Air-Gap bundles never require or
+  # prompt for domain certificates.
   cert_source=""
-  if [[ -d /etc/letsencrypt && -f "$MANAGER_CONF" ]]; then
-    airgap_prompt_default cert_source "TLS certificate pack source (type NONE to omit)" "/etc/letsencrypt"
-    [[ "$cert_source" == "NONE" ]] && cert_source=""
-  else
-    read -r -p "TLS certificate pack source (optional, Enter to omit): " cert_source
-  fi
 
   mkdir -p "$output_root"
   work="$(mktemp -d)"
