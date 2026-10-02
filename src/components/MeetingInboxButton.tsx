@@ -52,12 +52,16 @@ interface InboxMeeting {
   calendar_id: string | null;
 }
 
-export function MeetingInboxButton() {
+interface MeetingInboxButtonProps {
+  currentUserId?: string | null;
+}
+
+export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null }: MeetingInboxButtonProps) {
   const [open, setOpen] = useState(false);
   const { pos: fabPos, onDragStart, wasDragged } = useDraggableFab('inbox-fab-pos', 'right', 38);
   const [entries, setEntries] = useState<InboxEntry[]>([]);
   const [meetings, setMeetings] = useState<Record<string, InboxMeeting>>({});
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(providedCurrentUserId);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [delegateForEntry, setDelegateForEntry] = useState<InboxEntry | null>(null);
@@ -69,14 +73,18 @@ export function MeetingInboxButton() {
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const { groups: orgGroups, allUsers: orgAllUsers } = useOrgUsers(currentUserId);
+  const { groups: orgGroups, allUsers: orgAllUsers } = useOrgUsers(currentUserId, open || delegateForEntry !== null);
 
   const pendingCount = entries.length;
 
   const fetchData = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setCurrentUserId(user.id);
+    let userId = providedCurrentUserId ?? currentUserId;
+    if (!userId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      userId = user.id;
+      setCurrentUserId(userId);
+    }
     setFetchError(null);
 
     // Single joined query — avoids the two-query race where entries update
@@ -94,7 +102,7 @@ export function MeetingInboxButton() {
           location, user_id, participant_user_ids, notify_users, calendar_id
         )
       `)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('status', 'pending')
       .is('delegate_to', null)
       .not('meeting_id', 'is', null);
@@ -131,7 +139,7 @@ export function MeetingInboxButton() {
     setEntries(newEntries);
     setMeetings(mtgMap);
 
-  }, []);
+  }, [providedCurrentUserId, currentUserId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
