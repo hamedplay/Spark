@@ -278,7 +278,12 @@ export function useNotificationBell(
           loaded
         ) => {
           setNotifications(loaded);
-          scheduleUnreadCountSync();
+          const visibleUnread = loaded.reduce(
+            (count, notification) => count + (notification.read ? 0 : 1),
+            0
+          );
+          unreadCountRef.current = visibleUnread;
+          setUnreadCount(visibleUnread);
         },
         onNotificationInserted: (
           notification
