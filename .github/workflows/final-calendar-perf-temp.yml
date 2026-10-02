@@ -1,0 +1,51 @@
+name: Temporary final calendar performance validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/lib/startupSystemConfig.ts'
+      - 'src/context/ThemeContext.tsx'
+      - 'src/app/hooks/useAppRuntimeConfig.ts'
+      - 'src/app/layout/repositories/layoutUserRepository.ts'
+      - 'src/features/auth/hooks/useSessionHeartbeat.ts'
+      - 'src/features/notifications/hooks/useNotificationBell.ts'
+      - 'src/features/onboarding/**'
+      - 'src/components/Calendar/**'
+      - 'index.html'
+      - 'public/sw.js'
+      - 'worker/index.js'
+      - 'supabase/functions/avatar-upload/index.ts'
+      - '.github/workflows/final-calendar-perf-temp.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:calendar-url
+      - run: npm run test:notification-lifecycle
+      - run: npm run test:layout-presence
+      - run: npm run test:theme-sync
+      - name: Validate worker syntax
+        run: node --check worker/index.js
+      - name: Validate final performance contracts
+        run: |
+          grep -Fq "getStartupSystemConfig" src/context/ThemeContext.tsx
+          grep -Fq "getStartupSystemConfig" src/app/hooks/useAppRuntimeConfig.ts
+          grep -Fq "schedule(MIN_HEARTBEAT_SECONDS)" src/features/auth/hooks/useSessionHeartbeat.ts
+          grep -Fq "const visibleUnread = loaded.reduce" src/features/notifications/hooks/useNotificationBell.ts
+          grep -Fq "lazy(() =>" src/features/onboarding/FirstRunOnboardingGate.tsx
+          grep -Fq "const OUTPUT_SIZE = 256;" worker/index.js
+          grep -Fq 'cacheControl: "31536000"' worker/index.js
+          grep -Fq "const OUTPUT_SIZE = 256;" supabase/functions/avatar-upload/index.ts
+          grep -Fq 'cacheControl: "31536000"' supabase/functions/avatar-upload/index.ts
+          test "$(grep -c "/icons/icon-192x192.png" public/sw.js)" -eq 0
+          grep -Fq 'href="/logo_spark.png"' index.html
