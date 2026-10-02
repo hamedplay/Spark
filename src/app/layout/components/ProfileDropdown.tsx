@@ -38,6 +38,7 @@ const STATUS_OPTIONS = [
 ] as const;
 
 export interface ProfileDropdownProps {
+  currentUserId?: string | null;
   userProfile: LayoutUserProfile | null;
   onPageChange: (page: PageId) => void;
   onLogout: () => void;
@@ -48,6 +49,7 @@ export interface ProfileDropdownProps {
 }
 
 export function ProfileDropdown({
+  currentUserId = null,
   userProfile,
   onPageChange,
   onLogout,
@@ -75,7 +77,7 @@ export function ProfileDropdown({
     ) as LayoutUserStatus | null;
     if (saved) setStatus(saved);
     (async () => {
-      const userId = await getCurrentAuthUserId();
+      const userId = currentUserId || await getCurrentAuthUserId();
       if (!userId) return;
       const stored =
         await fetchLayoutUserPresenceStatus(userId);
@@ -84,7 +86,7 @@ export function ProfileDropdown({
         localStorage.setItem('user_status', stored);
       }
     })();
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -106,7 +108,7 @@ export function ProfileDropdown({
     localStorage.setItem('user_status', s);
     setShowStatusFlyout(false);
     setOpen(false);
-    const userId = await getCurrentAuthUserId();
+    const userId = currentUserId || await getCurrentAuthUserId();
     if (userId) {
       await upsertLayoutUserPresence({
         userId,
@@ -180,12 +182,17 @@ export function ProfileDropdown({
             setShowStatusFlyout(false);
           }}
           className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-white/60 dark:hover:bg-gray-700/60 transition-colors"
+          aria-label="منوی پروفایل"
+          aria-expanded={open}
         >
           <div className="relative flex-shrink-0">
             {userProfile?.avatar_url ? (
               <img
                 src={userProfile.avatar_url}
                 alt="پروفایل"
+                width={36}
+                height={36}
+                decoding="async"
                 className="w-9 h-9 rounded-full object-cover ring-2 ring-white dark:ring-gray-600 shadow"
               />
             ) : (
@@ -237,6 +244,9 @@ export function ProfileDropdown({
                     <img
                       src={userProfile.avatar_url}
                       alt="پروفایل"
+                      width={44}
+                      height={44}
+                      decoding="async"
                       className="w-11 h-11 rounded-full object-cover shadow"
                     />
                   ) : (
