@@ -49,6 +49,8 @@ function PortalButton({
       <button
         onClick={() => setOpen((v) => !v)}
         title="پرتال پیکربندی"
+        aria-label="پرتال پیکربندی"
+        aria-expanded={open}
         className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors ${
           activePage === 'portal-config'
             ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
@@ -83,6 +85,7 @@ function PortalButton({
 }
 
 export interface LayoutTopBarProps {
+  currentUserId?: string | null;
   userProfile: LayoutUserProfile | null;
   onPageChange: (page: PageId) => void;
   onLogout: () => void;
@@ -96,6 +99,7 @@ export interface LayoutTopBarProps {
 }
 
 export function LayoutTopBar({
+  currentUserId = null,
   userProfile,
   onPageChange,
   onLogout,
@@ -138,11 +142,12 @@ export function LayoutTopBar({
               onClick={() => void onPromptInstall()}
               className="p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
               title="نصب اپلیکیشن"
+              aria-label="نصب اپلیکیشن"
             >
               <Download className="w-5 h-5" />
             </button>
           )}
-          <NotificationBell onNavigate={onPageChange} />
+          <NotificationBell currentUserId={currentUserId} onNavigate={onPageChange} />
           {showPortalConfig && (
             <PortalButton
               activePage={activePage}
@@ -151,6 +156,7 @@ export function LayoutTopBar({
           )}
           <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1" />
           <ProfileDropdown
+            currentUserId={currentUserId}
             userProfile={userProfile}
             onPageChange={onPageChange}
             onLogout={onLogout}
