@@ -3,7 +3,6 @@ import { PermissionsProvider } from '../../context/PermissionsContext';
 import { GlobalCallProvider } from '../../context/GlobalCallContext';
 import { SplashScreen } from '../../components/SplashScreen';
 import { SparkLoader } from '../../components/ui/SparkLoader';
-import { InformeeParticipantAccess } from '../../features/meetings/components/InformeeParticipantAccess';
 import type { SparkMeetingPrefill } from '../../components/Spark/SparkAssistant';
 import type { PageId } from '../navigation/useNavigation';
 import { Layout } from '../../components/Layout';
@@ -12,6 +11,9 @@ import type { PageRendererProps } from '../navigation/pageRendererTypes';
 
 const SparkAssistant = lazy(() =>
   import('../../components/Spark/SparkAssistant').then((m) => ({ default: m.SparkAssistant })),
+);
+const InformeeParticipantAccess = lazy(() =>
+  import('../../features/meetings/components/InformeeParticipantAccess').then((m) => ({ default: m.InformeeParticipantAccess })),
 );
 
 function PageLoadingFallback() {
@@ -63,6 +65,23 @@ export function AppShell(props: AppShellProps) {
     rendererProps, sparkProps,
   } = props;
   const [assistantReady, setAssistantReady] = useState(false);
+  const [informeeAccessReady, setInformeeAccessReady] = useState(false);
+
+  useEffect(() => {
+    if (!currentUserId || activePage !== 'calendar') {
+      setInformeeAccessReady(false);
+      return;
+    }
+
+    const idleWindow = window as IdleCapableWindow;
+    if (idleWindow.requestIdleCallback) {
+      const id = idleWindow.requestIdleCallback(() => setInformeeAccessReady(true), { timeout: 1500 });
+      return () => idleWindow.cancelIdleCallback?.(id);
+    }
+
+    const timer = window.setTimeout(() => setInformeeAccessReady(true), 1000);
+    return () => window.clearTimeout(timer);
+  }, [currentUserId, activePage]);
 
   useEffect(() => {
     if (!currentUserId || !sparkVisible) {
@@ -116,8 +135,10 @@ export function AppShell(props: AppShellProps) {
             {renderContent(rendererProps)}
           </Suspense>
         </Layout>
-        {currentUserId && activePage === 'calendar' && (
-          <InformeeParticipantAccess currentUserId={currentUserId} />
+        {currentUserId && activePage === 'calendar' && informeeAccessReady && (
+          <Suspense fallback={null}>
+            <InformeeParticipantAccess currentUserId={currentUserId} />
+          </Suspense>
         )}
         {currentUserId && sparkVisible && assistantReady && (
           <Suspense fallback={null}>
