@@ -2849,6 +2849,45 @@ export type Database = {
         Relationships: [];
       };
       // ─── SMS & Notifications config ────────────────────────────────────────
+      sms_delivery_policies: {
+        Row: {
+          category: string;
+          event_type: string;
+          delivery_mode: 'immediate' | 'window' | 'fixed_time';
+          window_start: string;
+          window_end: string;
+          fixed_time: string;
+          timezone: string;
+          locked_immediate: boolean;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          category: string;
+          event_type: string;
+          delivery_mode?: 'immediate' | 'window' | 'fixed_time';
+          window_start?: string;
+          window_end?: string;
+          fixed_time?: string;
+          timezone?: string;
+          locked_immediate?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          category?: string;
+          event_type?: string;
+          delivery_mode?: 'immediate' | 'window' | 'fixed_time';
+          window_start?: string;
+          window_end?: string;
+          fixed_time?: string;
+          timezone?: string;
+          locked_immediate?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
       sms_templates: {
         Row: {
           id: string;
