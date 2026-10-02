@@ -199,7 +199,7 @@ export function MultiDayView(p: CalendarViewProps) {
                     <button
                       type="button"
                       className={`mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition-colors ${p.isToday(d.jy, d.jm, d.jd)
-                        ? 'bg-violet-600 text-white shadow-sm dark:bg-violet-500'
+                        ? 'bg-violet-700 text-white shadow-sm dark:bg-violet-600'
                         : 'text-slate-700 hover:bg-slate-100 dark:text-white dark:hover:bg-slate-800'}`}
                       onClick={() => {
                         p.setSelectedJy(d.jy);
@@ -246,7 +246,7 @@ export function MultiDayView(p: CalendarViewProps) {
                     {dayEvents.slice(0, 2).map((ev: any) => (
                       <div key={ev.id} className={`flex items-center gap-0.5 truncate rounded px-1 py-0.5 text-[9px] ${ev.type === 'leave' ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300' : 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300'}`}>
                         <span className="truncate">{ev.title}</span>
-                        <button type="button" onMouseDown={e => e.stopPropagation()} onClick={async e => { e.stopPropagation(); await supabase.from('all_day_events').delete().eq('id', ev.id); p.fetchAllDayEvents(); }} className="flex-shrink-0 hover:opacity-70"><X className="h-2 w-2" /></button>
+                        <button type="button" aria-label="حذف رویداد تمام‌روز" onMouseDown={e => e.stopPropagation()} onClick={async e => { e.stopPropagation(); await supabase.from('all_day_events').delete().eq('id', ev.id); p.fetchAllDayEvents(); }} className="flex-shrink-0 hover:opacity-70"><X className="h-2 w-2" /></button>
                       </div>
                     ))}
                   </div>
