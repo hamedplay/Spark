@@ -660,7 +660,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
       )}
 
       {/* Meeting Inbox FAB — fixed bottom-right, only visible on calendar page */}
-      <MeetingInboxButton />
+      <MeetingInboxButton currentUserId={currentUserId} />
     </div>
   );
 }
