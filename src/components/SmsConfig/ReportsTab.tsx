@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, ChevronDown, RefreshCw, Loader as Loader2 } from 'lucide-react';
+import { ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, ChevronDown, RefreshCw, Loader as Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import {
@@ -34,6 +34,7 @@ export function ReportsTab() {
 
   const [stats, setStats] = useState({ sent: 0, failed: 0, skipped: 0, total: 0 });
   const [checkingDeliveryId, setCheckingDeliveryId] = useState<string | null>(null);
+  const [clearingLogs, setClearingLogs] = useState(false);
 
   const checkDeliveryStatus = async (log: DispatchLog): Promise<void> => {
     if (checkingDeliveryId === log.id) return;
@@ -128,6 +129,32 @@ export function ReportsTab() {
 
   useEffect(() => { load(); loadStats(); }, [load, loadStats]);
 
+  const clearLogs = async () => {
+    if (clearingLogs) return;
+    const confirmed = window.confirm('تمام لاگ‌های پیامک حذف شوند؟ این عملیات قابل بازگشت نیست.');
+    if (!confirmed) return;
+
+    setClearingLogs(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-sms', {
+        body: { mode: 'clear_logs' },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'حذف لاگ‌ها ناموفق بود');
+
+      setLogs([]);
+      setStats({ sent: 0, failed: 0, skipped: 0, total: 0 });
+      setTotalCount(0);
+      setExpanded(null);
+      setPage(0);
+      toast.success(`${data.deleted ?? 0} لاگ حذف شد`);
+    } catch (error: any) {
+      toast.error(error?.message || 'حذف لاگ‌ها ناموفق بود');
+    } finally {
+      setClearingLogs(false);
+    }
+  };
+
   const formatDate = (iso: string) => {
     const d = new Date(iso);
     return d.toLocaleDateString('fa-IR', { year: 'numeric', month: 'short', day: 'numeric' }) +
@@ -178,10 +205,25 @@ export function ReportsTab() {
             <JalaliDateFilter value={filterDate} onChange={(v) => { setFilterDate(v); setPage(0); }} />
           </div>
         </div>
-        <button onClick={() => { load(); loadStats(); }}
-          className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors">
-          <RefreshCw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="hidden sm:inline text-[11px] text-gray-400">نگهداری خودکار: ۷۲ ساعت</span>
+          <button
+            type="button"
+            onClick={clearLogs}
+            disabled={clearingLogs || totalCount === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-40 text-xs font-medium transition-colors"
+          >
+            {clearingLogs
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Trash2 className="w-4 h-4" />}
+            خالی کردن لاگ‌ها
+          </button>
+          <button onClick={() => { load(); loadStats(); }}
+            className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors"
+            aria-label="بارگذاری مجدد گزارش‌ها">
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {loading ? (
