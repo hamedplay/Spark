@@ -33,4 +33,4 @@ jobs:
             grep -Fq 'text/css' "$f"
           done
       - name: Run Spark CLI baseline smoke test
-        run: python3 -m unittest deploy.spark-cli.tests.smoke.test_manager_baseline
+        run: python3 deploy/spark-cli/tests/smoke/test_manager_baseline.py
