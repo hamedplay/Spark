@@ -59,6 +59,9 @@ fi
 unset module module_path
 
 # Final installation contract must load after all Air-Gap IP/DNSless overrides.
+# This context is available even before a specific install action exports
+# SPARK_AIRGAP_ACTIVE, so status/probe paths cannot fall back to Internet mode.
+SPARK_AIRGAP_CONTEXT=1
 source "${SCRIPT_DIR}/lib/installation-universal.sh"
 
 spark_airgap_supabase_clone() {
