@@ -38,6 +38,20 @@ type OutboxMetadata = {
   meeting_id: string | null;
 };
 
+type DeferredSmsRow = {
+  id: string;
+  target_user_id: string | null;
+  target_phones: string[];
+  category: string;
+  event_type: string;
+  audience: string;
+  context: Record<string, unknown>;
+  meeting_id: string | null;
+  actor_user_id: string | null;
+  event_key: string | null;
+  attempt_count: number;
+};
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -83,6 +97,8 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const deferredResult = await processDeferredMeetingSmsQueue(supabase);
+
     const { data: claimedRows, error: claimError } = await supabase
       .rpc("claim_notification_outbox_rows", { p_limit: 50 });
 
@@ -96,7 +112,7 @@ Deno.serve(async (req: Request) => {
 
     if (!claimedRows || claimedRows.length === 0) {
       return new Response(
-        JSON.stringify({ processed: 0 }),
+        JSON.stringify({ processed: 0, deferred_sms_processed: deferredResult.processed, deferred_sms_failed: deferredResult.failed }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -405,6 +421,8 @@ Deno.serve(async (req: Request) => {
         notifications: notificationCount,
         sms_sent: smsSentCount,
         failed: failedCount,
+        deferred_sms_processed: deferredResult.processed,
+        deferred_sms_failed: deferredResult.failed,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
@@ -416,6 +434,72 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+async function processDeferredMeetingSmsQueue(
+  supabase: ReturnType<typeof createClient>,
+): Promise<{ processed: number; failed: number }> {
+  const { data, error } = await supabase.rpc("claim_deferred_sms_queue", { p_limit: 50 });
+  if (error) {
+    // The manual repair may not be installed yet. Do not block the main
+    // notification outbox while the database is being rolled out.
+    console.warn("[outbox-worker] deferred SMS queue unavailable", error.message);
+    return { processed: 0, failed: 0 };
+  }
+
+  const rows = (data || []) as DeferredSmsRow[];
+  let processed = 0;
+  let failed = 0;
+
+  for (const row of rows) {
+    try {
+      const { data: result, error: invokeError } = await supabase.functions.invoke("send-sms", {
+        body: {
+          mode: row.target_user_id ? "dispatch" : "external",
+          targetUserId: row.target_user_id,
+          mobiles: row.target_phones || [],
+          category: row.category,
+          eventType: row.event_type,
+          audience: row.audience,
+          context: {
+            ...(row.context || {}),
+            sms_window_deferred_delivery: true,
+          },
+          meetingId: row.meeting_id,
+          eventKey: row.event_key,
+          triggeredByUserId: row.actor_user_id,
+        },
+      });
+
+      if (invokeError || !result?.ok || result?.status === "failed") {
+        throw new Error(invokeError?.message || result?.errorCode || result?.error || "DEFERRED_SMS_FAILED");
+      }
+
+      await supabase
+        .from("deferred_sms_queue")
+        .update({
+          status: "processed",
+          processed_at: new Date().toISOString(),
+          last_error: null,
+        })
+        .eq("id", row.id);
+      processed++;
+    } catch (err) {
+      const attempt = Math.max(1, Number(row.attempt_count || 1));
+      const backoffMinutes = Math.min(60, [2, 5, 15, 30, 60][Math.min(attempt - 1, 4)]);
+      await supabase
+        .from("deferred_sms_queue")
+        .update({
+          status: "failed",
+          available_at: new Date(Date.now() + backoffMinutes * 60000).toISOString(),
+          last_error: err instanceof Error ? err.message : String(err),
+        })
+        .eq("id", row.id);
+      failed++;
+    }
+  }
+
+  return { processed, failed };
+}
 
 async function dispatchSms(
   supabase: ReturnType<typeof createClient>,
