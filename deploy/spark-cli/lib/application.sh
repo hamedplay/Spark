@@ -163,6 +163,9 @@ update_spark() (
   update_success=1
   rm -rf "$frontend_prev"
   frontend_switched=0
+  if declare -F application_record_active_version >/dev/null 2>&1; then
+    application_record_active_version "internet" "$target_sha"
+  fi
 
   ok "Internet App update completed. Database, migrations, Edge Functions, Supabase runtime, workers, schedulers and Manager were not changed."
   printf 'Application commit: %s\n' "$(git -C "$SPARK_ROOT" rev-parse HEAD)"
