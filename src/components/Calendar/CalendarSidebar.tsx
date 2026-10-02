@@ -67,7 +67,7 @@ export function CalendarSidebar({
             </span>
             <div>
               <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">تقویم ماهانه</p>
-              <p className="text-[9px] text-slate-400">انتخاب سریع روز</p>
+              <p className="text-[9px] text-slate-600 dark:text-slate-400">انتخاب سریع روز</p>
             </div>
           </div>
           <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${miniCalOpen ? '' : 'rotate-180'}`} />
@@ -89,7 +89,7 @@ export function CalendarSidebar({
 
             <div className="grid grid-cols-7 gap-y-0.5">
               {JALAALI_WEEKDAYS_SHORT.map((d, i) => (
-                <div key={i} className={`py-1 text-center text-[9px] ${i === 6 ? 'text-rose-400' : 'text-slate-400 dark:text-slate-500'}`}>{d}</div>
+                <div key={i} className={`py-1 text-center text-[9px] ${i === 6 ? 'text-rose-600 dark:text-rose-300' : 'text-slate-600 dark:text-slate-400'}`}>{d}</div>
               ))}
               {sidebarMonthDays.map((day, idx) => {
                 if (day === null) return <div key={`e${idx}`} />;
@@ -102,10 +102,10 @@ export function CalendarSidebar({
                     key={day}
                     onClick={() => onDayClick(day)}
                     className={`relative mx-auto flex h-7 w-7 items-center justify-center rounded-lg text-[10px] transition-all ${isTd
-                      ? 'bg-violet-600 font-bold text-white shadow-sm dark:bg-violet-500'
+                      ? 'bg-violet-700 font-bold text-white shadow-sm dark:bg-violet-600'
                       : isSel
                         ? 'bg-indigo-50 font-bold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/30'
-                        : `hover:bg-slate-100 dark:hover:bg-slate-800 ${isFri ? 'text-rose-400' : 'text-slate-600 dark:text-slate-300'}`}`}
+                        : `hover:bg-slate-100 dark:hover:bg-slate-800 ${isFri ? 'text-rose-600 dark:text-rose-300' : 'text-slate-700 dark:text-slate-300'}`}`}
                   >
                     {day}
                     {hasM && !isTd && <span className="absolute bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-cyan-500" />}
