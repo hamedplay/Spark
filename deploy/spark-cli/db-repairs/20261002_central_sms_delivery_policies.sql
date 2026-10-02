@@ -178,7 +178,9 @@ set delivery_mode='immediate',
 where category='auth'
   and event_type in ('login_otp','registration_phone_otp');
 
-create or replace function public.claim_deferred_sms_queue(p_limit integer default 50)
+drop function if exists public.claim_deferred_sms_queue(integer);
+
+create function public.claim_deferred_sms_queue(p_limit integer default 50)
 returns table(
   id uuid,
   delivery_mode text,
