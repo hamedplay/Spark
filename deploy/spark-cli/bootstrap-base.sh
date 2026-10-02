@@ -175,6 +175,11 @@ bootstrap-airgap.sh
   lib/env-modern.sh
   lib/runtime-fixes-base.sh
   lib/runtime-fixes.sh
+  lib/application.sh
+  lib/application-maintenance.sh
+  lib/linux-system.sh
+  lib/database.sh
+  lib/same-origin.sh
   lib/studio-session.sh
   lib/install-livekit.sh
   lib/airgap.sh
