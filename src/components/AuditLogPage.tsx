@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Activity, Search, Download, RefreshCw, X, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Info, Globe, FileText, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { Activity, Search, Download, RefreshCw, X, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Info, Globe, FileText, ChevronDown, ChevronUp, Eye, Trash2, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -200,6 +200,7 @@ export function AuditLogPage() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<AuditEntry | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   const [filters, setFilters] = useState<Filters>({
     year: String(CURRENT_JYEAR),
@@ -284,6 +285,30 @@ export function AuditLogPage() {
 
   useEffect(() => { search(); }, []);
 
+  const clearAuditLog = async () => {
+    if (clearing) return;
+    const confirmed = window.confirm('تمام رخدادهای ثبت‌شده حذف شوند؟ این عملیات قابل بازگشت نیست.');
+    if (!confirmed) return;
+
+    setClearing(true);
+    try {
+      const { error } = await supabase
+        .from('audit_log')
+        .delete()
+        .not('id', 'is', null);
+
+      if (error) throw error;
+
+      setLogs([]);
+      setSelected(null);
+      toast.success('تمام رخدادها حذف شدند');
+    } catch (error: any) {
+      toast.error(error?.message || 'حذف رخدادها ناموفق بود');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const exportExcel = async () => {
     const rows = logs.map((a, i) => ({
       ردیف: i + 1,
@@ -320,7 +345,17 @@ export function AuditLogPage() {
           رویدادها و رخدادها
           <span className="text-sm font-normal text-gray-400">({logs.length} رخداد)</span>
         </h3>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="hidden xl:inline text-[11px] text-gray-400">نگهداری خودکار: ۱ ماه</span>
+          <button
+            type="button"
+            onClick={clearAuditLog}
+            disabled={clearing || logs.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-40 text-xs font-medium transition-colors"
+          >
+            {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            خالی کردن رخدادها
+          </button>
           <button onClick={() => setFiltersOpen(v => !v)}
             className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-sm transition-colors">
             {filtersOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
