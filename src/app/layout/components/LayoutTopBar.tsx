@@ -110,7 +110,7 @@ export function LayoutTopBar({
 
   return (
     <div
-      className="flex-shrink-0 bg-white dark:bg-gray-800"
+      className="relative z-[100] flex-shrink-0 overflow-visible bg-white dark:bg-gray-800"
       style={{
         borderBottom: `2px solid ${accentColor}22`,
         paddingTop: 'env(safe-area-inset-top, 0px)',
