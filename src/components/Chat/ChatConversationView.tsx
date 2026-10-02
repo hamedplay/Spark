@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, CalendarDays } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ChatMessage } from './ChatMessage';
@@ -14,11 +14,11 @@ import type {
 } from './types';
 
 import { MentionsBar } from './Conversation/MentionsBar';
-import { ConversationModals } from './Conversation/ConversationModals';
-import { ReminderAlarmModal } from './Conversation/ReminderAlarmModal';
-import { StarredMessagesModal, type StarredItem } from './Conversation/StarredMessagesModal';
-import { RemindersModal } from './Conversation/RemindersModal';
-import { UserInfoPanel } from './Conversation/UserInfoPanel';
+import type { StarredItem } from './Conversation/StarredMessagesModal';
+
+const ConversationModals = lazy(() => import('./Conversation/ConversationModals').then((m) => ({ default: m.ConversationModals })));
+const ReminderAlarmModal = lazy(() => import('./Conversation/ReminderAlarmModal').then((m) => ({ default: m.ReminderAlarmModal })));
+
 import { ConversationHeader } from './Conversation/ConversationHeader';
 import { SearchBar } from './Conversation/SearchBar';
 import { MessageList } from './Conversation/MessageList';
@@ -677,7 +677,11 @@ export function ChatConversationView({
 
   return (
     <div className="flex flex-col h-full overflow-hidden" dir="rtl">
-      <ReminderAlarmModal reminderAlarm={reminderAlarm} onDismiss={dismissReminderAlarm} />
+      {reminderAlarm && (
+        <Suspense fallback={null}>
+          <ReminderAlarmModal reminderAlarm={reminderAlarm} onDismiss={dismissReminderAlarm} />
+        </Suspense>
+      )}
 
       <ConversationHeader
         onBack={onBack}
@@ -772,30 +776,34 @@ export function ChatConversationView({
       />
 
       {/* Modals & panels */}
-      <ConversationModals
-        showStarredModal={showStarredModal}
-        globalStarred={globalStarred}
-        onCloseStarred={() => setShowStarredModal(false)}
-        onGoToStarred={(item) => setShowStarredModal(false)}
-        conversationId={conversation.id}
-        scrollToMessage={scrollToMessage}
-        showRemindersModal={showRemindersModal}
-        reminders={reminders}
-        onCloseReminders={() => setShowRemindersModal(false)}
-        onDismissReminder={dismissReminder}
-        showInfoPanel={showInfoPanel}
-        conversation={conversation}
-        otherName={otherName}
-        isSavedMessages={isSavedMessages}
-        isUserOnline={isUserOnline}
-        getLastSeenText={getLastSeenText}
-        otherUserPresence={otherUserPresence}
-        localStarredCount={localStarredCount}
-        onCloseInfoPanel={() => setShowInfoPanel(false)}
-        jumpPickerDate={jumpPickerDate}
-        onJumpToDate={jumpToDate}
-        onCloseJumpPicker={() => setJumpPickerDate(null)}
-      />
+      {(showStarredModal || showRemindersModal || showInfoPanel || jumpPickerDate) && (
+        <Suspense fallback={null}>
+          <ConversationModals
+            showStarredModal={showStarredModal}
+            globalStarred={globalStarred}
+            onCloseStarred={() => setShowStarredModal(false)}
+            onGoToStarred={(item) => setShowStarredModal(false)}
+            conversationId={conversation.id}
+            scrollToMessage={scrollToMessage}
+            showRemindersModal={showRemindersModal}
+            reminders={reminders}
+            onCloseReminders={() => setShowRemindersModal(false)}
+            onDismissReminder={dismissReminder}
+            showInfoPanel={showInfoPanel}
+            conversation={conversation}
+            otherName={otherName}
+            isSavedMessages={isSavedMessages}
+            isUserOnline={isUserOnline}
+            getLastSeenText={getLastSeenText}
+            otherUserPresence={otherUserPresence}
+            localStarredCount={localStarredCount}
+            onCloseInfoPanel={() => setShowInfoPanel(false)}
+            jumpPickerDate={jumpPickerDate}
+            onJumpToDate={jumpToDate}
+            onCloseJumpPicker={() => setJumpPickerDate(null)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
