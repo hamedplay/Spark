@@ -250,6 +250,7 @@ spark_backend_dispatch_inner() {
     app-npm-audit-all) application_npm_audit_all ;;
     app-npm-list) application_npm_list ;;
     app-npm-doctor) application_npm_doctor ;;
+    app-nginx-gzip) application_optimize_nginx_gzip ;;
     app-active-version) application_active_version ;;
 
     database-update-supabase) spark_database_update_supabase ;;
