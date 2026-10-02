@@ -126,6 +126,14 @@ def _application_actions(_actions):
                     "Update the host Node.js 24 package used to build/maintain the application and validate the Spark Node engine.", "controlled"),
         core.Action("app-npm-outdated", "npm outdated app",
                     "Report outdated application npm dependencies without modifying the source or deployment."),
+        core.Action("app-npm-audit-production", "npm audit production",
+                    "Audit production application dependencies only (npm audit --omit=dev). Read-only; no automatic fix is applied."),
+        core.Action("app-npm-audit-all", "npm audit all",
+                    "Audit production and development application dependencies. Read-only; no automatic fix is applied."),
+        core.Action("app-npm-list", "npm list app",
+                    "Show the installed top-level npm dependency tree for the application."),
+        core.Action("app-npm-doctor", "npm doctor app",
+                    "Run npm environment health checks for registry access, cache, permissions, Node.js and npm."),
         core.Action("app-active-version", "Active version",
                     "Show active application commit, deployment mode/time, package version, Node/npm versions and frontend timestamp."),
     ]
@@ -266,6 +274,10 @@ def provisioning_self_test() -> int:
         "npm update app",
         "node update app",
         "npm outdated app",
+        "npm audit production",
+        "npm audit all",
+        "npm list app",
+        "npm doctor app",
         "Active version",
     ]
     if application_labels != expected_application_labels:
