@@ -5,7 +5,8 @@ import { supabase } from './lib/supabase';
 import { Toaster } from 'react-hot-toast';
 import { Wrench } from 'lucide-react';
 import { useUserPreferences, UserPreferencesProvider } from './features/user-preferences';
-import { useAuthSession, useSessionHeartbeat } from './features/auth';
+import { useAuthSession } from './features/auth/hooks/useAuthSession';
+import { useSessionHeartbeat } from './features/auth/hooks/useSessionHeartbeat';
 import { useMeetingsData } from './features/meetings/hooks/useMeetingsData';
 import { FirstRunOnboardingGate } from './features/onboarding';
 import { useAppRuntimeConfig } from './app/hooks/useAppRuntimeConfig';
@@ -17,7 +18,7 @@ import type { Meeting } from './types';
 import type { PageRendererProps } from './app/navigation/pageRendererTypes';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthenticatedThemeSync } from './context/AuthenticatedThemeSync';
-import { canOpenPortalConfig } from './features/permissions';
+import { canOpenPortalConfig } from './features/permissions/configPermissions';
 
 const toasterProps = {
   position: 'top-center' as const,
