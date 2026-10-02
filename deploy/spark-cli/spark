@@ -238,9 +238,25 @@ spark_backend_dispatch_inner() {
       ;;
 
     app-update) update_spark ;;
+    app-update-offline) application_update_offline ;;
+    app-npm-update) application_npm_update ;;
+    app-node-update) application_node_update ;;
+    app-npm-outdated) application_npm_outdated ;;
+    app-active-version) application_active_version ;;
+
     database-update-supabase) spark_database_update_supabase ;;
+
     linux-update) linux_update ;;
     resources) resource_status ;;
+    linux-network) linux_system_network ;;
+    linux-firewall) linux_system_firewall ;;
+    linux-version) linux_system_version ;;
+    linux-package-version) linux_system_package_versions ;;
+    linux-reboot) linux_system_reboot ;;
+    linux-history-delete) linux_system_history_delete ;;
+    linux-log-delete) linux_system_log_delete ;;
+    linux-cache-delete) linux_system_cache_delete ;;
+    linux-user-active) linux_system_active_users ;;
     version-info) version_info ;;
 
     npm-versions) new_log "npm-versions"; run_report "Node / npm versions" bash -c 'node --version; npm --version' ;;
