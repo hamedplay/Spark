@@ -17,7 +17,7 @@ application:
   type: static
 runtime:
   node:
-    requirement: ">=24.21.0 <25"
+    requirement: ""
     package_manager: npm
 install:
   command: [npm, ci]
@@ -44,7 +44,7 @@ health:
 
 
 class FakeBuildRunner:
-    def __init__(self, node="v24.21.0", fail_build=False):
+    def __init__(self, node="v23.7.4", fail_build=False):
         self.node = node
         self.fail_build = fail_build
         self.calls = []
@@ -98,13 +98,23 @@ class M43Tests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "npm ci"):
                 load_build_manifest(p)
 
-    def test_node_gate_and_secret_boundary(self):
+    def test_node_version_is_not_pinned_and_secret_boundary_remains(self):
         with tempfile.TemporaryDirectory() as td:
             release, manifest = self.make_release(Path(td))
+            for node_version in ("v18.20.8", "v22.19.0", "v24.21.0", "v26.0.0"):
+                result = StaticApplicationBuilder(FakeBuildRunner(node_version)).build(
+                    release, release.name, manifest, dry_run=True
+                )
+                self.assertEqual(result["status"], "PLANNED")
             with self.assertRaisesRegex(RuntimeError, "NODE_VERSION_MISMATCH"):
-                StaticApplicationBuilder(FakeBuildRunner("v22.0.0")).build(release, release.name, manifest, dry_run=True)
+                StaticApplicationBuilder(FakeBuildRunner("not-a-version")).build(
+                    release, release.name, manifest, dry_run=True
+                )
             with self.assertRaisesRegex(RuntimeError, "sensitive variable"):
-                StaticApplicationBuilder(FakeBuildRunner()).build(release, release.name, manifest, build_env={"SUPABASE_SERVICE_ROLE_KEY":"x"}, dry_run=True)
+                StaticApplicationBuilder(FakeBuildRunner()).build(
+                    release, release.name, manifest,
+                    build_env={"SUPABASE_SERVICE_ROLE_KEY":"x"}, dry_run=True
+                )
 
     def test_build_identity_idempotent(self):
         with tempfile.TemporaryDirectory() as td:
