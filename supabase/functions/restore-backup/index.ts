@@ -87,6 +87,7 @@ const CONFLICT_COLUMN: Record<string, string> = {
   channel_members: "channel_id,user_id",
   org_position_members: "position_id,user_id",
   sms_templates: "category,event_type,audience",
+  sms_delivery_policies: "category,event_type",
   spark_config: "module",
   chat_tags: "user_id,name",
   broadcast_recipients: "message_id,user_id",
@@ -131,7 +132,7 @@ const TABLE_PK: Record<string, string> = {
 
 const REQUIRED_USER_FKS: Record<string, string[]> = {
   meetings: ["user_id"], tasks: ["user_id"], notes: ["user_id"], contacts_email: ["user_id"],
-  user_preferences: ["user_id"], user_auto_accept_organizers: ["user_id", "organizer_user_id"], user_group_members: ["user_id"], chat_conversations: ["participant_a", "participant_b"],
+  user_preferences: ["user_id"], user_auto_accept_organizers: ["user_id", "organizer_user_id"], sms_delivery_policies: ["updated_by"], user_group_members: ["user_id"], chat_conversations: ["participant_a", "participant_b"],
   chat_messages: ["sender_id"], channel_members: ["user_id"], channel_messages: ["sender_id"], calendars: ["user_id"],
   org_position_members: ["user_id"], notifications: ["user_id"], audit_log: ["user_id"], chat_tags: ["user_id"],
   all_day_events: ["user_id"], bale_link_tokens: ["user_id"], telegram_link_tokens: ["user_id"],
