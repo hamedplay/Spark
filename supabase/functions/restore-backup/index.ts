@@ -43,7 +43,7 @@ const ALLOWED_TABLES = new Set([
   "org_organizations", "org_units", "org_positions", "org_position_members",
   "org_level_definitions", "org_level_permissions", "org_position_permissions",
   "system_config", "spark_config", "spark_ai_settings", "spark_field_keywords", "spark_memory",
-  "spark_assistant_logs", "social_channel_configs", "sms_providers", "sms_templates", "sms_group_rules",
+  "spark_assistant_logs", "social_channel_configs", "sms_providers", "sms_templates", "sms_delivery_policies", "sms_group_rules",
   "sms_dispatch_logs", "daily_report_config", "rahyab_settings", "rahyab_inbox",
   "bale_link_tokens", "telegram_link_tokens", "hr_sso_config", "audit_log",
   "minutes", "minutes_agenda_results", "minutes_approval_comments", "minutes_approvals",
@@ -54,7 +54,7 @@ const ALLOWED_TABLES = new Set([
 const RESTORE_ORDER = [
   "org_organizations", "org_level_definitions", "org_level_permissions", "org_units", "org_positions",
   "org_position_permissions", "user_groups", "notification_event_registry", "notification_templates",
-  "social_channel_configs", "sms_providers", "sms_templates", "sms_group_rules", "system_config",
+  "social_channel_configs", "sms_providers", "sms_templates", "sms_delivery_policies", "sms_group_rules", "system_config",
   "spark_config", "spark_ai_settings", "spark_field_keywords", "daily_report_config", "rahyab_settings",
   "hr_sso_config", "user_preferences", "user_auto_accept_organizers", "user_bale_mapping", "user_access_relations", "bale_link_tokens",
   "telegram_link_tokens", "calendars", "calendar_occasions", "all_day_events", "contacts_email", "notes",
