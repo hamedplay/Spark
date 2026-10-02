@@ -949,6 +949,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      user_auto_accept_organizers: {
+        Row: {
+          user_id: string;
+          organizer_user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          organizer_user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          organizer_user_id?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       user_presence: {
         Row: {
           user_id: string;
