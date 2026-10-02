@@ -114,20 +114,48 @@ def _manager_actions(actions):
     return [*MANAGER_OFFLINE_ACTIONS, *rebuilt]
 
 
-def _application_actions(actions):
-    rebuilt = []
-    for action in actions:
-        if action.action_id == "app-update":
-            rebuilt.append(core.Action(
-                action.action_id,
-                "Update Internet App",
-                "Fetch latest application source, run npm ci/build, and atomically deploy frontend only. Database, Supabase runtime, Edge Functions, workers, schedulers and Manager are not modified.",
-                action.risk,
-                action.special,
-            ))
-        else:
-            rebuilt.append(action)
-    return rebuilt
+def _application_actions(_actions):
+    return [
+        core.Action("app-update", "Update Internet App",
+                    "Fetch latest application source from origin/main, run npm ci/build, and atomically deploy frontend only. Database and Supabase are not modified.", "confirm"),
+        core.Action("app-update-offline", "Update Offline App",
+                    "Update only the application from the active Air-Gap bundle and bundled frontend dependencies. Database and Supabase are not modified.", "confirm"),
+        core.Action("app-npm-update", "npm update app",
+                    "Refresh application dependencies within package constraints in a temporary worktree, build, and deploy without dirtying source package files.", "controlled"),
+        core.Action("app-node-update", "node update app",
+                    "Update the host Node.js 24 package used to build/maintain the application and validate the Spark Node engine.", "controlled"),
+        core.Action("app-npm-outdated", "npm outdated app",
+                    "Report outdated application npm dependencies without modifying the source or deployment."),
+        core.Action("app-active-version", "Active version",
+                    "Show active application commit, deployment mode/time, package version, Node/npm versions and frontend timestamp."),
+    ]
+
+
+def _linux_system_actions(_actions):
+    return [
+        core.Action("linux-update", "Update Linux packages",
+                    "Run apt update/upgrade and report whether a reboot is required.", "controlled"),
+        core.Action("resources", "Resource monitor",
+                    "Show CPU, load, memory, disk, processes, Docker and listening sockets."),
+        core.Action("linux-network", "Network",
+                    "Show host addresses, routes, DNS configuration and listening sockets."),
+        core.Action("linux-firewall", "Firewall",
+                    "Show effective UFW and nftables firewall state without changing rules."),
+        core.Action("linux-version", "Linux version",
+                    "Show operating system, kernel, architecture and uptime."),
+        core.Action("linux-package-version", "Package version",
+                    "Show versions of key Linux/Spark runtime packages."),
+        core.Action("linux-reboot", "Reboot server",
+                    "Reboot the Linux server immediately after explicit confirmation.", "confirm"),
+        core.Action("linux-history-delete", "History delete",
+                    "Delete shell history for root and the invoking sudo user only.", "confirm"),
+        core.Action("linux-log-delete", "Log delete",
+                    "Delete archived systemd journal and rotated Linux logs while preserving active application/database data.", "confirm"),
+        core.Action("linux-cache-delete", "Cache delete",
+                    "Clear APT package cache and npm cache while preserving installed packages and node_modules.", "confirm"),
+        core.Action("linux-user-active", "User active",
+                    "Show currently logged-in users and recent login sessions."),
+    ]
 
 
 def _database_actions(security_actions):
@@ -177,7 +205,7 @@ def _extend_categories() -> None:
     backups = by_name.get("Backups", [])
     cleanup = _fix_cleanup_actions(by_name.get("Cleanup / Remove", []))
     application = _application_actions(by_name.get("Application", []))
-    linux_system = by_name.get("Linux System", [])
+    linux_system = _linux_system_actions(by_name.get("Linux System", []))
     manager = _manager_actions(by_name.get("Manager", []))
 
     original_security = by_name.get("Security", [])
@@ -231,9 +259,39 @@ def provisioning_self_test() -> int:
         raise RuntimeError("Spark Manager main menu contains duplicate categories")
 
     application_actions = [a for category, actions in core.CATEGORIES if category == "Application" for a in actions]
-    application_labels = {a.action_id: a.label for a in application_actions}
-    if application_labels.get("app-update") != "Update Internet App":
-        raise RuntimeError(f"Application UI action mismatch for app-update: {application_labels.get('app-update')!r}")
+    application_labels = [a.label for a in application_actions]
+    expected_application_labels = [
+        "Update Internet App",
+        "Update Offline App",
+        "npm update app",
+        "node update app",
+        "npm outdated app",
+        "Active version",
+    ]
+    if application_labels != expected_application_labels:
+        raise RuntimeError(
+            f"Application submenu mismatch: expected={expected_application_labels!r} actual={application_labels!r}"
+        )
+
+    linux_actions = [a for category, actions in core.CATEGORIES if category == "Linux System" for a in actions]
+    linux_labels = [a.label for a in linux_actions]
+    expected_linux_labels = [
+        "Update Linux packages",
+        "Resource monitor",
+        "Network",
+        "Firewall",
+        "Linux version",
+        "Package version",
+        "Reboot server",
+        "History delete",
+        "Log delete",
+        "Cache delete",
+        "User active",
+    ]
+    if linux_labels != expected_linux_labels:
+        raise RuntimeError(
+            f"Linux System submenu mismatch: expected={expected_linux_labels!r} actual={linux_labels!r}"
+        )
 
     manager_actions = [a for category, actions in core.CATEGORIES if category == "Manager" for a in actions]
     manager_labels = {a.action_id: a.label for a in manager_actions}
