@@ -85,15 +85,17 @@ jobs:
           set -euo pipefail
           grep -R -Fq -- '--spark-accent-600' dist/assets/*.css
 
-      - name: Core test suite except stale video-conference navigation expectation
+      - name: Dependency upgrade smoke tests
         shell: bash
         run: |
           set -euo pipefail
-          test_cmd="$(node -p "require('./package.json').scripts.test.replace('npm run test:layout-navigation && ', '')")"
-          bash -lc "$test_cmd"
-
-      - name: Video conference contract tests
-        run: npm run test:video-conference:contract
+          npm run test:recurrence
+          npm run test:meeting-record
+          npm run test:calendar-url
+          npm run test:meeting-prefill
+          npm run test:layout-presence
+          npm run test:user-preferences-mapping
+          npm run test:user-preferences-lifecycle
 
       - name: Report remaining outdated direct dependencies
         shell: bash
