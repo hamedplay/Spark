@@ -182,6 +182,7 @@ export function LayoutSidebar({
                 localStorage.setItem('sidebar_collapsed', String(next));
               }}
               className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex flex-shrink-0"
+              aria-label={isCollapsed ? 'باز کردن نوار کناری' : 'بستن نوار کناری'}
             >
               {isCollapsed ? (
                 <ChevronRight className="w-4 h-4 text-gray-500 dark:text-gray-400" />
