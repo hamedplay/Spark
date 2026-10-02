@@ -96,9 +96,23 @@ export function FirstRunOnboardingGate({
       }
     };
 
-    void load();
+    let timer: number | null = null;
+    let idleId: number | null = null;
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    if (idleWindow.requestIdleCallback) {
+      idleId = idleWindow.requestIdleCallback(() => void load(), { timeout: 2200 });
+    } else {
+      timer = window.setTimeout(() => void load(), 1400);
+    }
+
     return () => {
       cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      if (idleId !== null) idleWindow.cancelIdleCallback?.(idleId);
     };
   }, [enabled, userId]);
 
