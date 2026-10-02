@@ -2,15 +2,18 @@
 # Spark database-layer operations.
 # This module intentionally owns schema/RPC migrations and does not update the
 # frontend application or the Supabase Docker/runtime version.
+#
+# Canonical rule: every Spark operational SQL migration belongs under
+# /opt/spark/supabase/migrations. No deploy/spark-cli repair SQL fallback exists.
+SPARK_MIGRATIONS_DIR="${SPARK_ROOT}/supabase/migrations"
 
 spark_database_pending_migrations() {
-  local migrations_dir="${1:-${SPARK_ROOT}/supabase/migrations}"
+  local migrations_dir="$SPARK_MIGRATIONS_DIR"
   local latest_applied file base version
 
-  [[ -d "$migrations_dir" ]] || {
-    fail "Migration directory not found: ${migrations_dir}"
-    return 1
-  }
+  # The repository may legitimately contain no migrations yet. Once a migration
+  # is added, this canonical directory is the only supported source.
+  [[ -d "$migrations_dir" ]] || return 0
   [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || {
     fail "Supabase compose file not found: ${SUPABASE_ROOT}/docker-compose.yml"
     return 1
@@ -39,7 +42,14 @@ spark_database_pending_migrations() {
 }
 
 spark_database_apply_migration_file() {
-  local file="$1" base version name
+  local file="$1" base version name file_dir canonical_dir
+  file_dir="$(realpath -m "$(dirname "$file")")"
+  canonical_dir="$(realpath -m "$SPARK_MIGRATIONS_DIR")"
+  if [[ "$file_dir" != "$canonical_dir" ]]; then
+    fail "Refusing SQL outside canonical migration directory: $file"
+    return 1
+  fi
+
   base="$(basename "$file")"
   version="${base%%_*}"
   name="${base#*_}"
