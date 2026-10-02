@@ -3,7 +3,7 @@ import { CreateMeetingForm } from '../components/CreateMeetingForm';
 import type { CreateMeetingPageProps } from '../types/meetingsPage';
 
 export function CreateMeetingPage(props: CreateMeetingPageProps) {
-  const { prefillData, setActivePage, setSparkMeetingPrefill, fetchMeetings } = props;
+  const { currentUserId, prefillData, setActivePage, setSparkMeetingPrefill, fetchMeetings } = props;
 
   return (
     <div className="mx-auto max-w-6xl space-y-3 p-1 sm:p-2" dir="rtl">
@@ -29,6 +29,7 @@ export function CreateMeetingPage(props: CreateMeetingPageProps) {
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-900">
         <CreateMeetingForm
+          currentUserId={currentUserId}
           prefillData={prefillData || undefined}
           onSuccess={() => {
             setActivePage('meetings');
