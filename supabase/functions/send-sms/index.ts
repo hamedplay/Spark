@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 import { isValidPhone, normalizePhone } from "./phone.ts";
 import { handleDispatchMode, handleExternalMode } from "./requestModes.ts";
+import { evaluateSmsDeliveryPolicy, loadSmsDeliveryPolicy, queueDeferredSms } from "../_shared/smsDeliveryPolicy.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -122,6 +123,59 @@ Deno.serve(async (req: Request) => {
     // Provider is always resolved server-side; client-provided providerId is ignored.
     if (mode === "external") {
       return await handleExternalMode({ supabase, body, caller, json, isAuthOtp });
+    }
+
+    // Generic raw-send delivery policy. This covers service flows such as
+    // daily reports that already have fully-rendered SMS text.
+    if (
+      mode === "send" &&
+      body.bypassDeliveryPolicy !== true &&
+      typeof body.category === "string" &&
+      body.category &&
+      typeof body.eventType === "string" &&
+      body.eventType
+    ) {
+      try {
+        const policy = await loadSmsDeliveryPolicy(supabase, body.category, body.eventType);
+        const decision = evaluateSmsDeliveryPolicy(policy);
+        if (!decision.sendNow && decision.nextAllowedAt) {
+          const rawMobiles = Array.isArray(body.mobiles)
+            ? body.mobiles.filter((value: unknown): value is string => typeof value === "string" && value.trim().length > 0)
+            : [];
+          const rawMessage = typeof body.message === "string" ? body.message : "";
+          if (!rawMobiles.length || !rawMessage.trim()) {
+            return json({ ok: false, error: "mobiles و message برای ارسال زمان‌بندی‌شده الزامی است" }, 400);
+          }
+          const queueResult = await queueDeferredSms(supabase, {
+            deliveryMode: "send",
+            targetPhones: rawMobiles,
+            category: body.category,
+            eventType: body.eventType,
+            audience: typeof body.audience === "string" && body.audience ? body.audience : "all",
+            context: body.context && typeof body.context === "object" ? body.context : {},
+            meetingId: typeof body.meetingId === "string" && body.meetingId ? body.meetingId : null,
+            actorUserId: caller.userId === "service" ? null : caller.userId,
+            eventKey: typeof body.eventKey === "string" && body.eventKey ? body.eventKey : null,
+            rawMessage,
+            providerId: typeof body.providerId === "string" && body.providerId ? body.providerId : null,
+            availableAt: decision.nextAllowedAt,
+          });
+          return json({
+            ok: true,
+            status: "skipped",
+            reason: queueResult === "queued" ? "DEFERRED_BY_SMS_POLICY" : "DUPLICATE_DEFERRED_SMS",
+            deferredUntil: decision.nextAllowedAt.toISOString(),
+            deliveryMode: policy.mode,
+          });
+        }
+      } catch (policyError) {
+        return json({
+          ok: false,
+          status: "failed",
+          errorCode: "SMS_DELIVERY_POLICY_ERROR",
+          error: policyError instanceof Error ? policyError.message : String(policyError),
+        }, 500);
+      }
     }
 
     // For delivery_lookup, derive provider and message ID from the log record —
