@@ -39,32 +39,34 @@ jobs:
           mkdir -p "$BACKUP_DIR" "$STEP_DIR" "$LOG_DIR"
           source deploy/spark-cli/lib/core.sh
 
-          cat >/tmp/nginx.conf <<'EOF'
-user www-data;
-worker_processes auto;
-events { worker_connections 768; }
-http {
-    sendfile on;
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
+          python3 - <<'PY'
+          from pathlib import Path
+          Path('/tmp/nginx.conf').write_text("""user www-data;
+          worker_processes auto;
+          events { worker_connections 768; }
+          http {
+              sendfile on;
+              include /etc/nginx/mime.types;
+              default_type application/octet-stream;
 
-    ##
-    # Gzip Settings
-    ##
+              ##
+              # Gzip Settings
+              ##
 
-    gzip on;
-    # gzip_vary on;
-    # gzip_proxied any;
-    # gzip_comp_level 6;
-    # gzip_types text/plain text/css application/json application/javascript;
+              gzip on;
+              # gzip_vary on;
+              # gzip_proxied any;
+              # gzip_comp_level 6;
+              # gzip_types text/plain text/css application/json application/javascript;
 
-    ##
-    # Virtual Host Configs
-    ##
-    include /etc/nginx/conf.d/*.conf;
-    include /etc/nginx/sites-enabled/*;
-}
-EOF
+              ##
+              # Virtual Host Configs
+              ##
+              include /etc/nginx/conf.d/*.conf;
+              include /etc/nginx/sites-enabled/*;
+          }
+          """)
+          PY
 
           spark_apply_nginx_gzip_profile /tmp/nginx.conf
           spark_apply_nginx_gzip_profile /tmp/nginx.conf
