@@ -55,6 +55,8 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
   const [managementDashboardAccessLoading, setManagementDashboardAccessLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
+    let timer: number | null = null;
+    let idleId: number | null = null;
 
     if (!currentUserId) {
       setManagementDashboardAllowed(false);
@@ -63,15 +65,33 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
     }
 
     setManagementDashboardAccessLoading(true);
-    void (async () => {
+    const load = async () => {
       const { data, error } = await supabase.rpc('has_management_dashboard_access_v1');
       if (cancelled) return;
       setManagementDashboardAllowed(!error && data === true);
       setManagementDashboardAccessLoading(false);
-    })();
+    };
 
-    return () => { cancelled = true; };
-  }, [currentUserId]);
+    if (activePage === 'management-dashboard') {
+      void load();
+    } else {
+      const idleWindow = window as Window & {
+        requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+        cancelIdleCallback?: (id: number) => void;
+      };
+      if (idleWindow.requestIdleCallback) {
+        idleId = idleWindow.requestIdleCallback(() => void load(), { timeout: 1800 });
+      } else {
+        timer = window.setTimeout(() => void load(), 1000);
+      }
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      if (idleId !== null) (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(idleId);
+    };
+  }, [currentUserId, activePage]);
 
   const [showSplash, setShowSplash] = useState(false);
   const [splashDone, setSplashDone] = useState(false);
@@ -98,6 +118,7 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
   const minutesFollowupAccess = useMinutesFollowupAccess({
     isAuthenticated: canQueryMinutesFollowup,
     userId: currentUserId,
+    immediate: activePage === 'minutes-followup' || activePage === 'minutes-hub',
   });
 
   if (maintenanceMode && !isAdmin) {
