@@ -1,19 +1,21 @@
-import { useState, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { User, Mail, Phone, Building, MapPin, Camera, Loader as Loader2, Save, Briefcase, Hash, Users, CreditCard, ChevronDown, ChevronUp, CircleCheck as CheckCircle2, Crown, Building2, Link2, AtSign } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 import { JalaaliDateInput } from './Profile/JalaaliDateInput';
 import { Field } from './Profile/Field';
-import { BaleConnectSection } from './Profile/BaleConnectSection';
-import { TelegramConnectSection } from './Profile/TelegramConnectSection';
 import type { OrgPositionInfo, Profile } from './Profile/types';
 import { empty, LEVEL_LABELS, inp, inpDisabled } from './Profile/types';
-import { TotpFactorManager } from '../features/auth/components/TotpFactorManager';
-import { MfaMethodSelector } from '../features/auth/components/MfaMethodSelector';
-import { SessionManagementPanel } from '../features/auth/components/SessionManagementPanel';
 
-export function ProfilePage() {
+const BaleConnectSection = lazy(() => import('./Profile/BaleConnectSection').then((m) => ({ default: m.BaleConnectSection })));
+const TelegramConnectSection = lazy(() => import('./Profile/TelegramConnectSection').then((m) => ({ default: m.TelegramConnectSection })));
+const TotpFactorManager = lazy(() => import('../features/auth/components/TotpFactorManager').then((m) => ({ default: m.TotpFactorManager })));
+const MfaMethodSelector = lazy(() => import('../features/auth/components/MfaMethodSelector').then((m) => ({ default: m.MfaMethodSelector })));
+const SessionManagementPanel = lazy(() => import('../features/auth/components/SessionManagementPanel').then((m) => ({ default: m.SessionManagementPanel })));
+
+
+export function ProfilePage({ currentUserId = null }: { currentUserId?: string | null }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -25,7 +27,7 @@ export function ProfilePage() {
   const [orgPositionInfo, setOrgPositionInfo] = useState<OrgPositionInfo | null>(null);
   const avatarPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => { fetchProfile(); }, []);
+  useEffect(() => { void fetchProfile(); }, [currentUserId]);
 
   useEffect(() => {
     return () => { stopAvatarPoll(); };
@@ -68,18 +70,33 @@ export function ProfilePage() {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('کاربر احراز هویت نشده است');
+      let userId = currentUserId;
+      let authEmail = '';
+
+      if (!userId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('کاربر احراز هویت نشده است');
+        userId = user.id;
+        authEmail = user.email ?? '';
+      }
 
       const { data, error } = await supabase
-        .from('profiles').select('*').eq('user_id', user.id).maybeSingle();
+        .from('profiles').select('*').eq('user_id', userId).maybeSingle();
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
         setProfile({ ...empty, ...data } as unknown as Profile);
-        fetchOrgInfo(data.primary_position_id || null);
+        void fetchOrgInfo(data.primary_position_id || null);
       } else {
-        const newProfile = { ...empty, user_id: user.id, email: user.email ?? '' };
+        // Profile creation is an exceptional fallback. Only then ask Auth for
+        // the email when the authenticated shell supplied just the user id.
+        if (!authEmail) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user || user.id !== userId) throw new Error('کاربر احراز هویت نشده است');
+          authEmail = user.email ?? '';
+        }
+
+        const newProfile = { ...empty, user_id: userId, email: authEmail };
         const { data: created, error: ce } = await supabase
           .from('profiles').insert([newProfile]).select().single();
         if (ce) throw ce;
@@ -453,10 +470,12 @@ export function ProfilePage() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <SectionHeader id="social" title="شبکه‌های اجتماعی و پیام‌رسان" subtitle="اتصال به پیام‌رسان‌های بله و تلگرام" />
           {openSection === 'social' && (
-            <div className="p-6 space-y-5">
-              <BaleConnectSection />
-              <TelegramConnectSection />
-            </div>
+            <Suspense fallback={<div className="p-6 text-sm text-gray-400">در حال آماده‌سازی پیام‌رسان‌ها...</div>}>
+              <div className="p-6 space-y-5">
+                <BaleConnectSection />
+                <TelegramConnectSection />
+              </div>
+            </Suspense>
           )}
         </div>
 
@@ -466,8 +485,9 @@ export function ProfilePage() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden mt-4">
         <SectionHeader id="security" title="امنیت حساب" subtitle="انتخاب و مدیریت روش احراز هویت دومرحله‌ای" />
         {openSection === 'security' && (
-          <div className="p-6 space-y-6">
-            <MfaMethodSelector
+          <Suspense fallback={<div className="p-6 text-sm text-gray-400">در حال آماده‌سازی تنظیمات امنیتی...</div>}>
+            <div className="p-6 space-y-6">
+              <MfaMethodSelector
               refreshKey={mfaMethodRefreshKey}
               onRequestTotpEnrollment={() => {
                 document.getElementById('totp-factor-manager')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -477,10 +497,11 @@ export function ProfilePage() {
             <div id="totp-factor-manager" className="border-t border-gray-100 dark:border-gray-700 pt-6">
               <TotpFactorManager />
             </div>
-            <div className="border-t border-gray-100 dark:border-gray-700 pt-6">
-              <SessionManagementPanel />
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-6">
+                <SessionManagementPanel />
+              </div>
             </div>
-          </div>
+          </Suspense>
         )}
       </div>
 
