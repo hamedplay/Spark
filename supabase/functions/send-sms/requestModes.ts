@@ -1,5 +1,6 @@
 import { isValidPhone, normalizePhone } from "./phone.ts";
 import { renderSystemSmsTemplate } from "./templateRenderer.ts";
+import { evaluateSmsDeliveryPolicy, loadSmsDeliveryPolicy, queueDeferredSms } from "../_shared/smsDeliveryPolicy.ts";
 
 type SmsClient = any;
 type Caller = { userId: string; isAdmin: boolean };
@@ -35,205 +36,6 @@ function normalizedEventKey(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, 500) : null;
-}
-
-const MEETING_SMS_WINDOW_EVENTS = new Set([
-  "meeting_created",
-  "invite",
-  "meeting_confirmed",
-  "meeting_declined",
-  "change",
-  "cancel",
-  "reminder",
-  "meeting_representative_assigned",
-]);
-
-type MeetingSmsWindow = {
-  enabled: boolean;
-  start: string;
-  end: string;
-};
-
-function tehranParts(date: Date): { year: number; month: number; day: number; hour: number; minute: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tehran",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const map = new Map(parts.map((part) => [part.type, part.value]));
-  return {
-    year: Number(map.get("year")),
-    month: Number(map.get("month")),
-    day: Number(map.get("day")),
-    hour: Number(map.get("hour")),
-    minute: Number(map.get("minute")),
-  };
-}
-
-function zonedTehranToUtc(year: number, month: number, day: number, hour: number, minute: number): Date {
-  const targetMs = Date.UTC(year, month - 1, day, hour, minute, 0);
-  let guess = new Date(targetMs);
-  for (let i = 0; i < 2; i += 1) {
-    const local = tehranParts(guess);
-    const localAsUtc = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, 0);
-    guess = new Date(guess.getTime() + (targetMs - localAsUtc));
-  }
-  return guess;
-}
-
-function addTehranDays(parts: { year: number; month: number; day: number }, days: number): { year: number; month: number; day: number } {
-  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days, 12, 0, 0));
-  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
-}
-
-function parseMinutes(value: string): number | null {
-  if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value)) return null;
-  const [hour, minute] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-async function getMeetingSmsWindow(supabase: SmsClient, eventType: string): Promise<MeetingSmsWindow> {
-  if (!MEETING_SMS_WINDOW_EVENTS.has(eventType)) {
-    return { enabled: false, start: "06:00", end: "20:00" };
-  }
-  const prefix = "meeting_sms_window_" + eventType + "_";
-  const { data, error } = await supabase
-    .from("system_config")
-    .select("key,value")
-    .eq("section", "notifications")
-    .in("key", [prefix + "enabled", prefix + "start", prefix + "end"]);
-  if (error) throw error;
-  const map = new Map((data || []).map((row: any) => [row.key, String(row.value ?? "")]));
-  const defaultEnabled = eventType === "meeting_confirmed";
-  const start = parseMinutes(map.get(prefix + "start") || "") != null ? map.get(prefix + "start")! : "06:00";
-  const end = parseMinutes(map.get(prefix + "end") || "") != null ? map.get(prefix + "end")! : "20:00";
-  const enabledRaw = map.get(prefix + "enabled");
-  return {
-    enabled: enabledRaw == null ? defaultEnabled : enabledRaw === "true",
-    start,
-    end,
-  };
-}
-
-function meetingSmsWindowDecision(window: MeetingSmsWindow, now = new Date()): { allowedNow: boolean; nextAllowedAt: Date | null } {
-  if (!window.enabled) return { allowedNow: true, nextAllowedAt: null };
-  const start = parseMinutes(window.start);
-  const end = parseMinutes(window.end);
-  if (start == null || end == null || start === end) return { allowedNow: true, nextAllowedAt: null };
-
-  const local = tehranParts(now);
-  const current = local.hour * 60 + local.minute;
-  const [startHour, startMinute] = window.start.split(":").map(Number);
-
-  if (start < end) {
-    if (current >= start && current < end) return { allowedNow: true, nextAllowedAt: null };
-    const date = current < start ? local : addTehranDays(local, 1);
-    return {
-      allowedNow: false,
-      nextAllowedAt: zonedTehranToUtc(date.year, date.month, date.day, startHour, startMinute),
-    };
-  }
-
-  // Overnight window, e.g. 20:00 -> 06:00.
-  if (current >= start || current < end) return { allowedNow: true, nextAllowedAt: null };
-  return {
-    allowedNow: false,
-    nextAllowedAt: zonedTehranToUtc(local.year, local.month, local.day, startHour, startMinute),
-  };
-}
-
-async function queueDeferredMeetingSms(params: {
-  supabase: SmsClient;
-  eventType: string;
-  targetUserId: string;
-  audience: string;
-  meetingId: string | null;
-  eventKey: string | null;
-  actorUserId: string | null;
-  context: Record<string, unknown>;
-  availableAt: Date;
-}): Promise<"queued" | "duplicate"> {
-  const actorPart = params.actorUserId || "system";
-  const entityPart = params.meetingId || "no-meeting";
-  const idempotencyKey = params.eventKey
-    ? "meeting-sms-window:event:" + params.eventKey + ":recipient:" + params.targetUserId
-    : "meeting-sms-window:" + entityPart + ":" + params.eventType + ":" + params.targetUserId + ":" + actorPart;
-
-  const { error } = await params.supabase
-    .from("notification_outbox")
-    .insert({
-      event_key: params.eventType,
-      meeting_id: params.meetingId,
-      recipient_id: params.targetUserId,
-      channel: "sms",
-      event_type: params.eventType,
-      audience: params.audience,
-      payload: {
-        context: {
-          ...params.context,
-          sms_window_deferred_delivery: true,
-        },
-        sms_supported: true,
-      },
-      status: "pending",
-      category: "meeting",
-      entity_type: "meeting",
-      entity_id: params.meetingId,
-      actor_user_id: params.actorUserId,
-      idempotency_key: idempotencyKey,
-      available_at: params.availableAt.toISOString(),
-      next_attempt_at: params.availableAt.toISOString(),
-      notification_status: "sent",
-      sms_status: "pending",
-    });
-
-  if (!error) return "queued";
-  if (error.code === "23505") return "duplicate";
-  throw error;
-}
-
-async function queueDeferredExternalMeetingSms(params: {
-  supabase: SmsClient;
-  eventType: string;
-  mobiles: string[];
-  audience: string;
-  meetingId: string | null;
-  eventKey: string | null;
-  actorUserId: string | null;
-  context: Record<string, unknown>;
-  availableAt: Date;
-}): Promise<"queued" | "duplicate"> {
-  const phones = [...params.mobiles].sort();
-  const entityPart = params.meetingId || "no-meeting";
-  const actorPart = params.actorUserId || "system";
-  const idempotencyKey = params.eventKey
-    ? "meeting-external-sms-window:event:" + params.eventKey + ":phones:" + phones.join(",")
-    : "meeting-external-sms-window:" + entityPart + ":" + params.eventType + ":" + actorPart + ":" + phones.join(",");
-
-  const { error } = await params.supabase
-    .from("deferred_sms_queue")
-    .insert({
-      target_user_id: null,
-      target_phones: phones,
-      category: "meeting",
-      event_type: params.eventType,
-      audience: params.audience,
-      context: params.context,
-      meeting_id: params.meetingId,
-      actor_user_id: params.actorUserId,
-      event_key: params.eventKey,
-      idempotency_key: idempotencyKey,
-      available_at: params.availableAt.toISOString(),
-      status: "pending",
-    });
-
-  if (!error) return "queued";
-  if (error.code === "23505") return "duplicate";
-  throw error;
 }
 
 function internalDispatchKey(eventKey: string | null, meetingId: string | null, eventType: string, audience: string, targetUserId: string): string | null {
@@ -314,36 +116,38 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
   if (!targetUserId) return json({ ok: false, errorCode: "TARGET_PROFILE_NOT_FOUND", error: "targetUserId الزامی است" }, 400);
   if (!category || !eventType) return json({ ok: false, errorCode: "INVALID_REQUEST", error: "category و eventType الزامی است" }, 400);
 
-  const isDeferredDelivery = context.sms_window_deferred_delivery === true;
-  if (category === "meeting" && MEETING_SMS_WINDOW_EVENTS.has(eventType) && !isDeferredDelivery) {
+  const isDeferredDelivery = context.sms_policy_deferred_delivery === true;
+  if (!isDeferredDelivery) {
     try {
-      const window = await getMeetingSmsWindow(supabase, eventType);
-      const decision = meetingSmsWindowDecision(window);
-      if (!decision.allowedNow && decision.nextAllowedAt) {
-        const queueResult = await queueDeferredMeetingSms({
-          supabase,
-          eventType,
+      const policy = await loadSmsDeliveryPolicy(supabase, category, eventType);
+      const decision = evaluateSmsDeliveryPolicy(policy);
+      if (!decision.sendNow && decision.nextAllowedAt) {
+        const queueResult = await queueDeferredSms(supabase, {
+          deliveryMode: "dispatch",
           targetUserId,
+          category,
+          eventType,
           audience,
           meetingId,
-          eventKey,
           actorUserId: dbTriggeredBy,
+          eventKey,
           context,
           availableAt: decision.nextAllowedAt,
         });
         return json({
           ok: true,
           status: "skipped",
-          reason: queueResult === "queued" ? "DEFERRED_TO_SMS_WINDOW" : "DUPLICATE_DEFERRED_SMS",
+          reason: queueResult === "queued" ? "DEFERRED_BY_SMS_POLICY" : "DUPLICATE_DEFERRED_SMS",
           deferredUntil: decision.nextAllowedAt.toISOString(),
+          deliveryMode: policy.mode,
         });
       }
-    } catch (windowError) {
+    } catch (policyError) {
       return json({
         ok: false,
         status: "failed",
-        errorCode: "SMS_WINDOW_CONFIG_ERROR",
-        error: windowError instanceof Error ? windowError.message : String(windowError),
+        errorCode: "SMS_DELIVERY_POLICY_ERROR",
+        error: policyError instanceof Error ? policyError.message : String(policyError),
       }, 500);
     }
   }
@@ -474,7 +278,7 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
     provider_name: providerName,
   });
 
-  const sendBody: Record<string, unknown> = { mode: "send", mobiles: [rawPhone], message };
+  const sendBody: Record<string, unknown> = { mode: "send", mobiles: [rawPhone], message, bypassDeliveryPolicy: true };
   if (effectiveProviderId) sendBody.providerId = effectiveProviderId;
 
   let result: any;
@@ -571,36 +375,38 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
     return json({ ok: false, errorCode: "INVALID_TARGET_PHONE", error: `شماره موبایل معتبری یافت نشد. نامعتبر: ${invalidMobiles.join(", ")}` }, 400);
   }
 
-  const isDeferredDelivery = context.sms_window_deferred_delivery === true;
-  if (category === "meeting" && MEETING_SMS_WINDOW_EVENTS.has(eventType) && !isDeferredDelivery) {
+  const isDeferredDelivery = context.sms_policy_deferred_delivery === true;
+  if (!isDeferredDelivery) {
     try {
-      const window = await getMeetingSmsWindow(supabase, eventType);
-      const decision = meetingSmsWindowDecision(window);
-      if (!decision.allowedNow && decision.nextAllowedAt) {
-        const queueResult = await queueDeferredExternalMeetingSms({
-          supabase,
+      const policy = await loadSmsDeliveryPolicy(supabase, category, eventType);
+      const decision = evaluateSmsDeliveryPolicy(policy);
+      if (!decision.sendNow && decision.nextAllowedAt) {
+        const queueResult = await queueDeferredSms(supabase, {
+          deliveryMode: "external",
+          targetPhones: validMobiles,
+          category,
           eventType,
-          mobiles: validMobiles,
           audience,
           meetingId,
-          eventKey,
           actorUserId: dbTriggeredBy,
+          eventKey,
           context,
           availableAt: decision.nextAllowedAt,
         });
         return json({
           ok: true,
           status: "skipped",
-          reason: queueResult === "queued" ? "DEFERRED_TO_SMS_WINDOW" : "DUPLICATE_DEFERRED_SMS",
+          reason: queueResult === "queued" ? "DEFERRED_BY_SMS_POLICY" : "DUPLICATE_DEFERRED_SMS",
           deferredUntil: decision.nextAllowedAt.toISOString(),
+          deliveryMode: policy.mode,
         });
       }
-    } catch (windowError) {
+    } catch (policyError) {
       return json({
         ok: false,
         status: "failed",
-        errorCode: "SMS_WINDOW_CONFIG_ERROR",
-        error: windowError instanceof Error ? windowError.message : String(windowError),
+        errorCode: "SMS_DELIVERY_POLICY_ERROR",
+        error: policyError instanceof Error ? policyError.message : String(policyError),
       }, 500);
     }
   }
@@ -707,7 +513,7 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
           "Content-Type": "application/json",
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
         },
-        body: JSON.stringify({ mode: "send", mobiles: claimedPhones, message, providerId }),
+        body: JSON.stringify({ mode: "send", mobiles: claimedPhones, message, providerId, bypassDeliveryPolicy: true }),
       },
     );
     result = await innerResp.json();
