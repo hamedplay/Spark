@@ -169,10 +169,95 @@ installation_migrations_current() {
   [[ -z "$pending" ]]
 }
 
+spark_nginx_gzip_profile_present() {
+  command -v nginx >/dev/null 2>&1 || return 1
+  local rendered
+  rendered="$(nginx -T 2>/dev/null)" || return 1
+  grep -Eq '^[[:space:]]*gzip[[:space:]]+on;' <<<"$rendered" || return 1
+  grep -Eq '^[[:space:]]*gzip_vary[[:space:]]+on;' <<<"$rendered" || return 1
+  grep -Eq '^[[:space:]]*gzip_proxied[[:space:]]+any;' <<<"$rendered" || return 1
+  grep -Eq '^[[:space:]]*gzip_comp_level[[:space:]]+6;' <<<"$rendered" || return 1
+  grep -Eq '^[[:space:]]*gzip_min_length[[:space:]]+1024;' <<<"$rendered" || return 1
+  grep -Eq '^[[:space:]]*gzip_http_version[[:space:]]+1\.1;' <<<"$rendered" || return 1
+  grep -Eq 'application/javascript' <<<"$rendered" || return 1
+  grep -Eq 'text/css' <<<"$rendered" || return 1
+}
+
+spark_apply_nginx_gzip_profile() {
+  local file="${1:-/etc/nginx/nginx.conf}" backup_dir backup tmp
+  [[ -f "$file" ]] || { fail "Nginx configuration not found: $file"; return 1; }
+  command -v python3 >/dev/null 2>&1 || { fail "python3 is required to patch Nginx gzip settings."; return 1; }
+
+  backup_dir="${BACKUP_DIR:-/var/backups/spark}"
+  install -d -m 0700 "$backup_dir"
+  backup="${backup_dir}/nginx.conf.pre-gzip-$(date +%Y%m%d-%H%M%S).bak"
+  cp -a "$file" "$backup" || return 1
+  tmp="$(mktemp)"
+
+  if ! python3 - "$file" "$tmp" <<'PY_NGINX_GZIP'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1])
+target = Path(sys.argv[2])
+text = source.read_text(encoding="utf-8")
+
+profile = """\
+\t# Spark performance profile: compress text-based frontend assets.
+\t# Images and WOFF2 fonts are intentionally excluded because they are already compressed.
+\tgzip on;
+\tgzip_vary on;
+\tgzip_proxied any;
+\tgzip_comp_level 6;
+\tgzip_min_length 1024;
+\tgzip_buffers 16 8k;
+\tgzip_http_version 1.1;
+\tgzip_types
+\t\ttext/plain
+\t\ttext/css
+\t\tapplication/json
+\t\tapplication/javascript
+\t\tapplication/manifest+json
+\t\ttext/xml
+\t\tapplication/xml
+\t\tapplication/xml+rss
+\t\timage/svg+xml;
+
+"""
+
+section = re.compile(
+    r"(?ms)(^[ \t]*##\r?\n[ \t]*# Gzip Settings\r?\n[ \t]*##\r?\n).*?"
+    r"(?=^[ \t]*##\r?\n[ \t]*# Virtual Host Configs\r?\n[ \t]*##)"
+)
+match = section.search(text)
+if match:
+    updated = text[:match.start()] + match.group(1) + "\n" + profile + text[match.end():]
+else:
+    anchor = re.search(r"(?m)^[ \t]*default_type[ \t]+application/octet-stream;[ \t]*\r?$", text)
+    if not anchor:
+        raise SystemExit("Unable to locate the Nginx http gzip section or default_type anchor")
+    insertion = "\n\n\t##\n\t# Gzip Settings\n\t##\n\n" + profile.rstrip("\n")
+    updated = text[:anchor.end()] + insertion + text[anchor.end():]
+
+target.write_text(updated, encoding="utf-8")
+PY_NGINX_GZIP
+  then
+    rm -f "$tmp"
+    fail "Unable to render Spark Nginx gzip profile."
+    return 1
+  fi
+
+  cat "$tmp" >"$file"
+  rm -f "$tmp"
+  info "Nginx gzip performance profile applied (backup: $backup)"
+}
+
 installation_nginx_present() {
   command -v nginx >/dev/null 2>&1 || return 1
   nginx -t >/dev/null 2>&1 || return 1
   systemctl is-active --quiet nginx || return 1
+  spark_nginx_gzip_profile_present || return 1
   [[ -L /etc/nginx/sites-enabled/spark || -L /etc/nginx/sites-enabled/spark-bootstrap ]]
 }
 
