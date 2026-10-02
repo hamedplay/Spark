@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { fillPlaceholders, getSmsTemplates } from '../../lib/notifications';
 import type { SmsDispatchResult } from '../../lib/notifications';
 import type { ContactEmail } from '../../types';
+import { VIDEO_CONFERENCE_DISABLED_REASON, VIDEO_CONFERENCE_ENABLED } from '../../config/featureFlags';
 
 export interface ExternalSmsResult {
   ok: boolean;
@@ -12,8 +13,8 @@ export interface ExternalSmsResult {
   error?: string;
 }
 
-export const MEETING_VIDEO_CONFERENCE_ENABLED = false;
-export const MEETING_VIDEO_CONFERENCE_DISABLED_REASON = 'VIDEO_CONFERENCE_DISABLED';
+export const MEETING_VIDEO_CONFERENCE_ENABLED = VIDEO_CONFERENCE_ENABLED;
+export const MEETING_VIDEO_CONFERENCE_DISABLED_REASON = VIDEO_CONFERENCE_DISABLED_REASON;
 
 export async function sendSmsToExternals(
   externalNames: string[],
