@@ -60,7 +60,10 @@ export function useSessionHeartbeat(enabled: boolean): void {
       }
     };
 
-    void heartbeat();
+    // Auth bootstrap has just validated the session. Avoid duplicating that
+    // network work during first paint; begin the heartbeat after the minimum
+    // policy interval, then continue using the server-provided cadence.
+    schedule(MIN_HEARTBEAT_SECONDS);
 
     return () => {
       cancelled = true;
