@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { Settings, Shield, Globe, Video, Calendar, Server, ChevronDown, ChevronLeft, Plus, Trash2, X, RefreshCw, Wifi, Mail, Image, Palette, Monitor, Menu } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { invalidateAuthenticatedRTCConfigCache } from '../lib/authenticatedRtcConfig';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';
 const UserManagementPanel = lazy(() => import('./UserManagementPanel').then(m => ({ default: m.UserManagementPanel })));
@@ -102,6 +103,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
     const { error } = await supabase.from('system_config').update({ value, updated_by: currentUserId, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) { toast.error('خطا در ذخیره تنظیمات'); return; }
     setConfigs(prev => prev.map(c => c.id === id ? { ...c, value } : c));
+    if (cfg?.section === 'video_conference') invalidateAuthenticatedRTCConfigCache();
     toast.success('ذخیره شد');
     logAudit({ module: 'system_config', action: 'config_updated', entity_name: cfg ? `${cfg.section}.${cfg.key}` : id, details: `مقدار جدید: ${value}`, severity: 'info' });
   };
@@ -412,22 +414,34 @@ export function PortalConfigPage({ currentUserId }: Props) {
       case 'daily_report':
         return <DailyReportConfigPanel />;
 
-      case 'video_conference':
+      case 'video_conference': {
+        const hiddenKeys = new Set(['enabled', 'ice_connection_timeout', 'ice_restart_on_disconnect']);
+        const visibleVideoConfigs = cfgs('video_conference').filter(c => !hiddenKeys.has(c.key));
         return (
           <div className="space-y-5">
-            <SectionCard title="تنظیمات ویدیو کنفرانس" icon={Video} color="teal">
-              {cfgs('video_conference').filter(c => c.key !== 'ice_transport_policy').map(c => (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+              <div className="flex items-center gap-2 font-bold">
+                <Video className="h-4 w-4" />
+                ویدئوکنفرانس موقتاً غیرفعال است — به‌زودی
+              </div>
+              <p className="mt-1 text-xs leading-6">
+                فعال‌سازی قابلیت در سطح Release قفل شده است. تنظیمات زیر فقط برای آماده‌سازی و تست زیرساخت STUN/TURN نگه داشته شده‌اند و فعال‌کردن Room جدید از این صفحه ممکن نیست.
+              </p>
+            </div>
+            <SectionCard title="تنظیمات زیرساخت ویدیو کنفرانس" icon={Video} color="teal">
+              {visibleVideoConfigs.filter(c => c.key !== 'ice_transport_policy').map(c => (
                 <ConfigField key={c.id} entry={c} onSave={saveConfig} />
               ))}
-              {cfgs('video_conference').filter(c => c.key === 'ice_transport_policy').map(c => (
+              {visibleVideoConfigs.filter(c => c.key === 'ice_transport_policy').map(c => (
                 <div key={c.id} className="md:col-span-2">
                   <ConfigField entry={c} onSave={saveConfig} />
                 </div>
               ))}
             </SectionCard>
-            <IceTesterPanel configs={cfgs('video_conference')} />
+            <IceTesterPanel configs={visibleVideoConfigs} />
           </div>
         );
+      }
 
       case 'calendar':
         return (
