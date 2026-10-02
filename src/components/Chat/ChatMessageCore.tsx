@@ -12,7 +12,7 @@ import { FALLBACK_NAME } from '../../lib/useOrgUsers';
 import { UserAvatar } from './ChatConversationItem';
 import { ForwardModal } from './ForwardModal';
 import { supabase } from '../../lib/supabase';
-import { loadChatTheme, type ChatThemeSettings } from './ChatSettingsPage';
+import { loadChatTheme, type ChatThemeSettings } from './chatTheme';
 import { useChatAttachmentUrl } from '../../lib/chatAttachments';
 import { renderMarkdownBody } from './ChatMessageMarkdown';
 import {
