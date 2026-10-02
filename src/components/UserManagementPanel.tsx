@@ -1,25 +1,26 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { Users, Search, Plus, RefreshCw, EllipsisVertical as MoreVertical, Download, Upload, EyeOff, CircleAlert as AlertCircle, Loader as Loader2, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import * as XLSX from '../lib/xlsxCompat';
 import type { AdminProfile, Panel, Props, ImportResult } from './UserManagement/types';
 import { EXCEL_COLUMNS, emptyNew, menuItems } from './UserManagement/utils';
-import { ImportResultModal } from './UserManagement/ImportResultModal';
-import { UserPreviewPanel } from './UserManagement/UserPreviewPanel';
-import { UserProfileForm } from './UserManagement/UserProfileForm';
-import { PasswordPanel } from './UserManagement/PasswordPanel';
-import { DeactivatePanel } from './UserManagement/DeactivatePanel';
-import { AccessPanel } from './UserManagement/AccessPanel';
-import { RoleManagementPanel } from './UserManagement/RoleManagementPanel';
-import { ActivityPanel } from './UserManagement/ActivityPanel';
-import { LoginsPanel } from './UserManagement/LoginsPanel';
-import { UrlsPanel } from './UserManagement/UrlsPanel';
-import { UserRelationsPanel } from './UserManagement/UserRelationsPanel';
-import { PhoneSyncPanel } from './UserManagement/PhoneSyncPanel';
 import { handleImportFile } from './UserManagement/importHandler';
 import { AdminUserDeleteAction } from './AdminUserDeleteAction';
 import { AdminOverviewCards } from './UserManagement/AdminOverviewCards';
+const ImportResultModal = lazy(() => import('./UserManagement/ImportResultModal').then((m) => ({ default: m.ImportResultModal })));
+const UserPreviewPanel = lazy(() => import('./UserManagement/UserPreviewPanel').then((m) => ({ default: m.UserPreviewPanel })));
+const UserProfileForm = lazy(() => import('./UserManagement/UserProfileForm').then((m) => ({ default: m.UserProfileForm })));
+const PasswordPanel = lazy(() => import('./UserManagement/PasswordPanel').then((m) => ({ default: m.PasswordPanel })));
+const DeactivatePanel = lazy(() => import('./UserManagement/DeactivatePanel').then((m) => ({ default: m.DeactivatePanel })));
+const AccessPanel = lazy(() => import('./UserManagement/AccessPanel').then((m) => ({ default: m.AccessPanel })));
+const RoleManagementPanel = lazy(() => import('./UserManagement/RoleManagementPanel').then((m) => ({ default: m.RoleManagementPanel })));
+const ActivityPanel = lazy(() => import('./UserManagement/ActivityPanel').then((m) => ({ default: m.ActivityPanel })));
+const LoginsPanel = lazy(() => import('./UserManagement/LoginsPanel').then((m) => ({ default: m.LoginsPanel })));
+const UrlsPanel = lazy(() => import('./UserManagement/UrlsPanel').then((m) => ({ default: m.UrlsPanel })));
+const UserRelationsPanel = lazy(() => import('./UserManagement/UserRelationsPanel').then((m) => ({ default: m.UserRelationsPanel })));
+const PhoneSyncPanel = lazy(() => import('./UserManagement/PhoneSyncPanel').then((m) => ({ default: m.PhoneSyncPanel })));
+
 import { useDismissOnOutsideClick } from '../shared/ui/useDismissOnOutsideClick';
 import { usePermissions } from '../context/PermissionsContext';
 import { AccessDenied } from '../features/permissions';
@@ -231,28 +232,32 @@ export function UserManagementPanel({ currentUserId }: Props) {
     !search || (p.full_name || '').includes(search) || (p.email || '').includes(search) || (p.department || '').includes(search)
   );
 
+  const panelFallback = (
+    <div className="flex min-h-48 items-center justify-center text-sm text-gray-400">در حال آماده‌سازی بخش کاربر...</div>
+  );
+
   if (panel === 'preview' && selectedUser) {
-    return <UserPreviewPanel user={selectedUser} onBack={goBack} onEdit={() => setPanel('edit')} />;
+    return <Suspense fallback={panelFallback}><UserPreviewPanel user={selectedUser} onBack={goBack} onEdit={() => setPanel('edit')} /></Suspense>;
   }
   if (panel === 'add') {
-    return <UserProfileForm title="افزودن کاربر جدید" profile={emptyNew} isNew onSave={handleSaveUser} onBack={goBack} />;
+    return <Suspense fallback={panelFallback}><UserProfileForm title="افزودن کاربر جدید" profile={emptyNew} isNew onSave={handleSaveUser} onBack={goBack} /></Suspense>;
   }
   if (panel === 'edit' && selectedUser) {
-    return <UserProfileForm title="ویرایش اطلاعات کاربر" profile={selectedUser} isNew={false} onSave={handleSaveUser} onBack={goBack} />;
+    return <Suspense fallback={panelFallback}><UserProfileForm title="ویرایش اطلاعات کاربر" profile={selectedUser} isNew={false} onSave={handleSaveUser} onBack={goBack} /></Suspense>;
   }
-  if (panel === 'password' && selectedUser) return <PasswordPanel user={selectedUser} onBack={goBack} />;
-  if (panel === 'deactivate' && selectedUser) return <DeactivatePanel user={selectedUser} onBack={goBack} onDone={() => { load(); goBack(); }} />;
-  if (panel === 'access' && selectedUser) return canManageAccess ? <AccessPanel user={selectedUser} onBack={goBack} /> : <AccessDenied onReturn={goBack} />;
-  if (panel === 'roles' && selectedUser) return <RoleManagementPanel user={selectedUser} currentUserId={currentUserId} onBack={goBack} onDone={async () => { await load(); goBack(); }} />;
-  if (panel === 'relations' && selectedUser) return <UserRelationsPanel user={selectedUser} onBack={goBack} allProfiles={profiles} />;
-  if (panel === 'phonesync' && selectedUser) return <PhoneSyncPanel user={selectedUser} onBack={goBack} />;
-  if (panel === 'activity' && selectedUser) return <ActivityPanel user={selectedUser} onBack={goBack} />;
-  if (panel === 'logins' && selectedUser) return <LoginsPanel user={selectedUser} onBack={goBack} />;
-  if (panel === 'urls' && selectedUser) return <UrlsPanel user={selectedUser} onBack={goBack} />;
+  if (panel === 'password' && selectedUser) return <Suspense fallback={panelFallback}><PasswordPanel user={selectedUser} onBack={goBack} /></Suspense>;
+  if (panel === 'deactivate' && selectedUser) return <Suspense fallback={panelFallback}><DeactivatePanel user={selectedUser} onBack={goBack} onDone={() => { load(); goBack(); }} /></Suspense>;
+  if (panel === 'access' && selectedUser) return canManageAccess ? <Suspense fallback={panelFallback}><AccessPanel user={selectedUser} onBack={goBack} /></Suspense> : <AccessDenied onReturn={goBack} />;
+  if (panel === 'roles' && selectedUser) return <Suspense fallback={panelFallback}><RoleManagementPanel user={selectedUser} currentUserId={currentUserId} onBack={goBack} onDone={async () => { await load(); goBack(); }} /></Suspense>;
+  if (panel === 'relations' && selectedUser) return <Suspense fallback={panelFallback}><UserRelationsPanel user={selectedUser} onBack={goBack} allProfiles={profiles} /></Suspense>;
+  if (panel === 'phonesync' && selectedUser) return <Suspense fallback={panelFallback}><PhoneSyncPanel user={selectedUser} onBack={goBack} /></Suspense>;
+  if (panel === 'activity' && selectedUser) return <Suspense fallback={panelFallback}><ActivityPanel user={selectedUser} onBack={goBack} /></Suspense>;
+  if (panel === 'logins' && selectedUser) return <Suspense fallback={panelFallback}><LoginsPanel user={selectedUser} onBack={goBack} /></Suspense>;
+  if (panel === 'urls' && selectedUser) return <Suspense fallback={panelFallback}><UrlsPanel user={selectedUser} onBack={goBack} /></Suspense>;
 
   return (
     <div className="space-y-4" dir="rtl">
-      {importResult && <ImportResultModal result={importResult} onClose={() => setImportResult(null)} />}
+      {importResult && <Suspense fallback={null}><ImportResultModal result={importResult} onClose={() => setImportResult(null)} /></Suspense>}
       <AdminOverviewCards
         totalUsers={profiles.length}
         activeUsers={profiles.filter(p => p.is_active !== false).length}
