@@ -140,6 +140,7 @@ export function renderContent(props: PageRendererProps): ReactNode {
       />;
     case 'chat':
       return <ChatPage
+        currentUserId={currentUserId}
         onNavigateToCalendar={(ids, bodyText) => {
           if (ids && ids.length > 0) setChatMentionParticipants(ids);
           if (bodyText) setChatMeetingNotes(bodyText);
@@ -179,7 +180,7 @@ export function renderContent(props: PageRendererProps): ReactNode {
     case 'notes':
       return <NotesPage currentUserId={currentUserId} />;
     case 'profile':
-      return modernPage(<ProfilePage />);
+      return modernPage(<ProfilePage currentUserId={currentUserId} />);
     case 'contacts':
       return <ContactsPage currentUserId={currentUserId} />;
     case 'contacts_email':
@@ -262,6 +263,7 @@ export function renderContent(props: PageRendererProps): ReactNode {
         setPendingSchedule={props.setPendingSchedule}
         isAdmin={props.isAdmin}
         userPermissions={props.userPermissions}
+        currentUserId={props.currentUserId}
       />;
   }
 }
