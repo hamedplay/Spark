@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { MessageCircle, Plus, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -6,24 +6,27 @@ import toast from 'react-hot-toast';
 import { ChatSidebar } from './ChatSidebar';
 import type { SidebarTab } from './ChatSidebar';
 import { ChatConversationView } from './ChatConversationView';
-import { ChatActionsPanel } from './ChatActionsPanel';
-import { ChatSettingsPage } from './ChatSettingsPage';
-import { CallHistoryPage } from './CallHistoryPage';
-import { E2EECallPage } from './E2EECallPage';
-import { NewConversationModal } from './NewConversationModal';
 import type { ConversationWithProfile, UserProfile } from './types';
 import { useGlobalCall } from '../../context/GlobalCallContext';
 import { getPendingE2EERing, subscribeE2EERing } from '../../lib/globalE2EERing';
 
+const ChatActionsPanel = lazy(() => import('./ChatActionsPanel').then((m) => ({ default: m.ChatActionsPanel })));
+const ChatSettingsPage = lazy(() => import('./ChatSettingsPage').then((m) => ({ default: m.ChatSettingsPage })));
+const CallHistoryPage = lazy(() => import('./CallHistoryPage').then((m) => ({ default: m.CallHistoryPage })));
+const E2EECallPage = lazy(() => import('./E2EECallPage').then((m) => ({ default: m.E2EECallPage })));
+const NewConversationModal = lazy(() => import('./NewConversationModal').then((m) => ({ default: m.NewConversationModal })));
+
+
 interface Props {
+  currentUserId?: string | null;
   onNavigateToCalendar?: (mentionedUserIds?: string[], bodyText?: string) => void;
   onNavigateToTasks?: (messageBody: string, messageId: string) => void;
   initialOpenUserId?: string | null;
   onInitialOpenUserConsumed?: () => void;
 }
 
-export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenUserId, onInitialOpenUserConsumed }: Props) {
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+export function ChatPage({ currentUserId: providedCurrentUserId = null, onNavigateToCalendar, onNavigateToTasks, initialOpenUserId, onInitialOpenUserConsumed }: Props) {
+  const [currentUserId, setCurrentUserId] = useState<string | null>(providedCurrentUserId);
   const [currentUserProfile, setCurrentUserProfile] = useState<UserProfile | null>(null);
   const [conversations, setConversations] = useState<ConversationWithProfile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -181,27 +184,36 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
     console.log('[ChatPage] Subscribing conversations realtime channel:', channelName);
 
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
-      setCurrentUserId(user.id);
+      let userId = providedCurrentUserId;
+      let fallbackEmail: string | null = null;
+
+      if (!userId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        userId = user.id;
+        fallbackEmail = user.email || null;
+      }
+
+      if (cancelled) return;
+      setCurrentUserId(userId);
 
       const { data: profile } = await supabase
         .from('profiles_public')
         .select('user_id, full_name, username, avatar_url')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .maybeSingle();
       if (cancelled) return;
-      setCurrentUserProfile(profile || { user_id: user.id, full_name: null, email: user.email || null });
+      setCurrentUserProfile(profile || { user_id: userId, full_name: null, email: fallbackEmail });
 
-      await fetchConversations(user.id);
+      await fetchConversations(userId);
       if (cancelled) return;
 
       convChannelRef.current = supabase
         .channel(channelName)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' },
-          () => fetchConversations(user.id))
+          () => fetchConversations(userId))
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' },
-          () => fetchConversations(user.id))
+          () => fetchConversations(userId))
         .subscribe();
 
     })();
@@ -212,7 +224,7 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
         convChannelRef.current = null;
       }
     };
-  }, []);
+  }, [providedCurrentUserId, fetchConversations]);
 
   // ── E2EE incoming-call handoff ───────────────────────────────────────────
   useEffect(() => {
@@ -393,20 +405,26 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
             <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
           </div>
         ) : showActions ? (
-          <ChatActionsPanel
+          <Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>}>
+            <ChatActionsPanel
             currentUserId={currentUserId}
             onClose={() => setShowActions(false)}
             onNavigateToMessage={handleNavigateToMessage}
-          />
+            />
+          </Suspense>
         ) : showSettings ? (
-          <ChatSettingsPage onClose={() => setShowSettings(false)} />
+          <Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>}>
+            <ChatSettingsPage onClose={() => setShowSettings(false)} />
+          </Suspense>
         ) : sidebarTab === 'calls' ? (
-          <CallHistoryPage
+          <Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>}>
+            <CallHistoryPage
             currentUserId={currentUserId}
             onStartCall={handleStartCallFromHistory}
             onStartE2EECall={() => handleOpenE2EECall()}
             onClose={() => { setShowE2EECall(false); setSidebarTab('chats'); }}
-          />
+            />
+          </Suspense>
         ) : (
           <ChatSidebar
             conversations={conversations}
@@ -487,7 +505,8 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
 
         {sidebarTab === 'calls' && showE2EECall && (
           <div className="flex-1 min-h-0 bg-white dark:bg-slate-950">
-            <E2EECallPage
+            <Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-violet-500" /></div>}>
+              <E2EECallPage
               currentUserId={currentUserId}
               currentUserName={currentUserProfile?.full_name || currentUserProfile?.username || 'کاربر'}
               initialTargetUser={e2eeInitialTarget ? {
@@ -497,7 +516,8 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
                 avatar_url: e2eeInitialTarget.avatar_url,
               } : null}
               onBack={handleCloseE2EECall}
-            />
+              />
+            </Suspense>
           </div>
         )}
 
@@ -513,11 +533,13 @@ export function ChatPage({ onNavigateToCalendar, onNavigateToTasks, initialOpenU
 
       {/* ── New conversation modal ───────────────────────────────────────── */}
       {showNewConv && (
-        <NewConversationModal
+        <Suspense fallback={null}>
+          <NewConversationModal
           currentUserId={currentUserId}
           onSelect={handleNewConv}
           onClose={() => setShowNewConv(false)}
-        />
+          />
+        </Suspense>
       )}
     </div>
   );
