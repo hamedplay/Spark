@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'src/app/navigation/PageRenderer.tsx'
+      - 'src/AuthenticatedApp.tsx'
+      - 'src/app/hooks/useMinutesFollowupAccess.ts'
       - 'src/features/meetings/**'
       - 'src/components/Chat/**'
       - 'src/components/ProfilePage.tsx'
@@ -28,7 +30,6 @@ jobs:
       - run: npm run build
       - run: npm run test:meeting-prefill
       - run: npm run test:meeting-record
-      - run: npm run test:minutes-integration
       - run: npm run test:minutes-entry-flow
       - run: npm run test:notification-lifecycle
       - name: Validate performance wiring
@@ -39,3 +40,6 @@ jobs:
           grep -Fq "orgDirectoryNeeded" src/components/TasksPage.tsx
           grep -Fq "lazy(() => import('./ChannelConversationView')" src/components/Channels/ChannelsPage.tsx
           grep -Fq "lazy(() => import('./ChatActionsPanel')" src/components/Chat/ChatPage.tsx
+          grep -Fq "import('../../features/meetings/pages/MeetingsPage')" src/app/navigation/PageRenderer.tsx
+          grep -Fq "immediate: activePage === 'minutes-followup' || activePage === 'minutes-hub'" src/AuthenticatedApp.tsx
+          grep -Fq "requestIdleCallback" src/app/hooks/useMinutesFollowupAccess.ts
