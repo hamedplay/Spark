@@ -5,7 +5,7 @@ import { insertNotification as insertNotificationFromTemplate } from '../lib/not
 import toast from 'react-hot-toast';
 import { useUserPreferences } from '../features/user-preferences';
 import { MeetingData, CalendarEntry, CalendarSubscription, PendingSchedule, CalendarFormState } from './Calendar/types';
-import { PRIORITY_COLORS, SLOT_HEIGHT, HOURS_START, HOURS_END, DEFAULT_CALENDAR_COLOR, toJalaali, jalaaliToDate, jalaaliToYYYYMMDD, parseRequestDateToDateStr, timeToMinutes, minutesToTime, minutesToSlotIndex } from './Calendar/utils';
+import { PRIORITY_COLORS, SLOT_HEIGHT, HOURS_START, HOURS_END, DEFAULT_CALENDAR_COLOR, VIEW_OPTIONS, toJalaali, jalaaliToDate, jalaaliToYYYYMMDD, parseRequestDateToDateStr, timeToMinutes, minutesToTime, minutesToSlotIndex } from './Calendar/utils';
 import { useOrgUsers, resolveUserDisplay } from '../lib/useOrgUsers';
 import { useCalendarDataActions } from './Calendar/useCalendarDataActions';
 import { useCalendarNavigation } from './Calendar/useCalendarNavigation';
@@ -14,6 +14,16 @@ import { CalendarPageView } from './Calendar/CalendarPageView';
 import type { CalendarViewMode } from './Calendar/utils';
 
 type ViewMode = CalendarViewMode;
+
+const VALID_CALENDAR_VIEW_MODES = new Set<CalendarViewMode>(VIEW_OPTIONS.map(option => option.key));
+
+function readStoredCalendarView(): CalendarViewMode | null {
+  if (typeof window === 'undefined') return null;
+  const stored = window.localStorage.getItem('user_prefs_calendar_view');
+  return stored && VALID_CALENDAR_VIEW_MODES.has(stored as CalendarViewMode)
+    ? stored as CalendarViewMode
+    : null;
+}
 
 interface CalendarPageProps {
   currentUserId?: string | null;
@@ -43,10 +53,7 @@ export function CalendarPage({
   const { prefs, updatePrefs, loading: prefsLoading } = useUserPreferences();
   const [meetings, setMeetings] = useState<MeetingData[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    const p = localStorage.getItem('user_prefs_calendar_view') as ViewMode | null;
-    return p ?? 'week';
-  });
+  const [viewMode, setViewMode] = useState<ViewMode>(() => readStoredCalendarView() ?? 'week');
   const [showViewDropdown, setShowViewDropdown] = useState(false);
   const [currentJy, setCurrentJy] = useState(0);
   const [currentJm, setCurrentJm] = useState(0);
@@ -210,19 +217,32 @@ export function CalendarPage({
     if (showSearch && searchInputRef.current) searchInputRef.current.focus();
   }, [showSearch]);
 
-  // Apply user's default calendar view preference (once, after preferences finish loading)
+  // Apply the DB default only when the user does not already have a valid explicit
+  // calendar view selection. This prevents late preference hydration from overwriting
+  // toolbar choices such as 3-day / 4-day / week.
   const prefViewApplied = useRef(false);
   useEffect(() => {
     if (prefsLoading || prefViewApplied.current) return;
-    if (!prefs.default_calendar_view) return;
     prefViewApplied.current = true;
-    const map: Record<string, ViewMode> = { month: 'month', week: 'week', day: 'day', list: 'list-month' };
-    const mapped = map[prefs.default_calendar_view];
+
+    const stored = readStoredCalendarView();
+    if (stored) {
+      if (stored !== viewMode) setViewMode(stored);
+      return;
+    }
+
+    const map: Partial<Record<string, ViewMode>> = {
+      month: 'month',
+      week: 'week',
+      day: 'day',
+      list: 'schedule',
+    };
+    const mapped = prefs.default_calendar_view ? map[prefs.default_calendar_view] : undefined;
     if (mapped) {
       setViewMode(mapped);
-      localStorage.setItem('user_prefs_calendar_view', mapped);
+      window.localStorage.setItem('user_prefs_calendar_view', mapped);
     }
-  }, [prefsLoading, prefs.default_calendar_view]);
+  }, [prefsLoading, prefs.default_calendar_view, viewMode]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
