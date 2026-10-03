@@ -445,6 +445,8 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
             hideOffHours={hideOffHours}
             setHideOffHours={setHideOffHours}
             updatePrefs={updatePrefs}
+            slotHeight={slotHeight}
+            adjustSlotHeight={adjustSlotHeight}
           />
 
           {/* View */}

@@ -28,14 +28,8 @@ function detectCompactCalendarLayout(): boolean {
   return narrowViewport || (coarsePointer && shortDeviceSide <= 900);
 }
 
-function dispatchCalendarZoom(delta: number) {
-  window.dispatchEvent(new CustomEvent('spark-calendar-zoom', { detail: { delta } }));
-}
-
-function dispatchCalendarDensity(density: Density) {
-  const slotHeight = density === 'compact' ? 24 : density === 'comfortable' ? 36 : 44;
-  localStorage.setItem('spark_calendar_density', density);
-  window.dispatchEvent(new CustomEvent('spark-calendar-density', { detail: { density, slotHeight } }));
+function densitySlotHeight(density: Density): number {
+  return density === 'compact' ? 24 : density === 'comfortable' ? 36 : 44;
 }
 
 export function CalendarToolbar(props: {
@@ -68,6 +62,8 @@ export function CalendarToolbar(props: {
   hideOffHours: boolean;
   setHideOffHours: React.Dispatch<React.SetStateAction<boolean>>;
   updatePrefs: (p: Record<string, unknown>) => void;
+  slotHeight: number;
+  adjustSlotHeight: (delta: number) => void;
 }) {
   const {
     showMobileSidebar, setShowMobileSidebar,
@@ -90,6 +86,7 @@ export function CalendarToolbar(props: {
     canHideOffHours, prefsHideOffhours,
     hideOffHours, setHideOffHours,
     updatePrefs,
+    slotHeight, adjustSlotHeight,
   } = props;
 
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -109,6 +106,14 @@ export function CalendarToolbar(props: {
       window.removeEventListener('resize', sync);
       window.removeEventListener('orientationchange', sync);
     };
+  }, []);
+
+  useEffect(() => {
+    const target = densitySlotHeight(density);
+    if (slotHeight !== target) adjustSlotHeight(target - slotHeight);
+    // Apply a persisted density once when this toolbar instance mounts.
+    // Subsequent changes are applied directly by the density buttons below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -288,10 +293,10 @@ export function CalendarToolbar(props: {
   const appearanceControl = (
     <div className="relative flex-shrink-0">
       <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
-        <button type="button" onClick={() => dispatchCalendarZoom(-4)} className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" title="کوچک‌نمایی" aria-label="کوچک‌نمایی تقویم">
+        <button type="button" onClick={() => adjustSlotHeight(-4)} className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" title="کوچک‌نمایی" aria-label="کوچک‌نمایی تقویم">
           <ZoomOut className="h-3.5 w-3.5" />
         </button>
-        <button type="button" onClick={() => dispatchCalendarZoom(4)} className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" title="بزرگ‌نمایی" aria-label="بزرگ‌نمایی تقویم">
+        <button type="button" onClick={() => adjustSlotHeight(4)} className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" title="بزرگ‌نمایی" aria-label="بزرگ‌نمایی تقویم">
           <ZoomIn className="h-3.5 w-3.5" />
         </button>
         {!compactToolbar && (
@@ -313,7 +318,9 @@ export function CalendarToolbar(props: {
               type="button"
               onClick={() => {
                 setDensity(key);
-                dispatchCalendarDensity(key);
+                localStorage.setItem('spark_calendar_density', key);
+                const target = densitySlotHeight(key);
+                if (slotHeight !== target) adjustSlotHeight(target - slotHeight);
                 setShowAppearance(false);
               }}
               className={`w-full rounded-lg px-2 py-1.5 text-right transition-colors ${density === key ? 'bg-violet-50 dark:bg-violet-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800'}`}
@@ -344,7 +351,7 @@ export function CalendarToolbar(props: {
     return (
       <div
         ref={toolbarRef}
-        className="relative flex flex-shrink-0 flex-col overflow-visible border-b border-slate-200/80 bg-white/95 px-1.5 py-1 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
+        className="relative z-[140] flex flex-shrink-0 flex-col overflow-visible border-b border-slate-200/80 bg-white/95 px-1.5 py-1 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
       >
         <div className="flex min-w-0 items-center gap-1">
           {calendarSidebarButton}
@@ -368,7 +375,7 @@ export function CalendarToolbar(props: {
   return (
     <div
       ref={toolbarRef}
-      className="relative flex min-h-[42px] flex-shrink-0 items-center gap-1.5 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-1.5 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
+      className="relative z-[140] flex min-h-[42px] flex-shrink-0 items-center gap-1.5 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-1.5 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
     >
       {calendarSidebarButton}
       {todayButton}
