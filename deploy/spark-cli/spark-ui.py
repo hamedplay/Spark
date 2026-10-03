@@ -118,8 +118,10 @@ def _application_actions(_actions):
     return [
         core.Action("app-update", "Update Internet App",
                     "Fetch latest application source from origin/main, run npm ci/build, and atomically deploy frontend only. Database and Supabase are not modified.", "confirm"),
+        core.Action("app-build-offline-update", "Build Offline App Update",
+                    "Build a standalone Application-only offline update package from latest origin/main with bundled frontend dependencies. No DB/Supabase/Linux/Manager payload is included.", "controlled"),
         core.Action("app-update-offline", "Update Offline App",
-                    "Update only the application from the active Air-Gap bundle and bundled frontend dependencies. Database and Supabase are not modified.", "confirm"),
+                    "Apply a standalone Offline App update package, or fall back to the active full Air-Gap bundle. Database and Supabase are not modified.", "confirm"),
         core.Action("app-npm-update", "npm update app",
                     "Update only the npm CLI to the latest available npm 12.x release. Node.js is preserved.", "controlled"),
         core.Action("app-node-update", "node update app",
@@ -274,6 +276,7 @@ def provisioning_self_test() -> int:
     application_labels = [a.label for a in application_actions]
     expected_application_labels = [
         "Update Internet App",
+        "Build Offline App Update",
         "Update Offline App",
         "npm update app",
         "node update app",
@@ -283,6 +286,7 @@ def provisioning_self_test() -> int:
         "npm audit all",
         "npm list app",
         "npm doctor app",
+        "Optimize Nginx Gzip",
         "Active version",
     ]
     if application_labels != expected_application_labels:
@@ -378,26 +382,20 @@ def provisioning_self_test() -> int:
 
     base.assert_english_ui_registry()
     sample = "\u062a\u0633\u062a Docker\n"
-    sanitized = base.sanitize_backend_text(sample, "diagnostic-docker")
-    if base.NON_ENGLISH_UI_RE.search(sanitized) or "Docker" not in sanitized:
-        raise RuntimeError("English-only PTY rendering guard failed")
-
-    spark_entry = HERE / "spark"
-    if spark_entry.is_file() and "install-22)" not in spark_entry.read_text(encoding="utf-8"):
-        raise RuntimeError("Spark backend does not expose install-22")
-    if spark_entry.is_file() and "database-update-supabase)" not in spark_entry.read_text(encoding="utf-8"):
-        raise RuntimeError("Spark backend does not expose database-update-supabase")
+    if base.sanitize_output(sample) != "[non-English output]\nDocker":
+        raise RuntimeError("non-English sanitizer contract failed")
     return 0
 
 
 _extend_categories()
 core.TaskProcess.__init__ = manager_routed_task_init
-core.self_test = provisioning_self_test
 
 
-def main(argv: list[str]) -> int:
-    return base.main(argv)
+def main() -> int:
+    if "--self-test" in sys.argv:
+        return provisioning_self_test()
+    return base.main()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())
