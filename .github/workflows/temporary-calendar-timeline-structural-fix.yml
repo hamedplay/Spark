@@ -1,0 +1,72 @@
+name: Temporary calendar timeline structural fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/temporary-calendar-timeline-structural-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Move current-day timeline into the day event stacking context
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/Calendar/MultiDayView.tsx')
+          text = path.read_text()
+
+          start = text.index('function renderCurrentTime(\n')
+          end = text.index('function renderCurrentTimeRailLabel(', start)
+          old_block = text[start:end]
+          new_block = '''function renderCurrentTime(\n  p: CalendarViewProps,\n  days: Array<{ jy: number; jm: number; jd: number; weekday: number }>,\n  dayCount: number,\n) {\n  if (!days.some(d => p.isToday(d.jy, d.jm, d.jd))) return null;\n\n  const nowMin = p.currentTime.getHours() * 60 + p.currentTime.getMinutes();\n  const top = (nowMin / 30) * p.slotHeight;\n\n  // Background guide across the whole time grid. The strong current-day marker\n  // is rendered inside the day column so it shares the meeting stacking context.\n  return (\n    <div\n      className="pointer-events-none absolute left-0 right-0"\n      style={{ top: `${top}px`, zIndex: 5 }}\n      aria-hidden="true"\n    >\n      <div className="absolute left-0 right-0 h-[2px] -translate-y-1/2 bg-rose-400/55 shadow-[0_0_6px_rgba(244,63,94,0.24)] dark:bg-rose-500/45" />\n    </div>\n  );\n}\n\nfunction renderCurrentTimeDayOverlay(\n  p: CalendarViewProps,\n  day: { jy: number; jm: number; jd: number; weekday: number },\n) {\n  if (!p.isToday(day.jy, day.jm, day.jd)) return null;\n\n  const nowMin = p.currentTime.getHours() * 60 + p.currentTime.getMinutes();\n  const top = (nowMin / 30) * p.slotHeight;\n\n  return (\n    <div\n      className="pointer-events-none absolute left-0 right-0"\n      style={{ top: `${top}px`, zIndex: 1000 }}\n      aria-hidden="true"\n    >\n      <div className="absolute left-0 right-0 h-[3px] -translate-y-1/2 bg-rose-500 shadow-[0_0_0_1px_rgba(255,255,255,0.8),0_0_10px_rgba(244,63,94,0.55)] dark:bg-rose-400 dark:shadow-[0_0_0_1px_rgba(15,23,42,0.85),0_0_10px_rgba(251,113,133,0.6)]" />\n      <div className="absolute -right-1.5 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-rose-500 shadow-[0_0_0_1px_rgba(244,63,94,0.28),0_0_10px_rgba(244,63,94,0.6)] dark:border-slate-950 dark:bg-rose-400" />\n    </div>\n  );\n}\n\n'''
+          text = text[:start] + new_block + text[end:]
+
+          needle = '''                        {renderMeetingsWithOverlap(eventRenderProps, meetings.filter(m => {\n                          if (p.dragMoveMeeting?.id !== m.id) return true;\n                          const originalDate = parseRequestDateToDateStr(m.request_date) || '';\n                          const originalCol = days.findIndex(day => jalaaliToYYYYMMDD(day.jy, day.jm, day.jd) === originalDate);\n                          const targetCol = Math.max(0, Math.min(dayCount - 1, originalCol + p.dragMoveCurrentDeltaDay));\n                          return originalCol === colIdx || targetCol === colIdx;\n                        }), dayCount)}\n'''
+          replacement = needle + '''                        {renderCurrentTimeDayOverlay(p, d)}\n'''
+          if text.count(needle) != 1:
+              raise SystemExit(f'expected one meeting render block, found {text.count(needle)}')
+          text = text.replace(needle, replacement, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Validate structural layering
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'renderCurrentTimeDayOverlay(p, d)' src/components/Calendar/MultiDayView.tsx
+          grep -Fq 'style={{ top: `${top}px`, zIndex: 1000 }}' src/components/Calendar/MultiDayView.tsx
+          grep -Fq 'style={{ top: `${top}px`, zIndex: 5 }}' src/components/Calendar/MultiDayView.tsx
+          grep -Fq 'pointer-events-none absolute left-0 right-0' src/components/Calendar/MultiDayView.tsx
+
+      - name: Build validation
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'spark-automation'
+          git config user.email 'spark-automation@users.noreply.github.com'
+          git add src/components/Calendar/MultiDayView.tsx
+          git commit -m 'fix(calendar): render current timeline inside today column'
+          git push origin HEAD:main
