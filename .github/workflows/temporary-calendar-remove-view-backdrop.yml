@@ -1,0 +1,87 @@
+name: Temporary calendar view backdrop fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/temporary-calendar-remove-view-backdrop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Remove blocking backdrop and use outside-click detection
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          toolbar = Path('src/components/Calendar/CalendarToolbar.tsx')
+          text = toolbar.read_text()
+
+          marker = "  const toolbarRef = useRef<HTMLDivElement | null>(null);\n"
+          replacement = marker + "  const viewControlRef = useRef<HTMLDivElement | null>(null);\n"
+          if text.count(marker) != 1:
+              raise SystemExit(f'toolbar ref marker count: {text.count(marker)}')
+          text = text.replace(marker, replacement, 1)
+
+          effect_marker = "  const iconButton = compactToolbar\n"
+          outside_effect = """  useEffect(() => {\n    if (!showViewDropdown) return;\n\n    const handleOutsidePointerDown = (event: PointerEvent) => {\n      const target = event.target as Node | null;\n      if (target && !viewControlRef.current?.contains(target)) {\n        setShowViewDropdown(false);\n      }\n    };\n\n    document.addEventListener('pointerdown', handleOutsidePointerDown);\n    return () => document.removeEventListener('pointerdown', handleOutsidePointerDown);\n  }, [showViewDropdown, setShowViewDropdown]);\n\n"""
+          if text.count(effect_marker) != 1:
+              raise SystemExit(f'icon marker count: {text.count(effect_marker)}')
+          text = text.replace(effect_marker, outside_effect + effect_marker, 1)
+
+          view_marker = '    <div className="relative z-[1000] flex-shrink-0 pointer-events-auto">\n'
+          view_replacement = '    <div ref={viewControlRef} className="relative z-[1000] flex-shrink-0 pointer-events-auto">\n'
+          if text.count(view_marker) != 1:
+              raise SystemExit(f'view control marker count: {text.count(view_marker)}')
+          text = text.replace(view_marker, view_replacement, 1)
+          toolbar.write_text(text)
+
+          page = Path('src/components/Calendar/CalendarPageView.tsx')
+          page_text = page.read_text()
+          backdrop = '      {showViewDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowViewDropdown(false)} />}\n\n'
+          if page_text.count(backdrop) != 1:
+              raise SystemExit(f'blocking backdrop marker count: {page_text.count(backdrop)}')
+          page_text = page_text.replace(backdrop, '', 1)
+          page.write_text(page_text)
+          PY
+
+      - name: Validate backdrop removal
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Fq '{showViewDropdown && <div className="fixed inset-0 z-40"' src/components/Calendar/CalendarPageView.tsx
+          grep -Fq 'const viewControlRef = useRef<HTMLDivElement | null>(null);' src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq "document.addEventListener('pointerdown', handleOutsidePointerDown);" src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq 'ref={viewControlRef}' src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq 'onClick={() => selectViewMode(v.key)}' src/components/Calendar/CalendarToolbar.tsx
+
+      - name: Build validation
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'spark-automation'
+          git config user.email 'spark-automation@users.noreply.github.com'
+          git add src/components/Calendar/CalendarToolbar.tsx src/components/Calendar/CalendarPageView.tsx
+          git commit -m 'fix(calendar): remove blocking view dropdown backdrop'
+          git push origin HEAD:main
