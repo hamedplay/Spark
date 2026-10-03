@@ -18,43 +18,23 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Patch offline app bundle builder
+      - name: Patch offline app builder and validator
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          p = Path('deploy/spark-cli/lib/application-maintenance.sh')
+          s = p.read_text()
 
-          manager = Path('deploy/spark-cli/lib/spark-manager-airgap')
-          s = manager.read_text()
-          start = s.index('spark_airgap_sync_source_main() {')
-          end = s.index('\n\ndispatch_backend() {', start)
-          new = '''spark_airgap_sync_source_main() {
-  local remote_head shallow
-  [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT} on the connected builder."; return 1; }
-  shallow="$(command git -C "$SPARK_ROOT" rev-parse --is-shallow-repository 2>/dev/null || printf false)"
-  if [[ "$shallow" == "true" ]]; then
-    GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --prune --unshallow origin main || { fail "Unable to unshallow Spark main history."; return 1; }
-  else
-    GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --prune origin main || { fail "Unable to fetch Spark main."; return 1; }
-  fi
-  remote_head="$(command git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)"
-  command git -C "$SPARK_ROOT" rev-list --objects "$remote_head" >/dev/null || { fail "Spark main history is incomplete on the connected builder."; return 1; }
-  printf '%s\n' "$remote_head"
-}'''
-          manager.write_text(s[:start] + new + s[end:])
-
-          app = Path('deploy/spark-cli/lib/application-maintenance.sh')
-          s = app.read_text()
-
-          old_decl = '''  local target_sha short stage work root output partial created source_ref
+          old = '''  local target_sha short stage work root output partial created source_ref
   local arch node_version npm_version node_pkg_version node_deb npm_tgz
   run_logged "Fetch latest application source from origin/main" \\
     git -C "$SPARK_ROOT" fetch --prune origin main || return 1
   target_sha="$(git -C "$SPARK_ROOT" rev-parse refs/remotes/origin/main)" || return 1
   [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve latest origin/main commit."; return 1; }
 '''
-          new_decl = '''  local target_sha short stage work root output partial created source_ref
+          new = '''  local target_sha short stage work root output partial created source_ref
   local arch node_version npm_version node_pkg_version node_deb npm_tgz
   local shallow bundle_repo verify_repo verified_sha
   shallow="$(git -C "$SPARK_ROOT" rev-parse --is-shallow-repository 2>/dev/null || printf false)"
@@ -68,37 +48,41 @@ jobs:
   target_sha="$(git -C "$SPARK_ROOT" rev-parse refs/remotes/origin/main)" || return 1
   [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve latest origin/main commit."; return 1; }
   run_logged "Validate complete application Git history" \\
-    bash -c "git -C '$SPARK_ROOT' rev-list --objects '$target_sha' >/dev/null" || { fail "Application source history is incomplete; refusing to build an offline update."; return 1; }
+    bash -c "git -C '$SPARK_ROOT' rev-list --objects '$target_sha' >/dev/null" || {
+      fail "Application source history is incomplete; refusing to build an Offline App update."
+      return 1
+    }
 '''
-          if s.count(old_decl) != 1:
-              raise SystemExit(f'app fetch block count={s.count(old_decl)}')
-          s = s.replace(old_decl, new_decl, 1)
+          if s.count(old) != 1:
+              raise SystemExit(f'fetch block count={s.count(old)}')
+          s = s.replace(old, new, 1)
 
-          if s.count('  source_ref="refs/remotes/origin/main"\n') != 1:
-              raise SystemExit('source_ref marker not unique')
-          s = s.replace('  source_ref="refs/remotes/origin/main"\n', '  source_ref="refs/heads/main"\n', 1)
+          marker = '  source_ref="refs/remotes/origin/main"\n'
+          if s.count(marker) != 1:
+              raise SystemExit(f'source ref count={s.count(marker)}')
+          s = s.replace(marker, '  source_ref="refs/heads/main"\n', 1)
 
-          old_cleanup = '''  cleanup_build_offline_app_update() {
+          old = '''  cleanup_build_offline_app_update() {
     git -C "$SPARK_ROOT" worktree remove --force "$stage" >/dev/null 2>&1 || true
     rm -rf "$stage" "$work" "$partial"
   }
 '''
-          new_cleanup = '''  cleanup_build_offline_app_update() {
+          new = '''  cleanup_build_offline_app_update() {
     git -C "$SPARK_ROOT" worktree remove --force "$stage" >/dev/null 2>&1 || true
     rm -rf "$stage" "$work" "$partial" "${bundle_repo:-}" "${verify_repo:-}"
   }
 '''
-          if s.count(old_cleanup) != 1:
-              raise SystemExit(f'cleanup block count={s.count(old_cleanup)}')
-          s = s.replace(old_cleanup, new_cleanup, 1)
+          if s.count(old) != 1:
+              raise SystemExit(f'cleanup block count={s.count(old)}')
+          s = s.replace(old, new, 1)
 
-          old_bundle = '''  run_logged "Create application source Git bundle" \\
+          old = '''  run_logged "Create application source Git bundle" \\
     git -C "$SPARK_ROOT" bundle create "$root/sources/spark.git.bundle" "$source_ref" || return 1
   run_logged "Package frontend dependencies for offline build" \\
     tar -C "$stage" -czf "$root/npm/frontend-node-modules.tar.gz" node_modules || return 1
 '''
-          new_bundle = '''  bundle_repo="$(mktemp -d /tmp/spark-app-bundle-source.XXXXXX)" || return 1
-  verify_repo="$(mktemp -d /tmp/spark-app-bundle-import.XXXXXX)" || return 1
+          new = '''  bundle_repo="$(mktemp -d /tmp/spark-app-bundle-source.XXXXXX)" || return 1
+  verify_repo="$(mktemp -d /tmp/spark-app-bundle-verify.XXXXXX)" || return 1
   run_logged "Create canonical full-history application bundle source" \\
     git init --bare -q "$bundle_repo" || return 1
   run_logged "Populate full application history for offline bundle" \\
@@ -107,17 +91,20 @@ jobs:
   run_logged "Create full-history application Git bundle" \\
     git -C "$bundle_repo" bundle create "$root/sources/spark.git.bundle" "$source_ref" || return 1
 
-  run_logged "Validate application bundle in an empty repository" \\
+  run_logged "Initialize empty repository for Offline App bundle validation" \\
     git -C "$verify_repo" init -q || return 1
   git -C "$verify_repo" bundle verify "$root/sources/spark.git.bundle" >>"$CURRENT_LOG" 2>&1 || {
-    fail "Generated Offline App Git bundle failed verification."
+    fail "Generated Offline App Git bundle failed bundle verification."
     return 1
   }
-  run_logged "Import generated application bundle into empty repository" \\
+  run_logged "Import generated Offline App bundle into empty repository" \\
     git -C "$verify_repo" fetch "$root/sources/spark.git.bundle" "$source_ref" || return 1
   verified_sha="$(git -C "$verify_repo" rev-parse FETCH_HEAD)" || return 1
-  [[ "$verified_sha" == "$target_sha" ]] || { fail "Generated Offline App bundle revision mismatch."; return 1; }
-  run_logged "Traverse imported Offline App history" \\
+  [[ "$verified_sha" == "$target_sha" ]] || {
+    fail "Generated Offline App bundle revision mismatch."
+    return 1
+  }
+  run_logged "Traverse all reachable objects in generated Offline App bundle" \\
     bash -c "git -C '$verify_repo' rev-list --objects '$verified_sha' >/dev/null" || {
       fail "Generated Offline App bundle is missing reachable Git objects."
       return 1
@@ -126,13 +113,47 @@ jobs:
   run_logged "Package frontend dependencies for offline build" \\
     tar -C "$stage" -czf "$root/npm/frontend-node-modules.tar.gz" node_modules || return 1
 '''
-          if s.count(old_bundle) != 1:
-              raise SystemExit(f'bundle block count={s.count(old_bundle)}')
-          s = s.replace(old_bundle, new_bundle, 1)
-          app.write_text(s)
+          if s.count(old) != 1:
+              raise SystemExit(f'bundle block count={s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          old = '''  if ! git -C "$verify_repo" bundle verify "${root}/sources/spark.git.bundle" >>"$CURRENT_LOG" 2>&1; then
+    rm -rf "$verify_repo"
+    fail "Offline App Git bundle is invalid."
+    return 1
+  fi
+  rm -rf "$verify_repo"
+'''
+          new = '''  if ! git -C "$verify_repo" bundle verify "${root}/sources/spark.git.bundle" >>"$CURRENT_LOG" 2>&1; then
+    rm -rf "$verify_repo"
+    fail "Offline App Git bundle is invalid."
+    return 1
+  fi
+  if ! git -C "$verify_repo" fetch "${root}/sources/spark.git.bundle" "$source_ref" >>"$CURRENT_LOG" 2>&1; then
+    rm -rf "$verify_repo"
+    fail "Offline App Git bundle is incomplete and cannot be imported into an empty repository."
+    return 1
+  fi
+  if [[ "$(git -C "$verify_repo" rev-parse FETCH_HEAD 2>/dev/null || true)" != "$commit" ]]; then
+    rm -rf "$verify_repo"
+    fail "Offline App Git bundle revision does not match its manifest."
+    return 1
+  fi
+  if ! git -C "$verify_repo" rev-list --objects "$commit" >/dev/null 2>>"$CURRENT_LOG"; then
+    rm -rf "$verify_repo"
+    fail "Offline App Git bundle is missing reachable history objects."
+    return 1
+  fi
+  rm -rf "$verify_repo"
+'''
+          if s.count(old) != 1:
+              raise SystemExit(f'validator block count={s.count(old)}')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
           PY
 
-      - name: Validate syntax and contracts
+      - name: Validate syntax and update contracts
         shell: bash
         run: |
           set -euo pipefail
@@ -140,11 +161,11 @@ jobs:
           bash -n deploy/spark-cli/lib/application-maintenance.sh
           ! grep -Fq -- '--depth=1 origin main' deploy/spark-cli/lib/spark-manager-airgap
           grep -Fq -- '--unshallow origin main' deploy/spark-cli/lib/spark-manager-airgap
-          grep -Fq 'Validate application bundle in an empty repository' deploy/spark-cli/lib/application-maintenance.sh
-          grep -Fq 'Traverse imported Offline App history' deploy/spark-cli/lib/application-maintenance.sh
           grep -Fq 'source_ref="refs/heads/main"' deploy/spark-cli/lib/application-maintenance.sh
+          grep -Fq 'Import generated Offline App bundle into empty repository' deploy/spark-cli/lib/application-maintenance.sh
+          grep -Fq 'Offline App Git bundle is incomplete and cannot be imported into an empty repository.' deploy/spark-cli/lib/application-maintenance.sh
 
-      - name: Regression test shallow history to self-contained bundle
+      - name: Regression test self-contained Git bundle
         shell: bash
         run: |
           set -euo pipefail
@@ -158,32 +179,30 @@ jobs:
             git -C "$work/origin" add history.txt
             git -C "$work/origin" commit -qm "c$n"
           done
-          git clone -q --depth=1 "file://$work/origin" "$work/shallow"
-          test "$(git -C "$work/shallow" rev-parse --is-shallow-repository)" = true
-          git -C "$work/shallow" fetch -q --unshallow origin master
-          head="$(git -C "$work/shallow" rev-parse origin/master)"
-          bare="$work/bare"; verify="$work/verify"; bundle="$work/app.bundle"
-          git init --bare -q "$bare"
-          git -C "$bare" fetch -q "$work/shallow" "$head"
-          git -C "$bare" update-ref refs/heads/main "$head"
-          git -C "$bare" bundle create "$bundle" refs/heads/main
-          git init -q "$verify"
-          git -C "$verify" bundle verify "$bundle" >/dev/null
-          git -C "$verify" fetch -q "$bundle" refs/heads/main
-          imported="$(git -C "$verify" rev-parse FETCH_HEAD)"
-          test "$imported" = "$head"
-          test "$(git -C "$verify" rev-list --count "$imported")" -eq 4
-          git -C "$verify" rev-list --objects "$imported" >/dev/null
+          git clone -q --depth=1 "file://$work/origin" "$work/source"
+          test "$(git -C "$work/source" rev-parse --is-shallow-repository)" = true
+          git -C "$work/source" fetch -q --unshallow origin master
+          target="$(git -C "$work/source" rev-parse origin/master)"
+          git init --bare -q "$work/bare"
+          git -C "$work/bare" fetch -q "$work/source" "$target"
+          git -C "$work/bare" update-ref refs/heads/main "$target"
+          git -C "$work/bare" bundle create "$work/app.bundle" refs/heads/main
+          git init -q "$work/verify"
+          git -C "$work/verify" bundle verify "$work/app.bundle" >/dev/null
+          git -C "$work/verify" fetch -q "$work/app.bundle" refs/heads/main
+          test "$(git -C "$work/verify" rev-parse FETCH_HEAD)" = "$target"
+          test "$(git -C "$work/verify" rev-list --count FETCH_HEAD)" -eq 4
+          git -C "$work/verify" rev-list --objects FETCH_HEAD >/dev/null
 
-      - name: Build validation
+      - name: Build application
         run: |
           npm ci --no-audit --no-fund
           npm run build
 
-      - name: Commit fix
+      - name: Commit implementation
         run: |
           git config user.name spark-automation
           git config user.email spark-automation@users.noreply.github.com
-          git add deploy/spark-cli/lib/spark-manager-airgap deploy/spark-cli/lib/application-maintenance.sh
-          git commit -m 'fix(manager): build self-contained offline app git bundle'
+          git add deploy/spark-cli/lib/application-maintenance.sh
+          git commit -m 'fix(manager): make offline app update package self-contained'
           git push origin HEAD:main
