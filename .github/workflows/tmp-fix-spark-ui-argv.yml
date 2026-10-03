@@ -23,17 +23,42 @@ jobs:
           from pathlib import Path
           p = Path('deploy/spark-cli/spark-ui.py')
           s = p.read_text(encoding='utf-8')
-          old = '    return base.main()\n'
-          new = '    return base.main(sys.argv[1:])\n'
-          if old not in s:
-              raise SystemExit('expected base.main() call not found')
-          if s.count(old) != 1:
-              raise SystemExit(f'unexpected base.main() occurrence count: {s.count(old)}')
-          p.write_text(s.replace(old, new), encoding='utf-8')
+
+          replacements = {
+              '    return base.main()\n': '    return base.main(sys.argv[1:])\n',
+              '    if base.sanitize_output(sample) != "[non-English output]\\nDocker":\n': '    if base.sanitize_backend_text(sample) != "[Legacy backend message sanitized] Docker\\n":\n',
+          }
+          for old, new in replacements.items():
+              if old not in s:
+                  raise SystemExit(f'expected text not found: {old!r}')
+              if s.count(old) != 1:
+                  raise SystemExit(f'unexpected occurrence count for {old!r}: {s.count(old)}')
+              s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8')
           PY
-          python3 -m py_compile deploy/spark-cli/spark-ui.py
+
+          python3 -m py_compile deploy/spark-cli/spark-ui.py deploy/spark-cli/spark-ui-base.py deploy/spark-cli/spark-ui-core.py
           python3 deploy/spark-cli/spark-ui.py --self-test
           grep -Fq 'return base.main(sys.argv[1:])' deploy/spark-cli/spark-ui.py
+          grep -Fq 'base.sanitize_backend_text(sample)' deploy/spark-cli/spark-ui.py
+
+          python3 - <<'PY'
+          import importlib.util
+          import sys
+          from pathlib import Path
+          p = Path('deploy/spark-cli/spark-ui.py').resolve()
+          old_argv = sys.argv[:]
+          sys.argv = [str(p), '--self-test']
+          try:
+              spec = importlib.util.spec_from_file_location('spark_ui_wrapper_validation', p)
+              mod = importlib.util.module_from_spec(spec)
+              assert spec.loader is not None
+              spec.loader.exec_module(mod)
+              assert mod.main() == 0
+          finally:
+              sys.argv = old_argv
+          PY
+
       - name: Commit fix and remove temporary workflow
         shell: bash
         run: |
@@ -42,5 +67,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git rm .github/workflows/tmp-fix-spark-ui-argv.yml
           git add deploy/spark-cli/spark-ui.py
-          git commit -m 'fix: pass CLI arguments to Spark UI base'
+          git commit -m 'fix: repair Spark UI wrapper compatibility'
           git push origin HEAD:main
