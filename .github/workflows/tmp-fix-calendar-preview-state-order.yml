@@ -1,0 +1,67 @@
+name: Temporary calendar preview state-order fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-calendar-preview-state-order.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Apply scoped patch
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('src/components/CalendarPageCore.tsx')
+          text = path.read_text()
+          decl = """  // Hover/click preview popup for day/week blocks\n  const [previewMeeting, setPreviewMeeting] = useState<MeetingData | null>(null);\n  const [previewPos, setPreviewPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });\n  const previewRef = useRef<HTMLDivElement | null>(null);\n\n"""
+          if text.count(decl) != 1:
+              raise SystemExit('preview state declaration block not found exactly once')
+          text = text.replace(decl, '', 1)
+          anchor = """  const [detailMeeting, setDetailMeeting] = useState<MeetingData | null>(null);\n\n"""
+          if text.count(anchor) != 1:
+              raise SystemExit('detailMeeting anchor not found exactly once')
+          text = text.replace(anchor, anchor + decl, 1)
+          path.write_text(text)
+
+      - name: Verify scoped diff
+        run: |
+          git diff --check
+          test "$(git diff --name-only | wc -l)" -eq 1
+          test "$(git diff --name-only)" = "src/components/CalendarPageCore.tsx"
+          python - <<'PY'
+          from pathlib import Path
+          t = Path('src/components/CalendarPageCore.tsx').read_text()
+          assert t.index('const [previewMeeting') < t.index('previewMeeting !== null')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build validation
+        run: npm run build
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name 'spark-automation'
+          git config user.email 'spark-automation@users.noreply.github.com'
+          rm .github/workflows/tmp-fix-calendar-preview-state-order.yml
+          git add src/components/CalendarPageCore.tsx .github/workflows/tmp-fix-calendar-preview-state-order.yml
+          git commit -m 'fix(calendar): initialize preview state before lazy user loading'
+          git push origin main
