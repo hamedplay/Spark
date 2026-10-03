@@ -8,7 +8,7 @@
 SPARK_APP_STATE_FILE="${STATE_DIR}/application-active.env"
 SPARK_AIRGAP_HOME="${AIRGAP_HOME:-/opt/spark-airgap}"
 SPARK_AIRGAP_CURRENT="${SPARK_AIRGAP_HOME}/current"
-SPARK_APP_OFFLINE_UPDATE_DIR="/var/backups/spark/application-updates"
+SPARK_APP_OFFLINE_UPDATE_DIR="${SPARK_APP_OFFLINE_UPDATE_DIR:-/var/backups/spark/application-updates}"
 
 application_record_active_version() {
   local mode="$1" commit="$2"
@@ -93,7 +93,7 @@ application_offline_update_meta() {
 }
 
 application_validate_offline_update_bundle() {
-  local root="$1" format type commit source_ref
+  local root="$1" format type commit source_ref arch node_version npm_version node_package npm_package
   [[ -d "$root" ]] || { fail "Offline App update directory not found: $root"; return 1; }
   [[ -f "${root}/metadata/manifest.env" ]] || { fail "Offline App update manifest is missing."; return 1; }
   [[ -f "${root}/sources/spark.git.bundle" ]] || { fail "Offline App source bundle is missing."; return 1; }
@@ -104,12 +104,26 @@ application_validate_offline_update_bundle() {
   type="$(application_offline_update_meta "$root" TYPE)"
   commit="$(application_offline_update_meta "$root" SPARK_COMMIT)"
   source_ref="$(application_offline_update_meta "$root" SOURCE_REF)"
-  [[ "$format" == "1" && "$type" == "application-update" ]] || {
-    fail "Unsupported Offline App update format."
+  arch="$(application_offline_update_meta "$root" ARCH)"
+  node_version="$(application_offline_update_meta "$root" NODE_VERSION)"
+  npm_version="$(application_offline_update_meta "$root" NPM_VERSION)"
+  node_package="$(application_offline_update_meta "$root" NODE_PACKAGE)"
+  npm_package="$(application_offline_update_meta "$root" NPM_PACKAGE)"
+
+  [[ "$format" == "2" && "$type" == "application-update" ]] || {
+    fail "Unsupported Offline App update format. Expected runtime-complete format v2."
     return 1
   }
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { fail "Offline App SPARK_COMMIT is invalid."; return 1; }
   [[ -n "$source_ref" ]] || { fail "Offline App SOURCE_REF is missing."; return 1; }
+  [[ -n "$arch" && "$arch" == "$(dpkg --print-architecture)" ]] || {
+    fail "Offline App architecture mismatch: package=${arch:-unknown} host=$(dpkg --print-architecture)."
+    return 1
+  }
+  [[ "$node_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { fail "Offline App NODE_VERSION is invalid."; return 1; }
+  [[ "$npm_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-].*)?$ ]] || { fail "Offline App NPM_VERSION is invalid."; return 1; }
+  [[ -n "$node_package" && -f "${root}/runtime/node/${node_package}" ]] || { fail "Offline App Node.js package is missing."; return 1; }
+  [[ -n "$npm_package" && -f "${root}/runtime/npm/${npm_package}" ]] || { fail "Offline App npm package is missing."; return 1; }
 
   run_logged "Verify Offline App update integrity" \
     bash -c "cd '$root' && sha256sum --quiet -c SHA256SUMS" || return 1
@@ -119,21 +133,69 @@ application_validate_offline_update_bundle() {
   }
 }
 
+application_install_offline_runtime() {
+  local root="$1" node_version npm_version node_package npm_package node_deb npm_tgz
+  node_version="$(application_offline_update_meta "$root" NODE_VERSION)"
+  npm_version="$(application_offline_update_meta "$root" NPM_VERSION)"
+  node_package="$(application_offline_update_meta "$root" NODE_PACKAGE)"
+  npm_package="$(application_offline_update_meta "$root" NPM_PACKAGE)"
+  node_deb="${root}/runtime/node/${node_package}"
+  npm_tgz="${root}/runtime/npm/${npm_package}"
+
+  run_logged "Install bundled Node.js ${node_version}" dpkg -i "$node_deb" || {
+    fail "Bundled Node.js package installation failed. No network repair is attempted in Offline App mode."
+    return 1
+  }
+  [[ "$(node --version 2>/dev/null || true)" == "v${node_version}" ]] || {
+    fail "Node.js version verification failed after offline install: expected=v${node_version} actual=$(node --version 2>/dev/null || printf unavailable)"
+    return 1
+  }
+
+  run_logged "Install bundled npm ${npm_version}" \
+    npm install -g "$npm_tgz" --offline --no-audit --no-fund || return 1
+  [[ "$(npm --version 2>/dev/null || true)" == "$npm_version" ]] || {
+    fail "npm version verification failed after offline install: expected=${npm_version} actual=$(npm --version 2>/dev/null || printf unavailable)"
+    return 1
+  }
+}
+
 application_build_offline_update() (
   title
   new_log "build-offline-app-update"
 
   command -v git >/dev/null 2>&1 || { fail "git is not installed."; return 1; }
+  command -v node >/dev/null 2>&1 || { fail "Node.js is not installed."; return 1; }
   command -v npm >/dev/null 2>&1 || { fail "npm is not installed."; return 1; }
   command -v tar >/dev/null 2>&1 || { fail "tar is not installed."; return 1; }
   command -v sha256sum >/dev/null 2>&1 || { fail "sha256sum is not installed."; return 1; }
+  command -v dpkg >/dev/null 2>&1 || { fail "dpkg is not installed."; return 1; }
+  command -v apt-get >/dev/null 2>&1 || { fail "apt-get is not installed."; return 1; }
   [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository not found: ${SPARK_ROOT}"; return 1; }
 
   local target_sha short stage work root output partial created source_ref
+  local arch node_version npm_version node_pkg_version node_deb npm_tgz
   run_logged "Fetch latest application source from origin/main" \
     git -C "$SPARK_ROOT" fetch --prune origin main || return 1
   target_sha="$(git -C "$SPARK_ROOT" rev-parse refs/remotes/origin/main)" || return 1
   [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve latest origin/main commit."; return 1; }
+
+  arch="$(dpkg --print-architecture)"
+  node_version="$(node --version | sed 's/^v//')"
+  npm_version="$(npm --version)"
+  node_pkg_version="$(dpkg-query -W -f='${Version}' nodejs 2>/dev/null || true)"
+  [[ "$node_version" =~ ^24\.[0-9]+\.[0-9]+$ ]] || {
+    fail "Offline App builder requires the supported Node 24.x runtime; active Node.js is v${node_version}."
+    return 1
+  }
+  [[ "$npm_version" =~ ^12\.[0-9]+\.[0-9]+([+-].*)?$ ]] || {
+    fail "Offline App builder requires the supported npm 12.x runtime; active npm is ${npm_version}."
+    return 1
+  }
+  [[ -n "$node_pkg_version" ]] || {
+    fail "Active Node.js is not backed by the Debian nodejs package; exact offline runtime packaging is unavailable."
+    return 1
+  }
+
   short="${target_sha:0:12}"
   source_ref="refs/remotes/origin/main"
   stage="/opt/spark-app-update-build-${short}-$$"
@@ -149,7 +211,8 @@ application_build_offline_update() (
   trap cleanup_build_offline_app_update EXIT
 
   rm -rf "$stage"
-  mkdir -p "$root/metadata" "$root/sources" "$root/npm" "$SPARK_APP_OFFLINE_UPDATE_DIR"
+  mkdir -p "$root/metadata" "$root/sources" "$root/npm" \
+    "$root/runtime/node" "$root/runtime/npm" "$SPARK_APP_OFFLINE_UPDATE_DIR"
   chmod 0700 "$SPARK_APP_OFFLINE_UPDATE_DIR"
 
   run_logged "Create application update staging worktree" \
@@ -164,26 +227,55 @@ application_build_offline_update() (
   run_logged "Package frontend dependencies for offline build" \
     tar -C "$stage" -czf "$root/npm/frontend-node-modules.tar.gz" node_modules || return 1
 
+  run_logged "Download exact active Node.js Debian package" \
+    bash -c "cd '$root/runtime/node' && apt-get download 'nodejs=${node_pkg_version}'" || {
+      fail "Unable to download the exact active Node.js package (${node_pkg_version}). Refresh/configure the NodeSource repository, then retry."
+      return 1
+    }
+  node_deb="$(find "$root/runtime/node" -maxdepth 1 -type f -name 'nodejs_*.deb' -print -quit)"
+  [[ -f "$node_deb" ]] || { fail "Downloaded Node.js .deb was not found."; return 1; }
+
+  run_logged "Package exact active npm release" \
+    npm pack "npm@${npm_version}" --pack-destination "$root/runtime/npm" >/dev/null || return 1
+  npm_tgz="$(find "$root/runtime/npm" -maxdepth 1 -type f -name 'npm-*.tgz' -print -quit)"
+  [[ -f "$npm_tgz" ]] || { fail "Packed npm archive was not found."; return 1; }
+
   created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   cat >"$root/metadata/manifest.env" <<EOF_APP_UPDATE
-FORMAT_VERSION=1
+FORMAT_VERSION=2
 TYPE=application-update
 SPARK_COMMIT=$target_sha
 SOURCE_REF=$source_ref
 CREATED_AT=$created
+ARCH=$arch
+NODE_VERSION=$node_version
+NODE_DEB_VERSION=$node_pkg_version
+NPM_VERSION=$npm_version
+NODE_PACKAGE=$(basename "$node_deb")
+NPM_PACKAGE=$(basename "$npm_tgz")
 EOF_APP_UPDATE
 
   (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS) || return 1
-  run_logged "Create standalone Offline App update archive" \
+  run_logged "Create runtime-complete Offline App update archive" \
     tar -C "$work" -czf "$partial" "$(basename "$root")" || return 1
   chmod 0600 "$partial"
   mv -f "$partial" "$output" || return 1
 
-  ok "Offline App update package created."
-  printf 'Application commit : %s\n' "$target_sha"
-  printf 'Output             : %s\n' "$output"
-  printf 'Scope              : Application only; no DB/Supabase/Linux/Manager update\n'
-  printf 'Log                : %s\n' "$CURRENT_LOG"
+  ok "Runtime-complete Offline App update package created."
+  printf 'Application commit : %s
+' "$target_sha"
+  printf 'Node.js            : v%s (%s)
+' "$node_version" "$node_pkg_version"
+  printf 'npm                : %s
+' "$npm_version"
+  printf 'Architecture       : %s
+' "$arch"
+  printf 'Output             : %s
+' "$output"
+  printf 'Scope              : App source + Node.js + npm + build dependencies; no DB/Supabase/Linux/Manager update
+'
+  printf 'Log                : %s
+' "$CURRENT_LOG"
 )
 
 application_update_offline() (
@@ -199,7 +291,8 @@ application_update_offline() (
   fi
 
   local input extract_root root bundle node_archive target_sha old_sha fetched_sha stage source_ref
-  local source_advanced=0 update_success=0 standalone=0
+  local modules_next modules_prev node_expected npm_expected standalone_format
+  local source_advanced=0 modules_switched=0 update_success=0 standalone=0
   read -r -p "Offline App update .tar.gz/directory (Enter = active full Air-Gap bundle): " input
 
   if [[ -n "$input" ]]; then
@@ -218,10 +311,12 @@ application_update_offline() (
     application_validate_offline_update_bundle "$root" || { [[ -z "$extract_root" ]] || rm -rf "$extract_root"; return 1; }
     source_ref="$(application_offline_update_meta "$root" SOURCE_REF)"
     target_sha="$(application_offline_update_meta "$root" SPARK_COMMIT)"
+    standalone_format="$(application_offline_update_meta "$root" FORMAT_VERSION)"
   else
     root="$(application_active_airgap_root)" || return 1
     source_ref="main"
     target_sha="$(application_airgap_meta "$root" SPARK_COMMIT)"
+    standalone_format="0"
   fi
 
   bundle="${root}/sources/spark.git.bundle"
@@ -244,19 +339,41 @@ application_update_offline() (
   fi
 
   stage="/opt/spark-app-offline-${target_sha:0:12}-$$"
-  rm -rf "$stage"
+  modules_next="${SPARK_ROOT}/node_modules.next.$$"
+  modules_prev="${SPARK_ROOT}/node_modules.prev.$$"
+  rm -rf "$stage" "$modules_next" "$modules_prev"
+
   cleanup_offline_app() {
     git -C "$SPARK_ROOT" worktree remove --force "$stage" >/dev/null 2>&1 || true
-    rm -rf "$stage"
+    rm -rf "$stage" "$modules_next"
+    if (( update_success == 1 || modules_switched == 0 )); then
+      rm -rf "$modules_prev"
+    fi
     [[ -z "$extract_root" ]] || rm -rf "$extract_root"
   }
-  rollback_offline_source() {
+  rollback_offline_source_and_modules() {
+    if (( modules_switched == 1 )); then
+      rm -rf "${SPARK_ROOT}/node_modules"
+      [[ -d "$modules_prev" ]] && mv "$modules_prev" "${SPARK_ROOT}/node_modules" || true
+      modules_switched=0
+    fi
     if (( source_advanced == 1 )); then
       git -C "$SPARK_ROOT" reset --hard "$old_sha" >>"$CURRENT_LOG" 2>&1 || true
+      source_advanced=0
     fi
   }
   trap cleanup_offline_app EXIT
-  trap 'rollback_offline_source; exit 130' INT TERM
+  trap 'rollback_offline_source_and_modules; exit 130' INT TERM
+
+  if (( standalone == 1 )) && [[ "$standalone_format" == "2" ]]; then
+    node_expected="$(application_offline_update_meta "$root" NODE_VERSION)"
+    npm_expected="$(application_offline_update_meta "$root" NPM_VERSION)"
+    info "Bundled runtime: Node.js v${node_expected}, npm ${npm_expected}"
+    application_install_offline_runtime "$root" || return 1
+    ok "Bundled Node.js/npm runtime installed and verified"
+  else
+    warn "Legacy full Air-Gap fallback selected; Node.js/npm runtime is not changed by this compatibility path."
+  fi
 
   run_logged "Create offline application staging worktree" \
     git -C "$SPARK_ROOT" worktree add --detach "$stage" "$target_sha" || return 1
@@ -264,10 +381,14 @@ application_update_offline() (
     tar -xzf "$node_archive" -C "$stage" || return 1
   run_logged "Prepare production frontend environment" \
     application_prepare_frontend_env "$stage" || return 1
-  run_logged "Build offline application with npm" \
+  run_logged "Build offline application with bundled dependencies" \
     bash -c "cd '$stage' && npm_config_offline=true npm_config_audit=false npm_config_fund=false npm run build" || return 1
   run_logged "Validate offline application build" \
     application_validate_frontend_build "$stage" || return 1
+
+  mkdir -p "$modules_next"
+  run_logged "Stage bundled application dependencies" \
+    rsync -a --delete "${stage}/node_modules/" "$modules_next/" || return 1
 
   if [[ "$old_sha" != "$target_sha" ]]; then
     run_logged "Fast-forward local application source to offline revision" \
@@ -275,21 +396,46 @@ application_update_offline() (
     source_advanced=1
   fi
 
+  if [[ -d "${SPARK_ROOT}/node_modules" ]]; then
+    mv "${SPARK_ROOT}/node_modules" "$modules_prev" || {
+      rollback_offline_source_and_modules
+      fail "Unable to stage previous application dependencies for rollback."
+      return 1
+    }
+  fi
+  if ! mv "$modules_next" "${SPARK_ROOT}/node_modules"; then
+    [[ -d "$modules_prev" ]] && mv "$modules_prev" "${SPARK_ROOT}/node_modules" || true
+    rollback_offline_source_and_modules
+    fail "Unable to activate bundled application dependencies."
+    return 1
+  fi
+  modules_switched=1
+
   if ! application_activate_dist "$stage"; then
-    rollback_offline_source
+    rollback_offline_source_and_modules
     return 1
   fi
 
   application_record_active_version "offline" "$target_sha"
   update_success=1
-  ok "Offline App update completed. Database, migrations, Supabase runtime, Edge Functions, workers, schedulers and Manager were not changed."
-  printf 'Application commit: %s\n' "$target_sha"
+  rm -rf "$modules_prev"
+  modules_switched=0
+  ok "Offline App update completed with application source, Node.js/npm runtime and build dependencies. Database, migrations, Supabase runtime, Edge Functions, workers, schedulers and Manager were not changed."
+  printf 'Application commit: %s
+' "$target_sha"
+  printf 'Node.js           : %s
+' "$(node --version)"
+  printf 'npm               : %s
+' "$(npm --version)"
   if (( standalone == 1 )); then
-    printf 'Update package    : %s\n' "${input}"
+    printf 'Update package    : %s
+' "${input}"
   else
-    printf 'Air-Gap bundle    : %s\n' "$(basename "$root")"
+    printf 'Air-Gap bundle    : %s
+' "$(basename "$root")"
   fi
-  printf 'Log               : %s\n' "$CURRENT_LOG"
+  printf 'Log               : %s
+' "$CURRENT_LOG"
 )
 
 application_packages_update() (
