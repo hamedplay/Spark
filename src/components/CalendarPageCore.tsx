@@ -11,7 +11,9 @@ import { useCalendarDataActions } from './Calendar/useCalendarDataActions';
 import { useCalendarNavigation } from './Calendar/useCalendarNavigation';
 import { CalendarPageView } from './Calendar/CalendarPageView';
 
-type ViewMode = 'month' | 'week' | 'day' | 'list-week' | 'list-month';
+import type { CalendarViewMode } from './Calendar/utils';
+
+type ViewMode = CalendarViewMode;
 
 interface CalendarPageProps {
   currentUserId?: string | null;

@@ -15,9 +15,10 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { toJalaali, toFarsiDigits } from './utils';
+import type { CalendarViewMode } from './utils';
 import type { MeetingData } from '../types';
 
-interface ViewOption { key: string; label: string; }
+interface ViewOption { key: CalendarViewMode; label: string; }
 type Density = 'responsive' | 'comfortable' | 'compact';
 
 function detectCompactCalendarLayout(): boolean {
@@ -54,8 +55,8 @@ export function CalendarToolbar(props: {
   getNavTitle: () => string;
   showViewDropdown: boolean;
   setShowViewDropdown: React.Dispatch<React.SetStateAction<boolean>>;
-  viewMode: string;
-  setViewMode: React.Dispatch<React.SetStateAction<string>>;
+  viewMode: CalendarViewMode;
+  setViewMode: React.Dispatch<React.SetStateAction<CalendarViewMode>>;
   VIEW_OPTIONS: ViewOption[];
   canHideOffHours: boolean;
   prefsHideOffhours: boolean | undefined;
@@ -257,9 +258,16 @@ export function CalendarToolbar(props: {
     </div>
   );
 
+  const selectViewMode = (nextView: CalendarViewMode) => {
+    setViewMode(nextView);
+    localStorage.setItem('user_prefs_calendar_view', nextView);
+    setShowViewDropdown(false);
+  };
+
   const viewControl = (
-    <div className="relative flex-shrink-0">
+    <div className="relative z-[1000] flex-shrink-0 pointer-events-auto">
       <button
+        type="button"
         onClick={() => setShowViewDropdown(o => !o)}
         className={`${compactToolbar ? 'h-7 min-w-[68px] px-2 text-[11px]' : 'h-8 min-w-[94px] px-2.5 text-xs'} flex items-center justify-between gap-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/15`}
         aria-haspopup="menu"
@@ -269,15 +277,13 @@ export function CalendarToolbar(props: {
         <ChevronDown className="h-3.5 w-3.5" />
       </button>
       {showViewDropdown && (
-        <div className="absolute left-0 top-full z-[120] mt-1 min-w-[160px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_14px_40px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-900" role="menu">
+        <div className="absolute left-0 top-full z-[1100] mt-1 min-w-[160px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_14px_40px_rgba(15,23,42,0.18)] pointer-events-auto dark:border-slate-700 dark:bg-slate-900" role="menu" onPointerDown={e => e.stopPropagation()}>
           {VIEW_OPTIONS.map(v => (
             <button
               key={v.key}
-              onClick={() => {
-                setViewMode(v.key);
-                localStorage.setItem('user_prefs_calendar_view', v.key);
-                setShowViewDropdown(false);
-              }}
+              type="button"
+              onPointerDown={e => { e.preventDefault(); e.stopPropagation(); }}
+              onClick={() => selectViewMode(v.key)}
               className={`flex w-full items-center gap-2 px-3 py-2 text-right text-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${viewMode === v.key ? 'font-bold text-indigo-600 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-200'}`}
               role="menuitem"
             >
