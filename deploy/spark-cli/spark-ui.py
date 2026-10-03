@@ -382,7 +382,7 @@ def provisioning_self_test() -> int:
 
     base.assert_english_ui_registry()
     sample = "\u062a\u0633\u062a Docker\n"
-    if base.sanitize_output(sample) != "[non-English output]\nDocker":
+    if base.sanitize_backend_text(sample) != "[Legacy backend message sanitized] Docker\n":
         raise RuntimeError("non-English sanitizer contract failed")
     return 0
 
@@ -394,7 +394,7 @@ core.TaskProcess.__init__ = manager_routed_task_init
 def main() -> int:
     if "--self-test" in sys.argv:
         return provisioning_self_test()
-    return base.main()
+    return base.main(sys.argv[1:])
 
 
 if __name__ == "__main__":
