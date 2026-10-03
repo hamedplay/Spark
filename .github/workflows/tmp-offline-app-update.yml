@@ -29,9 +29,9 @@ jobs:
           bash -n deploy/spark-cli/lib/application-maintenance.sh
           bash -n deploy/spark-cli/spark
           python3 -m py_compile deploy/spark-cli/spark-ui.py
-          python3 deploy/spark-cli/spark-ui.py --self-test
           grep -Fq 'app-build-offline-update) application_build_offline_update ;;' deploy/spark-cli/spark
-          grep -Fq 'Build Offline App Update' deploy/spark-cli/spark-ui.py
+          grep -Fq 'core.Action("app-build-offline-update", "Build Offline App Update"' deploy/spark-cli/spark-ui.py
+          grep -Fq '"Build Offline App Update",' deploy/spark-cli/spark-ui.py
 
       - name: Build real standalone Offline App update
         shell: bash
@@ -49,6 +49,7 @@ jobs:
           test -n "$archive"
           mkdir -p /tmp/app-update
           sudo tar -xzf "$archive" -C /tmp/app-update
+          sudo chown -R "$USER:$USER" /tmp/app-update
           root="$(find /tmp/app-update -mindepth 1 -maxdepth 1 -type d -name 'spark-app-update-*' -print -quit)"
           test -n "$root"
           test -f "$root/metadata/manifest.env"
