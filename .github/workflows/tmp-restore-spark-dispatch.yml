@@ -1,0 +1,48 @@
+name: Temporary restore Spark dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tmp-restore-spark-dispatch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore healthy entrypoint and add only new dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 22d6b6f7eb646a24776c36ba540bf3375e9634f2:deploy/spark-cli/spark > deploy/spark-cli/spark
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('deploy/spark-cli/spark')
+          text = path.read_text()
+          old = '    app-update) update_spark ;;\n    app-update-offline) application_update_offline ;;'
+          new = '    app-update) update_spark ;;\n    app-build-offline-update) application_build_offline_update ;;\n    app-update-offline) application_update_offline ;;'
+          if old not in text:
+              raise SystemExit('Application dispatch anchor not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          bash -n deploy/spark-cli/spark
+          grep -Fq 'SPARK_MANAGER_VERSION=' deploy/spark-cli/spark
+          grep -Fq 'MANAGER_CONF=' deploy/spark-cli/spark
+          grep -Fq 'app-build-offline-update) application_build_offline_update ;;' deploy/spark-cli/spark
+
+      - name: Commit restored entrypoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "hamedplay"
+          git config user.email "hamedkhaleghi493@gmail.com"
+          git add deploy/spark-cli/spark
+          git commit -m "fix: preserve Manager entrypoint while adding Offline App builder"
+          git push origin HEAD:main
