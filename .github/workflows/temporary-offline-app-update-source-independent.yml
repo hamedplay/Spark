@@ -33,9 +33,16 @@ jobs:
           set -euo pipefail
           bash -n deploy/spark-cli/lib/application-maintenance.sh
           python3 -m py_compile deploy/spark-cli/spark-ui-core.py
-          if grep -Fq '[[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository not found: ${SPARK_ROOT}"' deploy/spark-cli/lib/application-maintenance.sh; then exit 1; fi
-          grep -Fq 'Initialize isolated Offline App staging repository' deploy/spark-cli/lib/application-maintenance.sh
-          grep -Fq 'A local /opt/spark checkout is optional' deploy/spark-cli/lib/application-maintenance.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('deploy/spark-cli/lib/application-maintenance.sh').read_text()
+          start = text.index('application_update_offline() (')
+          end = text.index('\napplication_packages_update() (', start)
+          body = text[start:end]
+          assert 'Spark source repository not found: ${SPARK_ROOT}' not in body
+          assert 'Initialize isolated Offline App staging repository' in body
+          assert 'A local /opt/spark checkout is optional' in body
+          PY
           grep -Fq 'STATE_DIR / "application-active.env"' deploy/spark-cli/spark-ui-core.py
 
       - name: Validate bundle use without source checkout
