@@ -405,7 +405,7 @@ function renderCurrentTime(
 
   return (
     <div
-      className="pointer-events-none absolute left-0 right-0 z-40"
+      className="pointer-events-none absolute left-0 right-0 z-[80]"
       style={{ top: `${top}px` }}
       aria-hidden="true"
     >
