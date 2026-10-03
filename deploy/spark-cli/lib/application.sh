@@ -65,16 +65,20 @@ update_spark() (
   info "Current application source: ${old_sha}"
   info "Target application source : ${target_sha}"
 
+  local source_mode="fast-forward" backup_ref=""
   if ! git -C "$SPARK_ROOT" merge-base --is-ancestor "$old_sha" "$target_sha"; then
-    fail "origin/main is not a fast-forward from the current application source; update stopped."
-    return 1
+    source_mode="authoritative-reset"
+    backup_ref="refs/spark-manager/backups/app-update-$(date -u +%Y%m%dT%H%M%SZ)-${old_sha:0:12}"
+    run_logged "Preserve divergent application source for rollback" git -C "$SPARK_ROOT" update-ref "$backup_ref" "$old_sha" || return 1
+    warn "Local application history diverged from origin/main; clean deployment source will be realigned after build validation."
+    info "Rollback source ref: ${backup_ref}"
   fi
 
   stage="/opt/spark-app-update-${target_sha:0:12}-$$"
-  frontend_next="/var/www/spark.next.$"
-  frontend_prev="/var/www/spark.prev.$"
-  modules_next="${SPARK_ROOT}/node_modules.next.$"
-  modules_prev="${SPARK_ROOT}/node_modules.prev.$"
+  frontend_next="/var/www/spark.next.$$"
+  frontend_prev="/var/www/spark.prev.$$"
+  modules_next="${SPARK_ROOT}/node_modules.next.$$"
+  modules_prev="${SPARK_ROOT}/node_modules.prev.$$"
 
   rollback_application() {
     warn "Rolling back application layer only."
@@ -145,8 +149,11 @@ update_spark() (
   chown -R www-data:www-data "$frontend_next" || return 1
 
   if [[ "$old_sha" != "$target_sha" ]]; then
-    run_logged "Fast-forward application source to origin/main" \
-      git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
+    if [[ "$source_mode" == "fast-forward" ]]; then
+      run_logged "Fast-forward application source to origin/main" git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
+    else
+      run_logged "Realign clean deployment source to authoritative origin/main" git -C "$SPARK_ROOT" reset --hard "$target_sha" || return 1
+    fi
     source_advanced=1
   fi
 
