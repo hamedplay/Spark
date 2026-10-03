@@ -403,16 +403,6 @@ application_update_offline() (
   trap cleanup_offline_app EXIT
   trap 'rollback_offline_source_and_modules; exit 130' INT TERM
 
-  if (( standalone == 1 )) && [[ "$standalone_format" == "2" ]]; then
-    node_expected="$(application_offline_update_meta "$root" NODE_VERSION)"
-    npm_expected="$(application_offline_update_meta "$root" NPM_VERSION)"
-    info "Bundled runtime: Node.js v${node_expected}, npm ${npm_expected}"
-    application_install_offline_runtime "$root" || return 1
-    ok "Bundled Node.js/npm runtime installed and verified"
-  else
-    warn "Legacy full Air-Gap fallback selected; Node.js/npm runtime is not changed by this compatibility path."
-  fi
-
   run_logged "Initialize isolated Offline App staging repository" git init -q "$stage" || return 1
   run_logged "Fetch offline application revision into staging" \
     git -C "$stage" fetch "$bundle" "$source_ref" || return 1
@@ -431,6 +421,16 @@ application_update_offline() (
       fail "Offline application bundle is not a fast-forward from the currently deployed application revision."
       return 1
     fi
+  fi
+
+  if (( standalone == 1 )) && [[ "$standalone_format" == "2" ]]; then
+    node_expected="$(application_offline_update_meta "$root" NODE_VERSION)"
+    npm_expected="$(application_offline_update_meta "$root" NPM_VERSION)"
+    info "Bundled runtime: Node.js v${node_expected}, npm ${npm_expected}"
+    application_install_offline_runtime "$root" || return 1
+    ok "Bundled Node.js/npm runtime installed and verified"
+  else
+    warn "Legacy full Air-Gap fallback selected; Node.js/npm runtime is not changed by this compatibility path."
   fi
 
   run_logged "Checkout offline application revision" \
