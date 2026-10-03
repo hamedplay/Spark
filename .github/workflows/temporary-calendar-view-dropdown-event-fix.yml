@@ -1,0 +1,73 @@
+name: Temporary calendar view dropdown event fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/temporary-calendar-view-dropdown-event-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Restore click-only view dropdown event path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/components/Calendar/CalendarToolbar.tsx')
+          text = path.read_text()
+
+          old_menu = 'role="menu" onPointerDown={e => e.stopPropagation()}>'
+          new_menu = 'role="menu">'
+          if text.count(old_menu) != 1:
+              raise SystemExit(f'expected one menu pointerdown marker, found {text.count(old_menu)}')
+          text = text.replace(old_menu, new_menu, 1)
+
+          old_item = '              onPointerDown={e => e.stopPropagation()}\n'
+          if text.count(old_item) != 1:
+              raise SystemExit(f'expected one item pointerdown marker, found {text.count(old_item)}')
+          text = text.replace(old_item, '', 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Validate event path and view contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Fq 'role="menu" onPointerDown=' src/components/Calendar/CalendarToolbar.tsx
+          ! grep -Fq 'onPointerDown={e => e.stopPropagation()}' src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq 'onClick={() => selectViewMode(v.key)}' src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq "{ key: '3-day' as const" src/components/Calendar/utils.ts
+          grep -Fq "{ key: '4-day' as const" src/components/Calendar/utils.ts
+          grep -Fq "{ key: 'week' as const" src/components/Calendar/utils.ts
+
+      - name: Build validation
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'spark-automation'
+          git config user.email 'spark-automation@users.noreply.github.com'
+          git add src/components/Calendar/CalendarToolbar.tsx
+          git commit -m 'fix(calendar): restore click event path for view menu'
+          git push origin HEAD:main
