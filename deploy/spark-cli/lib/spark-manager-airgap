@@ -48,12 +48,28 @@ done
 unset module path
 
 spark_airgap_sync_source_main() {
-  local remote_head
+  local remote_head shallow
   [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository is required at ${SPARK_ROOT} on the connected builder."; return 1; }
-  GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --depth=1 origin main || { fail "Unable to fetch Spark main."; return 1; }
+
+  shallow="$(command git -C "$SPARK_ROOT" rev-parse --is-shallow-repository 2>/dev/null || printf false)"
+  if [[ "$shallow" == "true" ]]; then
+    GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --prune --unshallow origin main || {
+      fail "Unable to unshallow Spark main history."
+      return 1
+    }
+  else
+    GIT_TERMINAL_PROMPT=0 command git -c http.version=HTTP/1.1 -C "$SPARK_ROOT" fetch --prune origin main || {
+      fail "Unable to fetch Spark main."
+      return 1
+    }
+  fi
+
   remote_head="$(command git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)"
-  printf '%s
-' "$remote_head"
+  command git -C "$SPARK_ROOT" rev-list --objects "$remote_head" >/dev/null || {
+    fail "Spark main history is incomplete on the connected builder."
+    return 1
+  }
+  printf '%s\n' "$remote_head"
 }
 
 dispatch_backend() {
