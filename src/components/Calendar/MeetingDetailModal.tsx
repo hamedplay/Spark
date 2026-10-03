@@ -473,7 +473,7 @@ const getJalaliDate = (): string => {
   };
 
   return (
-    <div className="fixed inset-0 z-[60]" onClick={onClose}>
+    <div className="fixed inset-0 z-[300]" onClick={onClose}>
       <div
         className="absolute inset-y-0 left-0 w-full max-w-md bg-white dark:bg-gray-900 shadow-2xl flex flex-col animate-slideInLeft"
         style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
