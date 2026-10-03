@@ -1,0 +1,46 @@
+name: Temporary calendar view click fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/temporary-calendar-view-click-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Restore calendar view option clicks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/components/Calendar/CalendarToolbar.tsx')
+          text = path.read_text()
+          old = "onPointerDown={e => { e.preventDefault(); e.stopPropagation(); }}"
+          new = "onPointerDown={e => e.stopPropagation()}"
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one blocked view option pointer handler, found {count}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Validate calendar view option interaction
+        run: |
+          grep -Fq 'onPointerDown={e => e.stopPropagation()}' src/components/Calendar/CalendarToolbar.tsx
+          ! grep -Fq 'onPointerDown={e => { e.preventDefault(); e.stopPropagation(); }}' src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq 'onClick={() => selectViewMode(v.key)}' src/components/Calendar/CalendarToolbar.tsx
+
+      - name: Commit patch
+        run: |
+          git config user.name "spark-automation"
+          git config user.email "spark-automation@users.noreply.github.com"
+          git add src/components/Calendar/CalendarToolbar.tsx
+          git commit -m "fix(calendar): allow view dropdown options to click"
+          git push origin HEAD:main
