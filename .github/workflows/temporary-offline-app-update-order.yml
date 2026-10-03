@@ -1,0 +1,51 @@
+name: Temporary offline app update ordering fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/temporary-offline-app-update-order.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Reorder validation before runtime mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('deploy/spark-cli/lib/application-maintenance.sh')
+          s=p.read_text()
+          block='''  if (( standalone == 1 )) && [[ "$standalone_format" == "2" ]]; then\n    node_expected="$(application_offline_update_meta "$root" NODE_VERSION)"\n    npm_expected="$(application_offline_update_meta "$root" NPM_VERSION)"\n    info "Bundled runtime: Node.js v${node_expected}, npm ${npm_expected}"\n    application_install_offline_runtime "$root" || return 1\n    ok "Bundled Node.js/npm runtime installed and verified"\n  else\n    warn "Legacy full Air-Gap fallback selected; Node.js/npm runtime is not changed by this compatibility path."\n  fi\n\n'''
+          if s.count(block)!=1: raise SystemExit('runtime block not unique')
+          s=s.replace(block,'',1)
+          marker='''  run_logged "Checkout offline application revision" \\\n    git -C "$stage" checkout --detach "$target_sha" || return 1\n'''
+          if s.count(marker)!=1: raise SystemExit('checkout marker not unique')
+          s=s.replace(marker,block+marker,1)
+          p.write_text(s)
+          PY
+          bash -n deploy/spark-cli/lib/application-maintenance.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('deploy/spark-cli/lib/application-maintenance.sh').read_text()
+          f=s.index('application_update_offline() (')
+          e=s.index('\napplication_packages_update() (',f)
+          b=s[f:e]
+          assert b.index('merge-base --is-ancestor "$old_sha" "$target_sha"') < b.index('application_install_offline_runtime "$root"') < b.index('Checkout offline application revision')
+          PY
+      - name: Commit
+        run: |
+          git config user.name spark-automation
+          git config user.email spark-automation@users.noreply.github.com
+          git add deploy/spark-cli/lib/application-maintenance.sh
+          git commit -m 'fix(manager): validate offline app revision before runtime install'
+          git push origin HEAD:main
