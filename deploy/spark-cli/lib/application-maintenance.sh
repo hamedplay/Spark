@@ -127,10 +127,19 @@ application_validate_offline_update_bundle() {
 
   run_logged "Verify Offline App update integrity" \
     bash -c "cd '$root' && sha256sum --quiet -c SHA256SUMS" || return 1
-  git -C "$SPARK_ROOT" bundle verify "${root}/sources/spark.git.bundle" >>"$CURRENT_LOG" 2>&1 || {
+  local verify_repo
+  verify_repo="$(mktemp -d /tmp/spark-app-bundle-verify.XXXXXX)" || return 1
+  if ! git -C "$verify_repo" init -q >>"$CURRENT_LOG" 2>&1; then
+    rm -rf "$verify_repo"
+    fail "Unable to initialize temporary repository for Offline App bundle validation."
+    return 1
+  fi
+  if ! git -C "$verify_repo" bundle verify "${root}/sources/spark.git.bundle" >>"$CURRENT_LOG" 2>&1; then
+    rm -rf "$verify_repo"
     fail "Offline App Git bundle is invalid."
     return 1
-  }
+  fi
+  rm -rf "$verify_repo"
 }
 
 application_install_offline_runtime() {
@@ -278,20 +287,49 @@ EOF_APP_UPDATE
 ' "$CURRENT_LOG"
 )
 
+application_current_deployed_commit() {
+  local commit="" airgap_root=""
+
+  if [[ -f "$SPARK_APP_STATE_FILE" ]]; then
+    commit="$(sed -n 's/^commit=//p' "$SPARK_APP_STATE_FILE" | tail -n1)"
+  fi
+  if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]] && [[ -d "${SPARK_ROOT}/.git" ]]; then
+    commit="$(git -C "$SPARK_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  fi
+  if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]] && [[ -L "$SPARK_AIRGAP_CURRENT" || -d "$SPARK_AIRGAP_CURRENT" ]]; then
+    airgap_root="$(readlink -f "$SPARK_AIRGAP_CURRENT" 2>/dev/null || true)"
+    if [[ -n "$airgap_root" ]]; then
+      commit="$(application_airgap_meta "$airgap_root" SPARK_COMMIT 2>/dev/null || true)"
+    fi
+  fi
+
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s\n' "$commit"
+}
+
 application_update_offline() (
   title
   new_log "update-offline-app"
 
-  [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository not found: ${SPARK_ROOT}"; return 1; }
+  command -v git >/dev/null 2>&1 || { fail "git is required for Offline App update."; return 1; }
+  command -v tar >/dev/null 2>&1 || { fail "tar is required for Offline App update."; return 1; }
   [[ -f "${SUPABASE_ROOT}/.env" ]] || { fail "Supabase environment is required only to read the existing frontend ANON_KEY."; return 1; }
-  if [[ -n "$(git -C "$SPARK_ROOT" status --porcelain)" ]]; then
-    fail "Spark source has uncommitted changes; Offline App update stopped."
-    git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
-    return 1
+
+  local source_available=0 source_old_sha=""
+  if [[ -d "${SPARK_ROOT}/.git" ]]; then
+    source_available=1
+    if [[ -n "$(git -C "$SPARK_ROOT" status --porcelain)" ]]; then
+      fail "Spark source has uncommitted changes; Offline App update stopped."
+      git -C "$SPARK_ROOT" status --short | tee -a "$CURRENT_LOG"
+      return 1
+    fi
+    source_old_sha="$(git -C "$SPARK_ROOT" rev-parse HEAD)" || return 1
+  else
+    info "Local Spark source checkout is absent; Offline App update will use the bundled source in an isolated staging repository."
   fi
 
-  local input extract_root root bundle node_archive target_sha old_sha fetched_sha stage source_ref
-  local modules_next modules_prev node_expected npm_expected standalone_format
+  local input extract_root="" root bundle node_archive target_sha old_sha fetched_sha stage source_ref
+  local modules_next="" modules_prev="" node_expected npm_expected standalone_format
   local source_advanced=0 modules_switched=0 update_success=0 standalone=0
   read -r -p "Offline App update .tar.gz/directory (Enter = active full Air-Gap bundle): " input
 
@@ -324,41 +362,41 @@ application_update_offline() (
   [[ -f "$bundle" ]] || { fail "Offline App source bundle is missing: $bundle"; return 1; }
   [[ -f "$node_archive" ]] || { fail "Offline App frontend dependency archive is missing: $node_archive"; return 1; }
   [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || { fail "Offline App SPARK_COMMIT is invalid."; return 1; }
-  old_sha="$(git -C "$SPARK_ROOT" rev-parse HEAD)" || return 1
 
-  run_logged "Fetch offline application revision" \
-    git -C "$SPARK_ROOT" fetch "$bundle" "$source_ref" || return 1
-  fetched_sha="$(git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)" || return 1
-  [[ "$fetched_sha" == "$target_sha" ]] || {
-    fail "Offline App manifest/source revision mismatch."
-    return 1
-  }
-  if ! git -C "$SPARK_ROOT" merge-base --is-ancestor "$old_sha" "$target_sha"; then
-    fail "Offline application bundle is not a fast-forward from current source."
-    return 1
+  old_sha="$(application_current_deployed_commit 2>/dev/null || true)"
+  if [[ "$old_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    info "Current deployed application revision: $old_sha"
+  else
+    old_sha=""
+    warn "Current deployed application revision metadata is unavailable; bundle integrity is verified, but fast-forward lineage cannot be proven."
   fi
 
   stage="/opt/spark-app-offline-${target_sha:0:12}-$$"
-  modules_next="${SPARK_ROOT}/node_modules.next.$$"
-  modules_prev="${SPARK_ROOT}/node_modules.prev.$$"
-  rm -rf "$stage" "$modules_next" "$modules_prev"
+  rm -rf "$stage"
+  if (( source_available == 1 )); then
+    modules_next="${SPARK_ROOT}/node_modules.next.$$"
+    modules_prev="${SPARK_ROOT}/node_modules.prev.$$"
+    rm -rf "$modules_next" "$modules_prev"
+  fi
 
   cleanup_offline_app() {
-    git -C "$SPARK_ROOT" worktree remove --force "$stage" >/dev/null 2>&1 || true
-    rm -rf "$stage" "$modules_next"
-    if (( update_success == 1 || modules_switched == 0 )); then
-      rm -rf "$modules_prev"
+    rm -rf "$stage"
+    if (( source_available == 1 )); then
+      rm -rf "$modules_next"
+      if (( update_success == 1 || modules_switched == 0 )); then
+        rm -rf "$modules_prev"
+      fi
     fi
     [[ -z "$extract_root" ]] || rm -rf "$extract_root"
   }
   rollback_offline_source_and_modules() {
-    if (( modules_switched == 1 )); then
+    if (( source_available == 1 && modules_switched == 1 )); then
       rm -rf "${SPARK_ROOT}/node_modules"
       [[ -d "$modules_prev" ]] && mv "$modules_prev" "${SPARK_ROOT}/node_modules" || true
       modules_switched=0
     fi
-    if (( source_advanced == 1 )); then
-      git -C "$SPARK_ROOT" reset --hard "$old_sha" >>"$CURRENT_LOG" 2>&1 || true
+    if (( source_available == 1 && source_advanced == 1 )); then
+      git -C "$SPARK_ROOT" reset --hard "$source_old_sha" >>"$CURRENT_LOG" 2>&1 || true
       source_advanced=0
     fi
   }
@@ -375,8 +413,28 @@ application_update_offline() (
     warn "Legacy full Air-Gap fallback selected; Node.js/npm runtime is not changed by this compatibility path."
   fi
 
-  run_logged "Create offline application staging worktree" \
-    git -C "$SPARK_ROOT" worktree add --detach "$stage" "$target_sha" || return 1
+  run_logged "Initialize isolated Offline App staging repository" git init -q "$stage" || return 1
+  run_logged "Fetch offline application revision into staging" \
+    git -C "$stage" fetch "$bundle" "$source_ref" || return 1
+  fetched_sha="$(git -C "$stage" rev-parse FETCH_HEAD)" || return 1
+  [[ "$fetched_sha" == "$target_sha" ]] || {
+    fail "Offline App manifest/source revision mismatch."
+    return 1
+  }
+
+  if [[ -n "$old_sha" && "$old_sha" != "$target_sha" ]]; then
+    if ! git -C "$stage" cat-file -e "${old_sha}^{commit}" 2>/dev/null; then
+      fail "Offline App bundle does not contain the currently deployed revision; refusing an unverifiable update."
+      return 1
+    fi
+    if ! git -C "$stage" merge-base --is-ancestor "$old_sha" "$target_sha"; then
+      fail "Offline application bundle is not a fast-forward from the currently deployed application revision."
+      return 1
+    fi
+  fi
+
+  run_logged "Checkout offline application revision" \
+    git -C "$stage" checkout --detach "$target_sha" || return 1
   run_logged "Restore bundled frontend dependencies" \
     tar -xzf "$node_archive" -C "$stage" || return 1
   run_logged "Prepare production frontend environment" \
@@ -386,30 +444,42 @@ application_update_offline() (
   run_logged "Validate offline application build" \
     application_validate_frontend_build "$stage" || return 1
 
-  mkdir -p "$modules_next"
-  run_logged "Stage bundled application dependencies" \
-    rsync -a --delete "${stage}/node_modules/" "$modules_next/" || return 1
-
-  if [[ "$old_sha" != "$target_sha" ]]; then
-    run_logged "Fast-forward local application source to offline revision" \
-      git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
-    source_advanced=1
-  fi
-
-  if [[ -d "${SPARK_ROOT}/node_modules" ]]; then
-    mv "${SPARK_ROOT}/node_modules" "$modules_prev" || {
-      rollback_offline_source_and_modules
-      fail "Unable to stage previous application dependencies for rollback."
+  if (( source_available == 1 )); then
+    run_logged "Fetch offline revision into retained local source" \
+      git -C "$SPARK_ROOT" fetch "$bundle" "$source_ref" || return 1
+    fetched_sha="$(git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)" || return 1
+    [[ "$fetched_sha" == "$target_sha" ]] || {
+      fail "Retained source fetch does not match Offline App manifest revision."
       return 1
     }
+    if [[ "$source_old_sha" != "$target_sha" ]]; then
+      if ! git -C "$SPARK_ROOT" merge-base --is-ancestor "$source_old_sha" "$target_sha"; then
+        fail "Offline application bundle is not a fast-forward from the retained local source."
+        return 1
+      fi
+      run_logged "Fast-forward retained local application source" \
+        git -C "$SPARK_ROOT" merge --ff-only "$target_sha" || return 1
+      source_advanced=1
+    fi
+
+    mkdir -p "$modules_next"
+    run_logged "Stage bundled application dependencies for retained source" \
+      rsync -a --delete "${stage}/node_modules/" "$modules_next/" || return 1
+    if [[ -d "${SPARK_ROOT}/node_modules" ]]; then
+      mv "${SPARK_ROOT}/node_modules" "$modules_prev" || {
+        rollback_offline_source_and_modules
+        fail "Unable to stage previous application dependencies for rollback."
+        return 1
+      }
+    fi
+    if ! mv "$modules_next" "${SPARK_ROOT}/node_modules"; then
+      [[ -d "$modules_prev" ]] && mv "$modules_prev" "${SPARK_ROOT}/node_modules" || true
+      rollback_offline_source_and_modules
+      fail "Unable to activate bundled application dependencies in retained source."
+      return 1
+    fi
+    modules_switched=1
   fi
-  if ! mv "$modules_next" "${SPARK_ROOT}/node_modules"; then
-    [[ -d "$modules_prev" ]] && mv "$modules_prev" "${SPARK_ROOT}/node_modules" || true
-    rollback_offline_source_and_modules
-    fail "Unable to activate bundled application dependencies."
-    return 1
-  fi
-  modules_switched=1
 
   if ! application_activate_dist "$stage"; then
     rollback_offline_source_and_modules
@@ -418,24 +488,21 @@ application_update_offline() (
 
   application_record_active_version "offline" "$target_sha"
   update_success=1
-  rm -rf "$modules_prev"
-  modules_switched=0
-  ok "Offline App update completed with application source, Node.js/npm runtime and build dependencies. Database, migrations, Supabase runtime, Edge Functions, workers, schedulers and Manager were not changed."
-  printf 'Application commit: %s
-' "$target_sha"
-  printf 'Node.js           : %s
-' "$(node --version)"
-  printf 'npm               : %s
-' "$(npm --version)"
-  if (( standalone == 1 )); then
-    printf 'Update package    : %s
-' "${input}"
-  else
-    printf 'Air-Gap bundle    : %s
-' "$(basename "$root")"
+  if (( source_available == 1 )); then
+    rm -rf "$modules_prev"
+    modules_switched=0
   fi
-  printf 'Log               : %s
-' "$CURRENT_LOG"
+  ok "Offline App update completed from bundled source. A local /opt/spark checkout is optional; Database, migrations, Supabase runtime, Edge Functions, workers, schedulers and Manager were not changed."
+  printf 'Application commit: %s\n' "$target_sha"
+  printf 'Node.js           : %s\n' "$(node --version)"
+  printf 'npm               : %s\n' "$(npm --version)"
+  if (( standalone == 1 )); then
+    printf 'Update package    : %s\n' "${input}"
+  else
+    printf 'Air-Gap bundle    : %s\n' "$(basename "$root")"
+  fi
+  printf 'Source checkout   : %s\n' "$([[ $source_available -eq 1 ]] && printf retained || printf not-required)"
+  printf 'Log               : %s\n' "$CURRENT_LOG"
 )
 
 application_packages_update() (

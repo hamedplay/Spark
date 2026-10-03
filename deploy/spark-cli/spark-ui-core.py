@@ -237,7 +237,19 @@ def collect_status() -> Dict[str, str]:
     status["nginx"] = run_quiet(["systemctl", "is-active", "nginx"], timeout=0.8) or "unknown"
     status["coturn"] = run_quiet(["systemctl", "is-active", "coturn"], timeout=0.8) or "unknown"
     status["docker"] = run_quiet(["systemctl", "is-active", "docker"], timeout=0.8) or "unknown"
-    status["commit"] = run_quiet(["git", "-C", str(SPARK_ROOT), "rev-parse", "--short=12", "HEAD"], timeout=0.8) or "n/a"
+    commit = run_quiet(["git", "-C", str(SPARK_ROOT), "rev-parse", "--short=12", "HEAD"], timeout=0.8)
+    if not commit:
+        try:
+            state_file = STATE_DIR / "application-active.env"
+            for line in state_file.read_text().splitlines():
+                if line.startswith("commit="):
+                    value = line.split("=", 1)[1].strip()
+                    if re.fullmatch(r"[0-9a-f]{40}", value):
+                        commit = value[:12]
+                    break
+        except OSError:
+            pass
+    status["commit"] = commit or "n/a"
     return status
 
 
