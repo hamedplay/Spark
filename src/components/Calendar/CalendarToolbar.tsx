@@ -277,12 +277,11 @@ export function CalendarToolbar(props: {
         <ChevronDown className="h-3.5 w-3.5" />
       </button>
       {showViewDropdown && (
-        <div className="absolute left-0 top-full z-[1100] mt-1 min-w-[160px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_14px_40px_rgba(15,23,42,0.18)] pointer-events-auto dark:border-slate-700 dark:bg-slate-900" role="menu" onPointerDown={e => e.stopPropagation()}>
+        <div className="absolute left-0 top-full z-[1100] mt-1 min-w-[160px] overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-[0_14px_40px_rgba(15,23,42,0.18)] pointer-events-auto dark:border-slate-700 dark:bg-slate-900" role="menu">
           {VIEW_OPTIONS.map(v => (
             <button
               key={v.key}
               type="button"
-              onPointerDown={e => e.stopPropagation()}
               onClick={() => selectViewMode(v.key)}
               className={`flex w-full items-center gap-2 px-3 py-2 text-right text-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${viewMode === v.key ? 'font-bold text-indigo-600 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-200'}`}
               role="menuitem"
