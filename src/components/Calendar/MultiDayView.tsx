@@ -406,7 +406,7 @@ function renderCurrentTime(
   return (
     <div
       className="pointer-events-none absolute left-0 right-0"
-      style={{ top: `${top}px`, zIndex: 900 }}
+      style={{ top: `${top}px`, zIndex: 35 }}
       aria-hidden="true"
     >
       <div className="absolute left-0 right-0 h-[2px] -translate-y-1/2 bg-rose-400/55 shadow-[0_0_6px_rgba(244,63,94,0.24)] dark:bg-rose-500/45" />
@@ -426,7 +426,7 @@ function renderCurrentTimeDayOverlay(
   return (
     <div
       className="pointer-events-none absolute left-0 right-0"
-      style={{ top: `${top}px`, zIndex: 1000 }}
+      style={{ top: `${top}px`, zIndex: 35 }}
       aria-hidden="true"
     >
       <div className="absolute left-0 right-0 h-[3px] -translate-y-1/2 bg-rose-500 shadow-[0_0_0_1px_rgba(255,255,255,0.8),0_0_10px_rgba(244,63,94,0.55)] dark:bg-rose-400 dark:shadow-[0_0_0_1px_rgba(15,23,42,0.85),0_0_10px_rgba(251,113,133,0.6)]" />
