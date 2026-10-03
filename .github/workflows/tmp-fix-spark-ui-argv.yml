@@ -1,0 +1,46 @@
+name: Temporary Spark UI argv fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/tmp-fix-spark-ui-argv.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch and validate Spark UI wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('deploy/spark-cli/spark-ui.py')
+          s = p.read_text(encoding='utf-8')
+          old = '    return base.main()\n'
+          new = '    return base.main(sys.argv[1:])\n'
+          if old not in s:
+              raise SystemExit('expected base.main() call not found')
+          if s.count(old) != 1:
+              raise SystemExit(f'unexpected base.main() occurrence count: {s.count(old)}')
+          p.write_text(s.replace(old, new), encoding='utf-8')
+          PY
+          python3 -m py_compile deploy/spark-cli/spark-ui.py
+          python3 deploy/spark-cli/spark-ui.py --self-test
+          grep -Fq 'return base.main(sys.argv[1:])' deploy/spark-cli/spark-ui.py
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/tmp-fix-spark-ui-argv.yml
+          git add deploy/spark-cli/spark-ui.py
+          git commit -m 'fix: pass CLI arguments to Spark UI base'
+          git push origin HEAD:main
