@@ -1,0 +1,55 @@
+name: Temporary calendar stacking fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/temporary-calendar-stacking-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch calendar stacking contexts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/Calendar/CalendarPageView.tsx')
+          text = path.read_text()
+
+          old = '''      <div className="flex flex-1 overflow-hidden flex-row-reverse gap-0">\n        {/* Content */}\n        <div className="flex-1 flex flex-col overflow-hidden min-w-0">\n          {/* Top bar */}\n          <CalendarToolbar'''
+          new = '''      <div className="flex flex-1 overflow-hidden flex-row-reverse gap-0">\n        {/* Content */}\n        <div className="relative isolate flex-1 flex flex-col overflow-hidden min-w-0">\n          {/* Top bar */}\n          <div className="relative z-[200] flex-shrink-0 overflow-visible">\n          <CalendarToolbar'''
+          if text.count(old) != 1:
+              raise SystemExit(f'content/toolbar anchor expected 1 match, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old2 = '''            adjustSlotHeight={adjustSlotHeight}\n          />\n\n          {/* View */}\n          <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900">'''
+          new2 = '''            adjustSlotHeight={adjustSlotHeight}\n          />\n          </div>\n\n          {/* View */}\n          <div className="relative z-0 flex-1 flex flex-col overflow-hidden bg-white dark:bg-gray-900">'''
+          if text.count(old2) != 1:
+              raise SystemExit(f'view anchor expected 1 match, found {text.count(old2)}')
+          text = text.replace(old2, new2, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Validate stacking fix
+        run: |
+          grep -Fq 'relative isolate flex-1 flex flex-col overflow-hidden min-w-0' src/components/Calendar/CalendarPageView.tsx
+          grep -Fq 'relative z-[200] flex-shrink-0 overflow-visible' src/components/Calendar/CalendarPageView.tsx
+          grep -Fq 'relative z-0 flex-1 flex flex-col overflow-hidden bg-white' src/components/Calendar/CalendarPageView.tsx
+
+      - name: Commit patch
+        run: |
+          git config user.name "spark-automation"
+          git config user.email "spark-automation@users.noreply.github.com"
+          git add src/components/Calendar/CalendarPageView.tsx
+          git commit -m "fix(calendar): keep toolbar popovers above sticky grid"
+          git push origin HEAD:main
