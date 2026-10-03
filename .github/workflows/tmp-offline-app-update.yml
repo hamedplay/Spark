@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           sudo rm -rf /opt/spark /var/backups/spark/application-updates
           sudo ln -s "$GITHUB_WORKSPACE" /opt/spark
-          sudo -E "$GITHUB_WORKSPACE/deploy/spark-cli/spark" --backend-action app-build-offline-update
+          sudo -E bash "$GITHUB_WORKSPACE/deploy/spark-cli/spark" --backend-action app-build-offline-update
 
       - name: Validate produced artifact contract
         shell: bash
