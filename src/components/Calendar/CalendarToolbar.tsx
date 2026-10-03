@@ -91,6 +91,7 @@ export function CalendarToolbar(props: {
   } = props;
 
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const viewControlRef = useRef<HTMLDivElement | null>(null);
   const [compactMobile, setCompactMobile] = useState(detectCompactCalendarLayout);
   const [compactToolbar, setCompactToolbar] = useState(detectCompactCalendarLayout);
   const [showAppearance, setShowAppearance] = useState(false);
@@ -133,6 +134,20 @@ export function CalendarToolbar(props: {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (!showViewDropdown) return;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && !viewControlRef.current?.contains(target)) {
+        setShowViewDropdown(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown);
+    return () => document.removeEventListener('pointerdown', handleOutsidePointerDown);
+  }, [showViewDropdown, setShowViewDropdown]);
 
   const iconButton = compactToolbar
     ? 'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition-colors'
@@ -265,7 +280,7 @@ export function CalendarToolbar(props: {
   };
 
   const viewControl = (
-    <div className="relative z-[1000] flex-shrink-0 pointer-events-auto">
+    <div ref={viewControlRef} className="relative z-[1000] flex-shrink-0 pointer-events-auto">
       <button
         type="button"
         onClick={() => setShowViewDropdown(o => !o)}

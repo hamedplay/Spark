@@ -584,8 +584,6 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
         </div>
       </div>
 
-      {showViewDropdown && <div className="fixed inset-0 z-40" onClick={() => setShowViewDropdown(false)} />}
-
       {/* Mobile sidebar drawer */}
       {showMobileSidebar && (
         <div className="fixed inset-0 z-50 lg:hidden" dir="rtl">
