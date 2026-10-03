@@ -282,7 +282,7 @@ export function CalendarToolbar(props: {
             <button
               key={v.key}
               type="button"
-              onPointerDown={e => { e.preventDefault(); e.stopPropagation(); }}
+              onPointerDown={e => e.stopPropagation()}
               onClick={() => selectViewMode(v.key)}
               className={`flex w-full items-center gap-2 px-3 py-2 text-right text-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${viewMode === v.key ? 'font-bold text-indigo-600 dark:text-indigo-300' : 'text-slate-700 dark:text-slate-200'}`}
               role="menuitem"
