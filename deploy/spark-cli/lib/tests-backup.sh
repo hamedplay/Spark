@@ -214,13 +214,23 @@ create_backup() {
     chmod 600 "${dest}/postgres.backup"
     info "Restore-compatible Plain SQL backup: ${dest}/postgres.backup" >&2
   elif [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] && compose config --services | grep -Fxq db; then
-    info "Backup PostgreSQL recovery snapshot..." >&2
-    if ! compose exec -T db pg_dump -U postgres -d postgres -Fc >"${dest}/postgres.dump"; then
+    if postgres_database_exists; then
+      info "Backup PostgreSQL recovery snapshot..." >&2
+      if ! compose exec -T db pg_dump -U postgres -d postgres -Fc >"${dest}/postgres.dump"; then
+        rm -rf "$dest"
+        fail "PostgreSQL recovery snapshot failed."
+        return 1
+      fi
+      chmod 600 "${dest}/postgres.dump"
+    elif [[ "$kind" == "pre-restore" ]]; then
+      info "Database 'postgres' does not exist yet; recording empty-target safety state." >&2
+      : >"${dest}/postgres.absent"
+      chmod 600 "${dest}/postgres.absent"
+    else
       rm -rf "$dest"
-      fail "PostgreSQL recovery snapshot failed."
+      fail "PostgreSQL database 'postgres' does not exist; recovery snapshot cannot be created."
       return 1
     fi
-    chmod 600 "${dest}/postgres.dump"
   fi
 
   mkdir -p "${dest}/config"
@@ -266,6 +276,11 @@ plain_backup_has_create_database() {
 
 plain_backup_has_drop_database() {
   grep -a -Eq '^DROP[[:space:]]+DATABASE([[:space:]]+IF[[:space:]]+EXISTS)?[[:space:]]+\"?postgres\"?([[:space:];]|$)' "$1"
+}
+
+postgres_database_exists() {
+  restore_ensure_db_writable 180 || return 1
+  [[ "$(compose exec -T db psql -X -U postgres -d template1 -Atqc "SELECT 1 FROM pg_database WHERE datname='postgres';" 2>/dev/null || true)" == "1" ]]
 }
 
 restore_stop_non_db_services() {
@@ -358,7 +373,8 @@ restore_custom_safety_dump() {
 }
 
 restore_plain_database_from_file() {
-  local path="$1" safety_dir safety_dump db_access_was_active=0 restore_rc=0 rollback_rc=0
+  local path="$1" safety_dir safety_dump safety_absent_marker
+  local safety_had_postgres=0 db_access_was_active=0 restore_rc=0 rollback_rc=0
   plain_backup_validate "$path" || return 1
   [[ -f "${SUPABASE_ROOT}/docker-compose.yml" ]] || {
     fail "Supabase runtime is not installed at ${SUPABASE_ROOT}."
@@ -379,10 +395,16 @@ restore_plain_database_from_file() {
     return 1
   }
   safety_dump="${safety_dir}/postgres.dump"
-  [[ -s "$safety_dump" ]] || {
-    fail "Safety backup does not contain postgres.dump. Restore was not started."
+  safety_absent_marker="${safety_dir}/postgres.absent"
+  if [[ -s "$safety_dump" ]]; then
+    safety_had_postgres=1
+  elif [[ -f "$safety_absent_marker" ]]; then
+    safety_had_postgres=0
+    info "Target database 'postgres' is absent; restore will create it from the supplied backup."
+  else
+    fail "Safety backup contains neither postgres.dump nor postgres.absent state marker. Restore was not started."
     return 1
-  }
+  fi
   printf 'Safety backup : %s\n' "$safety_dir"
 
   if systemctl is-active --quiet spark-db-access.socket 2>/dev/null; then
@@ -421,8 +443,13 @@ restore_plain_database_from_file() {
     restore_ensure_db_writable 180 >>"${CURRENT_LOG:-/dev/null}" 2>&1
     rollback_rc=$?
     if (( rollback_rc == 0 )); then
-      restore_custom_safety_dump "$safety_dump" >>"${CURRENT_LOG:-/dev/null}" 2>&1
-      rollback_rc=$?
+      if (( safety_had_postgres == 1 )); then
+        restore_custom_safety_dump "$safety_dump" >>"${CURRENT_LOG:-/dev/null}" 2>&1
+        rollback_rc=$?
+      else
+        restore_drop_postgres_database >>"${CURRENT_LOG:-/dev/null}" 2>&1
+        rollback_rc=$?
+      fi
     fi
     set -e
     (( db_access_was_active )) && systemctl start spark-db-access.socket >/dev/null 2>&1 || true
