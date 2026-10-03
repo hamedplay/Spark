@@ -1,0 +1,106 @@
+name: Temporary calendar toolbar fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/temporary-calendar-toolbar-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Patch calendar toolbar controls
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          toolbar = Path('src/components/Calendar/CalendarToolbar.tsx')
+          text = toolbar.read_text()
+
+          def once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          once(
+              "function dispatchCalendarZoom(delta: number) {\n  window.dispatchEvent(new CustomEvent('spark-calendar-zoom', { detail: { delta } }));\n}\n\nfunction dispatchCalendarDensity(density: Density) {\n  const slotHeight = density === 'compact' ? 24 : density === 'comfortable' ? 36 : 44;\n  localStorage.setItem('spark_calendar_density', density);\n  window.dispatchEvent(new CustomEvent('spark-calendar-density', { detail: { density, slotHeight } }));\n}\n\n",
+              "function densitySlotHeight(density: Density): number {\n  return density === 'compact' ? 24 : density === 'comfortable' ? 36 : 44;\n}\n\n",
+              'event bus helpers',
+          )
+
+          once(
+              "  updatePrefs: (p: Record<string, unknown>) => void;\n}) {",
+              "  updatePrefs: (p: Record<string, unknown>) => void;\n  slotHeight: number;\n  adjustSlotHeight: (delta: number) => void;\n}) {",
+              'toolbar props',
+          )
+
+          once(
+              "    hideOffHours, setHideOffHours,\n    updatePrefs,\n  } = props;",
+              "    hideOffHours, setHideOffHours,\n    updatePrefs,\n    slotHeight, adjustSlotHeight,\n  } = props;",
+              'toolbar destructure',
+          )
+
+          once(
+              "  useEffect(() => {\n    const el = toolbarRef.current;",
+              "  useEffect(() => {\n    const target = densitySlotHeight(density);\n    if (slotHeight !== target) adjustSlotHeight(target - slotHeight);\n    // Apply a persisted density once when this toolbar instance mounts.\n    // Subsequent changes are applied directly by the density buttons below.\n    // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, []);\n\n  useEffect(() => {\n    const el = toolbarRef.current;",
+              'persisted density sync',
+          )
+
+          text = text.replace("onClick={() => dispatchCalendarZoom(-4)}", "onClick={() => adjustSlotHeight(-4)}")
+          text = text.replace("onClick={() => dispatchCalendarZoom(4)}", "onClick={() => adjustSlotHeight(4)}")
+
+          once(
+              "                setDensity(key);\n                dispatchCalendarDensity(key);\n                setShowAppearance(false);",
+              "                setDensity(key);\n                localStorage.setItem('spark_calendar_density', key);\n                const target = densitySlotHeight(key);\n                if (slotHeight !== target) adjustSlotHeight(target - slotHeight);\n                setShowAppearance(false);",
+              'direct density apply',
+          )
+
+          text = text.replace(
+              'className="relative flex flex-shrink-0 flex-col overflow-visible border-b',
+              'className="relative z-[140] flex flex-shrink-0 flex-col overflow-visible border-b',
+          )
+          text = text.replace(
+              'className="relative flex min-h-[42px] flex-shrink-0 items-center gap-1.5 overflow-visible border-b',
+              'className="relative z-[140] flex min-h-[42px] flex-shrink-0 items-center gap-1.5 overflow-visible border-b',
+          )
+
+          toolbar.write_text(text)
+
+          page = Path('src/components/Calendar/CalendarPageView.tsx')
+          ptext = page.read_text()
+          marker = "            updatePrefs={updatePrefs}\n          />"
+          replacement = "            updatePrefs={updatePrefs}\n            slotHeight={slotHeight}\n            adjustSlotHeight={adjustSlotHeight}\n          />"
+          if ptext.count(marker) != 1:
+              raise SystemExit(f'CalendarToolbar call-site: expected 1 match, found {ptext.count(marker)}')
+          page.write_text(ptext.replace(marker, replacement, 1))
+          PY
+
+      - name: Validate toolbar wiring
+        run: |
+          grep -Fq "slotHeight: number;" src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq "adjustSlotHeight: (delta: number) => void;" src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq "onClick={() => adjustSlotHeight(-4)}" src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq "onClick={() => adjustSlotHeight(4)}" src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq "z-[140]" src/components/Calendar/CalendarToolbar.tsx
+          grep -Fq "slotHeight={slotHeight}" src/components/Calendar/CalendarPageView.tsx
+          grep -Fq "adjustSlotHeight={adjustSlotHeight}" src/components/Calendar/CalendarPageView.tsx
+          ! grep -Fq "dispatchCalendarZoom" src/components/Calendar/CalendarToolbar.tsx
+          ! grep -Fq "dispatchCalendarDensity" src/components/Calendar/CalendarToolbar.tsx
+
+      - name: Commit patch
+        run: |
+          git config user.name "spark-automation"
+          git config user.email "spark-automation@users.noreply.github.com"
+          git add src/components/Calendar/CalendarToolbar.tsx src/components/Calendar/CalendarPageView.tsx
+          git commit -m "fix(calendar): make toolbar zoom and density controls reliable"
+          git push origin HEAD:main
