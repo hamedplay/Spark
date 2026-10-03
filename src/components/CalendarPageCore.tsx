@@ -91,6 +91,11 @@ export function CalendarPage({
 
   const [detailMeeting, setDetailMeeting] = useState<MeetingData | null>(null);
 
+  // Hover/click preview popup for day/week blocks
+  const [previewMeeting, setPreviewMeeting] = useState<MeetingData | null>(null);
+  const [previewPos, setPreviewPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const previewRef = useRef<HTMLDivElement | null>(null);
+
   // New-meeting drag
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartSlot, setDragStartSlot] = useState<number | null>(null);
@@ -229,11 +234,6 @@ export function CalendarPage({
     if (showSearch) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showSearch]);
-
-  // Hover/click preview popup for day/week blocks
-  const [previewMeeting, setPreviewMeeting] = useState<MeetingData | null>(null);
-  const [previewPos, setPreviewPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const previewRef = useRef<HTMLDivElement | null>(null);
 
   // Month day popup
   const [monthDayPopup, setMonthDayPopup] = useState<{ jy: number; jm: number; jd: number; x: number; y: number } | null>(null);
