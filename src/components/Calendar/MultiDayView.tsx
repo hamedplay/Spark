@@ -363,6 +363,7 @@ export function MultiDayView(p: CalendarViewProps) {
                           const targetCol = Math.max(0, Math.min(dayCount - 1, originalCol + p.dragMoveCurrentDeltaDay));
                           return originalCol === colIdx || targetCol === colIdx;
                         }), dayCount)}
+                        {renderCurrentTimeDayOverlay(p, d)}
                         {p.isDragging && p.dragStartSlot !== null && p.dragEndSlot !== null && p.dragDate && p.dragDate.jy === d.jy && p.dragDate.jm === d.jm && p.dragDate.jd === d.jd && (() => {
                           const start = Math.min(p.dragStartSlot!, p.dragEndSlot!);
                           const end = Math.max(p.dragStartSlot!, p.dragEndSlot!) + 1;
@@ -395,29 +396,41 @@ function renderCurrentTime(
   days: Array<{ jy: number; jm: number; jd: number; weekday: number }>,
   dayCount: number,
 ) {
-  const todayIndex = days.findIndex(d => p.isToday(d.jy, d.jm, d.jd));
-  if (todayIndex < 0) return null;
+  if (!days.some(d => p.isToday(d.jy, d.jm, d.jd))) return null;
 
   const nowMin = p.currentTime.getHours() * 60 + p.currentTime.getMinutes();
   const top = (nowMin / 30) * p.slotHeight;
-  const colRight = `calc(${todayIndex} * 100% / ${dayCount})`;
-  const colWidth = `calc(100% / ${dayCount})`;
 
+  // Background guide across the whole time grid. The strong current-day marker
+  // is rendered inside the day column so it shares the meeting stacking context.
   return (
     <div
-      className="pointer-events-none absolute left-0 right-0 z-[80]"
-      style={{ top: `${top}px` }}
+      className="pointer-events-none absolute left-0 right-0"
+      style={{ top: `${top}px`, zIndex: 5 }}
       aria-hidden="true"
     >
       <div className="absolute left-0 right-0 h-[2px] -translate-y-1/2 bg-rose-400/55 shadow-[0_0_6px_rgba(244,63,94,0.24)] dark:bg-rose-500/45" />
-      <div
-        className="absolute h-[3px] -translate-y-1/2 bg-rose-500 shadow-[0_0_0_1px_rgba(255,255,255,0.8),0_0_10px_rgba(244,63,94,0.55)] dark:bg-rose-400 dark:shadow-[0_0_0_1px_rgba(15,23,42,0.85),0_0_10px_rgba(251,113,133,0.6)]"
-        style={{ right: colRight, width: colWidth }}
-      />
-      <div
-        className="absolute h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-rose-500 shadow-[0_0_0_1px_rgba(244,63,94,0.28),0_0_10px_rgba(244,63,94,0.6)] dark:border-slate-950 dark:bg-rose-400"
-        style={{ right: `calc(${todayIndex + 1} * 100% / ${dayCount} - 6px)` }}
-      />
+    </div>
+  );
+}
+
+function renderCurrentTimeDayOverlay(
+  p: CalendarViewProps,
+  day: { jy: number; jm: number; jd: number; weekday: number },
+) {
+  if (!p.isToday(day.jy, day.jm, day.jd)) return null;
+
+  const nowMin = p.currentTime.getHours() * 60 + p.currentTime.getMinutes();
+  const top = (nowMin / 30) * p.slotHeight;
+
+  return (
+    <div
+      className="pointer-events-none absolute left-0 right-0"
+      style={{ top: `${top}px`, zIndex: 1000 }}
+      aria-hidden="true"
+    >
+      <div className="absolute left-0 right-0 h-[3px] -translate-y-1/2 bg-rose-500 shadow-[0_0_0_1px_rgba(255,255,255,0.8),0_0_10px_rgba(244,63,94,0.55)] dark:bg-rose-400 dark:shadow-[0_0_0_1px_rgba(15,23,42,0.85),0_0_10px_rgba(251,113,133,0.6)]" />
+      <div className="absolute -right-1.5 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-rose-500 shadow-[0_0_0_1px_rgba(244,63,94,0.28),0_0_10px_rgba(244,63,94,0.6)] dark:border-slate-950 dark:bg-rose-400" />
     </div>
   );
 }
