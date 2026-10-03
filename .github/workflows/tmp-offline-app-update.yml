@@ -77,4 +77,4 @@ jobs:
           ! find "$root" -type f -name '*.sql' | grep -q .
 
           echo "Artifact: $archive"
-          du -h "$archive"
+          sudo du -h "$archive"
