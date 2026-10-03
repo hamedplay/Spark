@@ -8,6 +8,7 @@
 SPARK_APP_STATE_FILE="${STATE_DIR}/application-active.env"
 SPARK_AIRGAP_HOME="${AIRGAP_HOME:-/opt/spark-airgap}"
 SPARK_AIRGAP_CURRENT="${SPARK_AIRGAP_HOME}/current"
+SPARK_APP_OFFLINE_UPDATE_DIR="/var/backups/spark/application-updates"
 
 application_record_active_version() {
   local mode="$1" commit="$2"
@@ -85,6 +86,106 @@ application_airgap_meta() {
   sed -n "s/^${key}=//p" "$manifest" | tail -n1
 }
 
+application_offline_update_meta() {
+  local root="$1" key="$2" manifest="${1}/metadata/manifest.env"
+  [[ -f "$manifest" ]] || return 1
+  sed -n "s/^${key}=//p" "$manifest" | tail -n1
+}
+
+application_validate_offline_update_bundle() {
+  local root="$1" format type commit source_ref
+  [[ -d "$root" ]] || { fail "Offline App update directory not found: $root"; return 1; }
+  [[ -f "${root}/metadata/manifest.env" ]] || { fail "Offline App update manifest is missing."; return 1; }
+  [[ -f "${root}/sources/spark.git.bundle" ]] || { fail "Offline App source bundle is missing."; return 1; }
+  [[ -f "${root}/npm/frontend-node-modules.tar.gz" ]] || { fail "Offline App dependency archive is missing."; return 1; }
+  [[ -f "${root}/SHA256SUMS" ]] || { fail "Offline App integrity manifest is missing."; return 1; }
+
+  format="$(application_offline_update_meta "$root" FORMAT_VERSION)"
+  type="$(application_offline_update_meta "$root" TYPE)"
+  commit="$(application_offline_update_meta "$root" SPARK_COMMIT)"
+  source_ref="$(application_offline_update_meta "$root" SOURCE_REF)"
+  [[ "$format" == "1" && "$type" == "application-update" ]] || {
+    fail "Unsupported Offline App update format."
+    return 1
+  }
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { fail "Offline App SPARK_COMMIT is invalid."; return 1; }
+  [[ -n "$source_ref" ]] || { fail "Offline App SOURCE_REF is missing."; return 1; }
+
+  run_logged "Verify Offline App update integrity" \
+    bash -c "cd '$root' && sha256sum --quiet -c SHA256SUMS" || return 1
+  git -C "$SPARK_ROOT" bundle verify "${root}/sources/spark.git.bundle" >>"$CURRENT_LOG" 2>&1 || {
+    fail "Offline App Git bundle is invalid."
+    return 1
+  }
+}
+
+application_build_offline_update() (
+  title
+  new_log "build-offline-app-update"
+
+  command -v git >/dev/null 2>&1 || { fail "git is not installed."; return 1; }
+  command -v npm >/dev/null 2>&1 || { fail "npm is not installed."; return 1; }
+  command -v tar >/dev/null 2>&1 || { fail "tar is not installed."; return 1; }
+  command -v sha256sum >/dev/null 2>&1 || { fail "sha256sum is not installed."; return 1; }
+  [[ -d "${SPARK_ROOT}/.git" ]] || { fail "Spark source repository not found: ${SPARK_ROOT}"; return 1; }
+
+  local target_sha short stage work root output partial created source_ref
+  run_logged "Fetch latest application source from origin/main" \
+    git -C "$SPARK_ROOT" fetch --prune origin main || return 1
+  target_sha="$(git -C "$SPARK_ROOT" rev-parse refs/remotes/origin/main)" || return 1
+  [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || { fail "Unable to resolve latest origin/main commit."; return 1; }
+  short="${target_sha:0:12}"
+  source_ref="refs/remotes/origin/main"
+  stage="/opt/spark-app-update-build-${short}-$$"
+  work="$(mktemp -d /tmp/spark-app-update.XXXXXX)" || return 1
+  root="${work}/spark-app-update-${short}"
+  output="${SPARK_APP_OFFLINE_UPDATE_DIR}/spark-app-update-${short}.tar.gz"
+  partial="${output}.partial.$$"
+
+  cleanup_build_offline_app_update() {
+    git -C "$SPARK_ROOT" worktree remove --force "$stage" >/dev/null 2>&1 || true
+    rm -rf "$stage" "$work" "$partial"
+  }
+  trap cleanup_build_offline_app_update EXIT
+
+  rm -rf "$stage"
+  mkdir -p "$root/metadata" "$root/sources" "$root/npm" "$SPARK_APP_OFFLINE_UPDATE_DIR"
+  chmod 0700 "$SPARK_APP_OFFLINE_UPDATE_DIR"
+
+  run_logged "Create application update staging worktree" \
+    git -C "$SPARK_ROOT" worktree add --detach "$stage" "$target_sha" || return 1
+  run_logged "Install locked application dependencies" \
+    bash -c "cd '$stage' && npm ci --no-audit --no-fund" || return 1
+  run_logged "Validate application build before packaging" \
+    bash -c "cd '$stage' && VITE_SUPABASE_URL=http://127.0.0.1 VITE_SUPABASE_ANON_KEY=offline-build-validation npm run build" || return 1
+
+  run_logged "Create application source Git bundle" \
+    git -C "$SPARK_ROOT" bundle create "$root/sources/spark.git.bundle" "$source_ref" || return 1
+  run_logged "Package frontend dependencies for offline build" \
+    tar -C "$stage" -czf "$root/npm/frontend-node-modules.tar.gz" node_modules || return 1
+
+  created="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  cat >"$root/metadata/manifest.env" <<EOF_APP_UPDATE
+FORMAT_VERSION=1
+TYPE=application-update
+SPARK_COMMIT=$target_sha
+SOURCE_REF=$source_ref
+CREATED_AT=$created
+EOF_APP_UPDATE
+
+  (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS) || return 1
+  run_logged "Create standalone Offline App update archive" \
+    tar -C "$work" -czf "$partial" "$(basename "$root")" || return 1
+  chmod 0600 "$partial"
+  mv -f "$partial" "$output" || return 1
+
+  ok "Offline App update package created."
+  printf 'Application commit : %s\n' "$target_sha"
+  printf 'Output             : %s\n' "$output"
+  printf 'Scope              : Application only; no DB/Supabase/Linux/Manager update\n'
+  printf 'Log                : %s\n' "$CURRENT_LOG"
+)
+
 application_update_offline() (
   title
   new_log "update-offline-app"
@@ -97,23 +198,44 @@ application_update_offline() (
     return 1
   fi
 
-  local root bundle node_archive target_sha old_sha fetched_sha stage
-  local source_advanced=0 update_success=0
-  root="$(application_active_airgap_root)" || return 1
+  local input extract_root root bundle node_archive target_sha old_sha fetched_sha stage source_ref
+  local source_advanced=0 update_success=0 standalone=0
+  read -r -p "Offline App update .tar.gz/directory (Enter = active full Air-Gap bundle): " input
+
+  if [[ -n "$input" ]]; then
+    standalone=1
+    if [[ -d "$input" ]]; then
+      root="$(readlink -f "$input")"
+    elif [[ -f "$input" ]]; then
+      extract_root="$(mktemp -d /tmp/spark-app-update-install.XXXXXX)" || return 1
+      tar -xzf "$input" -C "$extract_root" || { rm -rf "$extract_root"; fail "Unable to extract Offline App update archive."; return 1; }
+      root="$(find "$extract_root" -mindepth 1 -maxdepth 1 -type d -name 'spark-app-update-*' -print -quit)"
+      [[ -n "$root" ]] || { rm -rf "$extract_root"; fail "Offline App update root was not found in archive."; return 1; }
+    else
+      fail "Offline App update path not found: $input"
+      return 1
+    fi
+    application_validate_offline_update_bundle "$root" || { [[ -z "$extract_root" ]] || rm -rf "$extract_root"; return 1; }
+    source_ref="$(application_offline_update_meta "$root" SOURCE_REF)"
+    target_sha="$(application_offline_update_meta "$root" SPARK_COMMIT)"
+  else
+    root="$(application_active_airgap_root)" || return 1
+    source_ref="main"
+    target_sha="$(application_airgap_meta "$root" SPARK_COMMIT)"
+  fi
+
   bundle="${root}/sources/spark.git.bundle"
   node_archive="${root}/npm/frontend-node-modules.tar.gz"
-  [[ -f "$bundle" ]] || { fail "Air-Gap Spark source bundle is missing: $bundle"; return 1; }
-  [[ -f "$node_archive" ]] || { fail "Air-Gap frontend dependency archive is missing: $node_archive"; return 1; }
-
-  target_sha="$(application_airgap_meta "$root" SPARK_COMMIT)"
-  [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || { fail "Air-Gap SPARK_COMMIT is invalid."; return 1; }
+  [[ -f "$bundle" ]] || { fail "Offline App source bundle is missing: $bundle"; return 1; }
+  [[ -f "$node_archive" ]] || { fail "Offline App frontend dependency archive is missing: $node_archive"; return 1; }
+  [[ "$target_sha" =~ ^[0-9a-f]{40}$ ]] || { fail "Offline App SPARK_COMMIT is invalid."; return 1; }
   old_sha="$(git -C "$SPARK_ROOT" rev-parse HEAD)" || return 1
 
-  run_logged "Fetch offline application revision from active bundle" \
-    git -C "$SPARK_ROOT" fetch "$bundle" main || return 1
+  run_logged "Fetch offline application revision" \
+    git -C "$SPARK_ROOT" fetch "$bundle" "$source_ref" || return 1
   fetched_sha="$(git -C "$SPARK_ROOT" rev-parse FETCH_HEAD)" || return 1
   [[ "$fetched_sha" == "$target_sha" ]] || {
-    fail "Air-Gap manifest/source revision mismatch."
+    fail "Offline App manifest/source revision mismatch."
     return 1
   }
   if ! git -C "$SPARK_ROOT" merge-base --is-ancestor "$old_sha" "$target_sha"; then
@@ -126,6 +248,7 @@ application_update_offline() (
   cleanup_offline_app() {
     git -C "$SPARK_ROOT" worktree remove --force "$stage" >/dev/null 2>&1 || true
     rm -rf "$stage"
+    [[ -z "$extract_root" ]] || rm -rf "$extract_root"
   }
   rollback_offline_source() {
     if (( source_advanced == 1 )); then
@@ -161,7 +284,11 @@ application_update_offline() (
   update_success=1
   ok "Offline App update completed. Database, migrations, Supabase runtime, Edge Functions, workers, schedulers and Manager were not changed."
   printf 'Application commit: %s\n' "$target_sha"
-  printf 'Air-Gap bundle    : %s\n' "$(basename "$root")"
+  if (( standalone == 1 )); then
+    printf 'Update package    : %s\n' "${input}"
+  else
+    printf 'Air-Gap bundle    : %s\n' "$(basename "$root")"
+  fi
   printf 'Log               : %s\n' "$CURRENT_LOG"
 )
 
