@@ -29,6 +29,8 @@ jobs:
           bash -n deploy/spark-cli/lib/application-maintenance.sh
           bash -n deploy/spark-cli/spark
           python3 -m py_compile deploy/spark-cli/spark-ui.py
+          grep -Fq 'SPARK_MANAGER_VERSION=' deploy/spark-cli/spark
+          grep -Fq 'MANAGER_CONF=' deploy/spark-cli/spark
           grep -Fq 'app-build-offline-update) application_build_offline_update ;;' deploy/spark-cli/spark
           grep -Fq 'core.Action("app-build-offline-update", "Build Offline App Update"' deploy/spark-cli/spark-ui.py
           grep -Fq '"Build Offline App Update",' deploy/spark-cli/spark-ui.py
