@@ -109,11 +109,12 @@ export function CalendarPage({
       showCalendarList ||
       showSubscriptionsModal ||
       showMeetingForm ||
-      detailMeeting !== null
+      detailMeeting !== null ||
+      previewMeeting !== null
     ) {
       setOrgUsersEnabled(true);
     }
-  }, [showCalendarList, showSubscriptionsModal, showMeetingForm, detailMeeting]);
+  }, [showCalendarList, showSubscriptionsModal, showMeetingForm, detailMeeting, previewMeeting]);
 
   // Move meeting drag
   const [dragMoveMeeting, setDragMoveMeeting] = useState<MeetingData | null>(null);
