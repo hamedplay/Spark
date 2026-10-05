@@ -73,25 +73,33 @@ export async function uploadMinuteAttachment(
       size_bytes: file.size,
       description: opts.description ?? null,
       attachment_kind: opts.attachmentKind ?? 'general',
+      revision_number: opts.revisionNumber ?? null,
     }),
   });
   if (!efRes.ok) {
     const errBody = await efRes.json().catch(() => ({}));
     throw new Error(translateRpcError(errBody.error) || `بارگذاری ناموفق بود (${efRes.status})`);
   }
-  const begin = await efRes.json() as { attachment_id: string; storage_path: string; signed_url: string };
+  const begin = await efRes.json() as {
+    attachment_id: string;
+    storage_path: string;
+    upload_token: string;
+  };
   const attachmentId = begin.attachment_id;
   const storagePath = begin.storage_path;
 
-  // 2. Upload bytes to the signed URL returned by the Edge Function.
-  const upRes = await fetch(begin.signed_url, {
-    method: 'PUT',
-    body: file,
-    headers: { 'Content-Type': v.mime || file.type || 'application/octet-stream' },
-  });
-  if (!upRes.ok) {
-    throw new Error('بارگذاری فایل ناموفق بود: ' + upRes.status);
+  // 2. Upload through the Storage SDK so signed-upload payload/headers match the Storage API contract.
+  const contentType = v.mime || file.type || 'application/octet-stream';
+  const { error: uploadErr } = await supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .uploadToSignedUrl(storagePath, begin.upload_token, file, {
+      contentType,
+      cacheControl: '3600',
+    });
+  if (uploadErr) {
+    throw new Error('بارگذاری فایل ناموفق بود: ' + uploadErr.message);
   }
+  opts.onProgress?.(100);
 
   // 3. Finalize: backend verifies object exists + size matches, sets ready, writes audit.
   const { error: finErr } = await supabase.rpc('finalize_minutes_attachment', {
