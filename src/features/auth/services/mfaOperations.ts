@@ -139,7 +139,10 @@ export async function activateCanonicalTotpAfterEnrollment(): Promise<void> {
 }
 
 export async function deactivateCanonicalTotpBeforeUnenroll(): Promise<void> {
-  const { data, error } = await supabase.rpc('deactivate_canonical_totp_mfa');
+  const { data, error } = await supabase.rpc('deactivate_canonical_totp_mfa' as never) as unknown as {
+    data: { ok?: boolean; error?: string } | null;
+    error: unknown;
+  };
   if (error) throw error;
   if (!data?.ok) {
     const errorCode = data?.error;
