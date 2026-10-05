@@ -42,6 +42,7 @@ export type MfaEnrollError =
   | 'MFA_POLICY_DISABLED'
   | 'TOTP_NOT_ALLOWED'
   | 'MFA_POLICY_UNAVAILABLE'
+  | 'MFA_REQUIRED'
   | 'UNKNOWN_MFA_ERROR';
 
 export type VerifyResult = {
@@ -132,6 +133,22 @@ export async function verifyTotpFactor(
 export async function activateCanonicalTotpAfterEnrollment(): Promise<void> {
   const { data, error } = await supabase.rpc('activate_canonical_totp_mfa');
   if (error || !data?.ok) throw new Error(data?.error === 'MFA_SWITCH_REQUIRED' ? 'STEPUP_DENIED' : 'VERIFY_FAILED');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(MFA_METHOD_CHANGED_EVENT));
+  }
+}
+
+export async function deactivateCanonicalTotpBeforeUnenroll(): Promise<void> {
+  const { data, error } = await supabase.rpc('deactivate_canonical_totp_mfa');
+  if (error) throw error;
+  if (!data?.ok) {
+    const errorCode = data?.error;
+    if (errorCode === 'MFA_REQUIRED') throw new Error('MFA_REQUIRED');
+    if (errorCode === 'RECENT_TOTP_REQUIRED') throw new Error('RECENT_TOTP_REQUIRED');
+    if (errorCode === 'STEP_UP_REQUIRED') throw new Error('AAL2_NOT_REACHED');
+    if (errorCode === 'SESSION_INVALID') throw new Error('SESSION_INVALID');
+    throw new Error('VERIFY_FAILED');
+  }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(MFA_METHOD_CHANGED_EVENT));
   }
