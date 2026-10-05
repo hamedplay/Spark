@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase';
 import {
   cancelCurrentTotpEnrollment,
   activateCanonicalTotpAfterEnrollment,
+  deactivateCanonicalTotpBeforeUnenroll,
   getCurrentAal,
   listCurrentUserTotpFactors,
   startTotpEnrollment,
@@ -26,6 +27,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   VERIFY_FAILED: 'تأیید کد ناموفق بود. دوباره تلاش کنید.',
   AAL2_NOT_REACHED: 'ارتقاء سطح احراز هویت ناموفق بود. دوباره تلاش کنید.',
   SESSION_INVALID: 'نشست نامعتبر است. لطفاً مجدداً وارد شوید.',
+  RECENT_TOTP_REQUIRED: 'برای حذف، کد جدید برنامه احراز هویت را دوباره وارد کنید.',
+  MFA_REQUIRED: 'احراز هویت دومرحله‌ای برای حساب شما اجباری است و آخرین برنامه را نمی‌توان حذف کرد.',
   UNKNOWN_MFA_ERROR: 'خطای ناشناخته. دوباره تلاش کنید.',
 };
 
@@ -213,10 +216,23 @@ export function TotpFactorManager() {
     }
 
     setRemoving(true);
+    const removingLastFactor = verifiedCount === 1;
+    let canonicalDeactivated = false;
     try {
       await verifyTotpFactor(removeTarget.id, validCode);
+      if (removingLastFactor) {
+        await deactivateCanonicalTotpBeforeUnenroll();
+        canonicalDeactivated = true;
+      }
+
       const { error } = await supabase.auth.mfa.unenroll({ factorId: removeTarget.id });
-      if (error) throw error;
+      if (error) {
+        if (canonicalDeactivated) {
+          try { await activateCanonicalTotpAfterEnrollment(); } catch { /* best-effort rollback */ }
+        }
+        throw error;
+      }
+
       setRemoveTarget(null);
       setRemoveCode('');
       await loadFactors();
@@ -226,7 +242,7 @@ export function TotpFactorManager() {
     } finally {
       setRemoving(false);
     }
-  }, [loadFactors, removeCode, removeTarget]);
+  }, [loadFactors, removeCode, removeTarget, verifiedCount]);
 
   const verifiedCount = factors.length;
 
@@ -240,7 +256,7 @@ export function TotpFactorManager() {
 
     {factors.length > 0 && <div className="space-y-2">{factors.map((factor) => <div key={factor.id} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
       <div className="flex items-center gap-3"><Smartphone className="w-4 h-4 text-gray-400" /><div><p className="text-sm font-medium text-gray-800 dark:text-white flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-green-500" />برنامه احراز هویت</p><p className="text-xs text-gray-400">{new Date(factor.createdAt).toLocaleDateString('fa-IR')}</p></div></div>
-      <button type="button" onClick={() => { setRemoveTarget(factor); setRemoveCode(''); }} disabled={removing || (verifiedCount === 1 && mfaRequired)} className="p-2 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title={verifiedCount === 1 && mfaRequired ? 'ابتدا یک برنامه احراز هویت دیگر اضافه کنید' : 'حذف'}><Trash2 className="w-4 h-4" /></button>
+      <button type="button" onClick={() => { setRemoveTarget(factor); setRemoveCode(''); }} disabled={removing} className="p-2 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50" title="حذف"><Trash2 className="w-4 h-4" /></button>
     </div>)}</div>}
 
     {stepUpRequired && <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50"><div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 space-y-5">
