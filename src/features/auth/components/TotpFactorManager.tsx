@@ -216,7 +216,7 @@ export function TotpFactorManager() {
     }
 
     setRemoving(true);
-    const removingLastFactor = verifiedCount === 1;
+    const removingLastFactor = factors.length === 1;
     let canonicalDeactivated = false;
     try {
       await verifyTotpFactor(removeTarget.id, validCode);
@@ -242,9 +242,7 @@ export function TotpFactorManager() {
     } finally {
       setRemoving(false);
     }
-  }, [loadFactors, removeCode, removeTarget, verifiedCount]);
-
-  const verifiedCount = factors.length;
+  }, [factors.length, loadFactors, removeCode, removeTarget]);
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-8 h-8 text-teal-500 animate-spin" /></div>;
 
