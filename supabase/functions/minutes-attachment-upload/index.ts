@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
   const { data: sUp, error: upErr } = await adminClient.storage
     .from("minutes-attachments")
     .createSignedUploadUrl(storage_path);
-  if (upErr || !sUp?.signedUrl) {
+  if (upErr || !sUp?.signedUrl || !sUp?.token) {
     // Best-effort: delete the pending record so it doesn't linger
     try {
       await adminClient.from("minutes_attachments").delete().eq("id", attachment_id);
@@ -91,5 +91,6 @@ Deno.serve(async (req: Request) => {
     attachment_id,
     storage_path,
     signed_url: sUp.signedUrl,
+    upload_token: sUp.token,
   }, 200);
 });
