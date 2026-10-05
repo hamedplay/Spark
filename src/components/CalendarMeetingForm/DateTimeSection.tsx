@@ -29,33 +29,43 @@ export function DateTimeSection(props: {
     setScheduleDate,
   } = props;
 
-  if (!scheduleDate) return null;
+  const requiresScheduleSelection = !scheduleDate;
+  const manualEditorVisible = showManualDateTime || requiresScheduleSelection;
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-blue-50 dark:bg-blue-900/20">
-          <p className="text-xs text-blue-500 mb-0.5">تاریخ جلسه</p>
-          <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-            {showManualDateTime && manualDateStr ? manualDateStr : `${scheduleDate.jd} ${JALAALI_MONTHS[scheduleDate.jm-1]} ${scheduleDate.jy}`}
-          </p>
-        </div>
-        <div className="p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center gap-2">
-          <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />
-          <div>
-            <p className="text-xs text-blue-500 mb-0.5">زمان جلسه</p>
-            <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-              {showManualDateTime && manualStartTime ? `${manualStartTime} — ${manualEndTime}` : `${startTime} — ${endTime}`}
-            </p>
+      {scheduleDate ? (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-blue-50 dark:bg-blue-900/20">
+              <p className="text-xs text-blue-500 mb-0.5">تاریخ جلسه</p>
+              <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                {showManualDateTime && manualDateStr ? manualDateStr : `${scheduleDate.jd} ${JALAALI_MONTHS[scheduleDate.jm-1]} ${scheduleDate.jy}`}
+              </p>
+            </div>
+            <div className="p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-blue-500 mb-0.5">زمان جلسه</p>
+                <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                  {showManualDateTime && manualStartTime ? `${manualStartTime} — ${manualEndTime}` : `${startTime} — ${endTime}`}
+                </p>
+              </div>
+            </div>
           </div>
+          <button type="button" onClick={() => { setShowManualDateTime(v => !v); if (!manualDateStr) setManualDateStr(`${scheduleDate.jy}/${String(scheduleDate.jm).padStart(2,'0')}/${String(scheduleDate.jd).padStart(2,'0')}`); if (!manualStartTime) setManualStartTime(startTime); if (!manualEndTime) setManualEndTime(endTime); }}
+            className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+            <Edit2 className="w-3 h-3" />{showManualDateTime ? 'بستن ویرایش دستی' : 'تغییر دستی تاریخ و ساعت'}
+          </button>
+        </>
+      ) : (
+        <div className="p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-blue-50 dark:bg-blue-900/20">
+          <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">تاریخ و ساعت جلسه جدید را انتخاب کنید</p>
+          <p className="text-xs text-blue-500 mt-1">برای جلسه مشابه، زمان‌بندی جلسه قبلی کپی نمی‌شود.</p>
         </div>
-      </div>
-      {/* Manual date/time override toggle */}
-      <button type="button" onClick={() => { setShowManualDateTime(v => !v); if (!manualDateStr && scheduleDate) setManualDateStr(`${scheduleDate.jy}/${String(scheduleDate.jm).padStart(2,'0')}/${String(scheduleDate.jd).padStart(2,'0')}`); if (!manualStartTime) setManualStartTime(startTime); if (!manualEndTime) setManualEndTime(endTime); }}
-        className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline">
-        <Edit2 className="w-3 h-3" />{showManualDateTime ? 'بستن ویرایش دستی' : 'تغییر دستی تاریخ و ساعت'}
-      </button>
-      {showManualDateTime && (
+      )}
+
+      {manualEditorVisible && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-700">
           <div>
             <label className="block text-xs text-blue-600 dark:text-blue-400 mb-1">تاریخ (شمسی)</label>
