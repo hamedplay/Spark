@@ -9,6 +9,7 @@ import { normalizeMeetingDate, normalizeClockTime } from '../../lib/minutesDate'
 import { MeetingOwnerDelegateModal } from './MeetingOwnerDelegateModal';
 import { MeetingShareDialog } from '../../features/meetings/components/MeetingCard/MeetingShareDialog';
 import { InformeeAddParticipantModal } from '../../features/meetings/components/InformeeAddParticipantModal';
+import { ExternalInformeesManager } from '../../features/meetings/components/ExternalInformeesManager';
 
 interface AgendaItem {
   id: string;
@@ -53,6 +54,8 @@ export function MeetingDetailModal({
   const [showOwnerDelegate, setShowOwnerDelegate] = useState(false);
   const [showInformeeParticipantModal, setShowInformeeParticipantModal] = useState(false);
   const [informeeAddedParticipantIds, setInformeeAddedParticipantIds] = useState<string[]>([]);
+  const [externalInformeeNames, setExternalInformeeNames] = useState<string[]>([]);
+  const effectiveParticipantIds = Array.from(new Set([...(m.participant_user_ids || []), ...informeeAddedParticipantIds]));
   const [myDelegate, setMyDelegate] = useState<{
     userId: string;
     name: string;
@@ -73,6 +76,22 @@ export function MeetingDetailModal({
   useEffect(() => {
     setShowInformeeParticipantModal(false);
     setInformeeAddedParticipantIds([]);
+  }, [m.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setExternalInformeeNames([]);
+    supabase
+      .from('meetings')
+      .select('external_informees')
+      .eq('id', m.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        const row = data as { external_informees?: string[] | null } | null;
+        setExternalInformeeNames(Array.isArray(row?.external_informees) ? row.external_informees : []);
+      });
+    return () => { cancelled = true; };
   }, [m.id]);
 
   // Minutes access state — checked via RPC, not frontend-only
@@ -331,13 +350,14 @@ const getJalaliDate = (): string => {
 };
 
   const buildShareText = (): string => {
-    const participantNames = (m.participant_user_ids || [])
+    const participantNames = effectiveParticipantIds
       .map(uid => resolveName(uid))
       .join('، ');
     const notifyNames = ((m.notify_users || []) as string[])
       .map(uid => resolveName(uid))
       .join('، ');
     const externalNames = (m.external_participants || []).join('، ');
+    const externalInformees = externalInformeeNames.join('، ');
     const creatorName = resolveName(m.user_id);
     const startNorm = normalizeClockTime(m.start_time) ?? m.start_time;
     const endNorm = normalizeClockTime(m.end_time) ?? m.end_time;
@@ -354,7 +374,8 @@ const getJalaliDate = (): string => {
       m.phone ? `📞 تماس: ${m.phone}` : '',
       participantNames ? `👥 شرکت‌کنندگان: ${participantNames}` : '',
       notifyNames ? `🔔 مطلعین: ${notifyNames}` : '',
-      externalNames ? `🌐 خارج سازمان: ${externalNames}` : '',
+      externalNames ? `🌐 شرکت‌کنندگان خارج سازمان: ${externalNames}` : '',
+      externalInformees ? `🔔 مطلعین خارج سازمان: ${externalInformees}` : '',
       roomCode ? `🔗 لینک آنلاین: ${window.location.origin}/?conference=${roomCode}` : '',
       m.notes ? `📝 یادداشت: ${m.notes}` : '',
       agendaItems.length > 0
@@ -561,14 +582,14 @@ const getJalaliDate = (): string => {
           )}
 
           {/* Participants */}
-          {m.participant_user_ids && m.participant_user_ids.length > 0 && (
+          {effectiveParticipantIds.length > 0 && (
             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
               <div className="flex items-center gap-2 mb-2">
                 <Users className="w-4 h-4 text-gray-400" />
-                <p className="text-xs text-gray-400 font-medium">شرکت‌کنندگان ({m.participant_user_ids.length})</p>
+                <p className="text-xs text-gray-400 font-medium">شرکت‌کنندگان ({effectiveParticipantIds.length})</p>
               </div>
               <div className="flex flex-col gap-1.5">
-                {m.participant_user_ids.map(uid => {
+                {effectiveParticipantIds.map(uid => {
                   const status = participantStatuses[uid];
                   const statusBadge = isOwner && status ? (() => {
                     if (status === 'accepted') return (
@@ -606,18 +627,53 @@ const getJalaliDate = (): string => {
             </div>
           )}
 
-          {/* External */}
+          {/* External participants */}
           {m.external_participants && m.external_participants.length > 0 && (
             <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
               <div className="flex items-center gap-2 mb-2">
                 <UserPlus className="w-4 h-4 text-gray-400" />
-                <p className="text-xs text-gray-400 font-medium">افراد خارج سازمان</p>
+                <p className="text-xs text-gray-400 font-medium">شرکت‌کنندگان خارج سازمان</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {m.external_participants.map(name => (
                   <span key={name} className="inline-flex items-center gap-1.5 bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 px-2.5 py-1 rounded-full text-xs font-medium">{name}</span>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* External informees */}
+          {(externalInformeeNames.length > 0 || (canEdit && currentUserId)) && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-100 dark:border-amber-900/40">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Bell className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">مطلعین خارج سازمان</p>
+                </div>
+                {currentUserId && (
+                  <ExternalInformeesManager
+                    meetingId={m.id}
+                    currentUserId={currentUserId}
+                    meetingSubject={m.subject}
+                    meetingDate={(m as MeetingData & { request_jalaali_date?: string | null }).request_jalaali_date ?? m.request_date}
+                    startTime={m.start_time}
+                    endTime={m.end_time}
+                    location={m.location}
+                    names={externalInformeeNames}
+                    canManage={canEdit}
+                    onChanged={setExternalInformeeNames}
+                  />
+                )}
+              </div>
+              {externalInformeeNames.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {externalInformeeNames.map(name => (
+                    <span key={name} className="inline-flex items-center gap-1.5 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-full text-xs font-medium">{name}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-amber-600/70 dark:text-amber-300/70">مطلع خارج سازمانی ثبت نشده است.</p>
+              )}
             </div>
           )}
 
@@ -887,7 +943,7 @@ const getJalaliDate = (): string => {
           meetingId={m.id}
           currentUserId={currentUserId}
           organizerId={m.user_id}
-          existingParticipantIds={Array.from(new Set([...(m.participant_user_ids || []), ...informeeAddedParticipantIds]))}
+          existingParticipantIds={effectiveParticipantIds}
           onClose={() => setShowInformeeParticipantModal(false)}
           onSuccess={(participantUserId) => {
             setInformeeAddedParticipantIds(prev => prev.includes(participantUserId) ? prev : [...prev, participantUserId]);
@@ -901,7 +957,7 @@ const getJalaliDate = (): string => {
           meetingId={m.id}
           meetingSubject={m.subject}
           currentUserId={currentUserId}
-          participantUserIds={m.participant_user_ids || []}
+          participantUserIds={effectiveParticipantIds}
           notifyUserIds={(m.notify_users || []) as string[]}
           onClose={() => setShowOwnerDelegate(false)}
           onSuccess={(delegateUserId, delegateName) => {
@@ -989,9 +1045,10 @@ const getJalaliDate = (): string => {
           <div style={{ padding: '16px 20px 18px', display: 'flex', flexDirection: 'column', gap: 11, backgroundColor: '#f8fafc' }}>
             {(() => {
               const creatorName = isOwner ? 'شما' : resolveName(m.user_id);
-              const participantNames = (m.participant_user_ids || []).map(uid => resolveName(uid)).join('، ');
+              const participantNames = effectiveParticipantIds.map(uid => resolveName(uid)).join('، ');
               const notifyNames = ((m.notify_users || []) as string[]).map(uid => resolveName(uid)).join('، ');
               const externalNames = (m.external_participants || []).join('، ');
+              const externalInformees = externalInformeeNames.join('، ');
               const start = normalizeClockTime(m.start_time) ?? m.start_time;
               const finish = normalizeClockTime(m.end_time) ?? m.end_time;
               const rows = [
@@ -1003,7 +1060,8 @@ const getJalaliDate = (): string => {
                 { label: 'تلفن تماس', value: m.phone },
                 { label: 'شرکت‌کنندگان', value: participantNames },
                 { label: 'مطلعین', value: notifyNames },
-                { label: 'خارج سازمان', value: externalNames },
+                { label: 'شرکت‌کنندگان خارج سازمان', value: externalNames },
+                { label: 'مطلعین خارج سازمان', value: externalInformees },
                 { label: 'لینک آنلاین', value: roomCode ? `${window.location.origin}/?conference=${roomCode}` : '' },
                 { label: 'یادداشت', value: m.notes },
                 {
