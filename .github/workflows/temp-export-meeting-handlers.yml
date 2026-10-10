@@ -1,0 +1,22 @@
+name: Temporary export meeting handlers
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meeting-handler-sources
+          path: |
+            src/components/CalendarMeetingForm/commitEdit.ts
+            src/components/Calendar/useCalendarDataActions.ts
+            src/components/CalendarMeetingForm/services.ts
