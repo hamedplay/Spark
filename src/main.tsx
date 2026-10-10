@@ -4,6 +4,7 @@ import App from './App.tsx';
 import { startPwaNotificationBridge } from './lib/pwaNotificationBridge';
 import './index.css';
 import './responsive.css';
+import './meeting-mobile-fixes.css';
 import './spark-loader.css';
 import './corporate-theme.css';
 // Load the shared auth foundation up front so the public login page has the
