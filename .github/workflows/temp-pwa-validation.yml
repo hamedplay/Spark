@@ -18,10 +18,28 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Notification tests
-        run: |
-          npm run test:notification-model
-          npm run test:notification-lifecycle
-          npm run test:notification-producer
       - name: Build
-        run: npm run build
+        run: npm run build 2>&1 | tee build.log
+      - name: Notification tests
+        shell: bash
+        run: |
+          set +e
+          {
+            npm run test:notification-model
+            a=$?
+            npm run test:notification-lifecycle
+            b=$?
+            npm run test:notification-producer
+            c=$?
+            echo "exit_codes=$a,$b,$c"
+            exit $(( a || b || c ))
+          } 2>&1 | tee notification-tests.log
+          exit ${PIPESTATUS[0]}
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-validation-logs
+          path: |
+            build.log
+            notification-tests.log
