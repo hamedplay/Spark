@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { insertNotification } from '../lib/notifications';
 import type { SmsDispatchResult } from '../lib/notifications';
 import { getMeetingTemplateKey } from '../config/templateCatalog';
-import { computeMeetingChangeSet } from '../lib/meetingEditDiff';
+import { computeScopedMeetingChangeSet } from '../lib/meetingEditDiff';
 import type { MeetingChangeSet } from '../lib/meetingEditDiff';
 import toast from 'react-hot-toast';
 import moment from 'moment-jalaali';
@@ -228,9 +228,10 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   }, [prefillData]);
 
   const loadMeetingParticipants = async (meetingId: string) => {
-    const { data } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants, meeting_manager, is_online, conference_room_id').eq('id', meetingId).maybeSingle();
+    const { data } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants, meeting_manager, is_online, conference_room_id, send_sms').eq('id', meetingId).maybeSingle();
     if (!data) return;
     if (data.is_online !== undefined && data.is_online !== null) setIsOnline(!!data.is_online);
+    if (data.send_sms !== undefined && data.send_sms !== null) setSendSms(!!data.send_sms);
 
     if ((data.participant_user_ids || []).length > 0) {
       setSelectedParticipants((data.participant_user_ids as string[]).map((id: string) => ({ id, name: '' })));
@@ -442,7 +443,11 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const minorSet = new Set<string>();
         for (const id of bulkIds) {
           const existing = existingMap.get(id) || {};
-          const changeSet = computeMeetingChangeSet(existing, nextFields);
+          const changeSet = computeScopedMeetingChangeSet(
+            existing,
+            nextFields,
+            Boolean(prefillEditAllIds && prefillEditAllIds.length > 0),
+          );
           changeSetsByMeetingId[id] = changeSet;
           for (const field of changeSet.importantFields) importantSet.add(field);
           for (const field of changeSet.minorFields) minorSet.add(field);
@@ -568,8 +573,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         }
       }
 
+      let recurringMeetingDates = [meetingDateStr];
       if (repeatEnabled && meeting && repeatEndDate) {
-        await createRepeatMeetings({
+        const repeatDates = await createRepeatMeetings({
           baseRecord: record,
           type: repeatType,
           interval: repeatInterval,
@@ -579,6 +585,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           repeatMonthlyNth,
           repeatMonthlyNthWeekday,
         });
+        recurringMeetingDates = [meetingDateStr, ...repeatDates];
       }
 
       await insertNotification({
@@ -627,8 +634,20 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
       let externalSmsResult: ExternalSmsResult | null = null;
       if (sendSms && selectedExternal.length > 0) {
-        const fallbackSms = `دعوت به جلسه: «${subject}» | تاریخ: ${meetingDateStr} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
-        externalSmsResult = await sendSmsToExternals(selectedExternal, contacts, fallbackSms, userId, smsPlaceholders);
+        const meetingDatesText = recurringMeetingDates.join('، ');
+        const externalSmsPlaceholders = {
+          ...smsPlaceholders,
+          meeting_date: meetingDatesText,
+        };
+        const dateLabel = recurringMeetingDates.length > 1 ? 'تاریخ‌ها' : 'تاریخ';
+        const fallbackSms = `دعوت به جلسه: «${subject}» | ${dateLabel}: ${meetingDatesText} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
+        externalSmsResult = await sendSmsToExternals(
+          selectedExternal,
+          contacts,
+          fallbackSms,
+          userId,
+          externalSmsPlaceholders,
+        );
       }
       showSmsSummary(internalSmsResults, externalSmsResult);
 
