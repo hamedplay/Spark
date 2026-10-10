@@ -1,0 +1,159 @@
+import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2.111.0";
+import webpush from "npm:web-push@3.6.7";
+
+type OutboxRow = {
+  id: string;
+  notification_id: string;
+  user_id: string;
+  payload: Record<string, unknown>;
+};
+
+type SubscriptionRow = {
+  id: string;
+  endpoint: string;
+  p256dh: string;
+  auth_key: string;
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
+  const token = req.headers.get("X-Spark-Worker-Token") ?? "";
+  if (!token) return json({ error: "Unauthorized" }, 401);
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const service = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: tokenOk, error: tokenError } = await service.rpc(
+    "verify_pwa_push_worker_secret_service",
+    { p_candidate: token },
+  );
+  if (tokenError || tokenOk !== true) return json({ error: "Unauthorized" }, 401);
+
+  const { data: vapid, error: vapidError } = await service.rpc("get_pwa_vapid_config_service");
+  if (vapidError || !vapid?.public_key || !vapid?.private_key) {
+    return json({ error: "VAPID_NOT_CONFIGURED" }, 503);
+  }
+
+  webpush.setVapidDetails(
+    "mailto:spark-notifications@localhost.invalid",
+    String(vapid.public_key),
+    String(vapid.private_key),
+  );
+
+  const { data: claimed, error: claimError } = await service.rpc(
+    "claim_pwa_push_outbox_service",
+    { p_limit: 50 },
+  );
+  if (claimError) return json({ error: "CLAIM_FAILED" }, 500);
+
+  const rows = (Array.isArray(claimed) ? claimed : []) as OutboxRow[];
+  let sentRows = 0;
+  let failedRows = 0;
+
+  for (const row of rows) {
+    const { data: subscriptions, error: subscriptionsError } = await service
+      .from("pwa_push_subscriptions")
+      .select("id,endpoint,p256dh,auth_key")
+      .eq("user_id", row.user_id)
+      .is("disabled_at", null);
+
+    if (subscriptionsError) {
+      await service.rpc("complete_pwa_push_outbox_service", {
+        p_id: row.id,
+        p_success: false,
+        p_error: subscriptionsError.message,
+      });
+      failedRows++;
+      continue;
+    }
+
+    const activeSubscriptions = (subscriptions || []) as SubscriptionRow[];
+    if (activeSubscriptions.length === 0) {
+      await service.rpc("complete_pwa_push_outbox_service", {
+        p_id: row.id,
+        p_success: true,
+        p_error: null,
+      });
+      sentRows++;
+      continue;
+    }
+
+    let successCount = 0;
+    let transientFailureCount = 0;
+    const errors: string[] = [];
+
+    const safePayload = JSON.stringify({
+      title: "اسپارک",
+      body: "یک اعلان جدید در اسپارک دارید.",
+      actionUrl: typeof row.payload?.actionUrl === "string" ? row.payload.actionUrl : "/",
+      notificationId: row.notification_id,
+    });
+
+    for (const subscription of activeSubscriptions) {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: subscription.endpoint,
+            keys: { p256dh: subscription.p256dh, auth: subscription.auth_key },
+          },
+          safePayload,
+          { TTL: 60 * 60 * 24 },
+        );
+
+        successCount++;
+        await service
+          .from("pwa_push_subscriptions")
+          .update({ last_success_at: new Date().toISOString(), failure_count: 0 })
+          .eq("id", subscription.id);
+      } catch (error) {
+        const statusCode = typeof error === "object" && error !== null && "statusCode" in error
+          ? Number((error as { statusCode?: unknown }).statusCode)
+          : 0;
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${statusCode || "ERR"}:${message}`);
+
+        if (statusCode === 404 || statusCode === 410) {
+          await service
+            .from("pwa_push_subscriptions")
+            .update({ disabled_at: new Date().toISOString(), failure_count: 1 })
+            .eq("id", subscription.id);
+        } else {
+          transientFailureCount++;
+          const { data: current } = await service
+            .from("pwa_push_subscriptions")
+            .select("failure_count")
+            .eq("id", subscription.id)
+            .maybeSingle();
+          await service
+            .from("pwa_push_subscriptions")
+            .update({ failure_count: Number(current?.failure_count || 0) + 1 })
+            .eq("id", subscription.id);
+        }
+      }
+    }
+
+    const success = successCount > 0 || transientFailureCount === 0;
+    await service.rpc("complete_pwa_push_outbox_service", {
+      p_id: row.id,
+      p_success: success,
+      p_error: success ? null : errors.join(" | ").slice(0, 1000),
+    });
+
+    if (success) sentRows++;
+    else failedRows++;
+  }
+
+  return json({ ok: true, claimed: rows.length, sentRows, failedRows });
+});
