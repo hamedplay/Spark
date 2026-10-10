@@ -1,0 +1,16 @@
+/* Meeting edit drawer must stay above the detail drawer (z=300) while the
+   destructive confirmation dialog remains the top meeting layer (z=400). */
+.fixed.inset-0[class~="bg-black/40"][class~="z-50"]:has(> .animate-slideInLeft.max-w-lg) {
+  z-index: 350 !important;
+}
+
+@media (max-width: 640px) {
+  .fixed.inset-0[class~="bg-black/40"][class~="z-50"]:has(> .animate-slideInLeft.max-w-lg) > .animate-slideInLeft.max-w-lg {
+    width: 100% !important;
+    max-width: none !important;
+    height: 100dvh;
+    max-height: 100dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overscroll-behavior: contain;
+  }
+}
