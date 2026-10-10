@@ -26,6 +26,7 @@ function armInstalledPwaNotificationPermission() {
     requesting = true;
     try {
       await Notification.requestPermission();
+      window.dispatchEvent(new Event('pwa-notification-permission-changed'));
     } catch {
       // Browsers can reject permission requests depending on platform policy.
     } finally {
@@ -53,6 +54,9 @@ if (
       const registration = await navigator.serviceWorker.register('/pwa-sw.js', { scope: '/' });
       console.log('SW registered:', registration.scope);
       armInstalledPwaNotificationPermission();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        window.dispatchEvent(new Event('pwa-notification-permission-changed'));
+      }
       registration.addEventListener('updatefound', () => {
         const newWorker = registration.installing;
         if (!newWorker) return;
