@@ -197,6 +197,20 @@ export async function commitCalendarMeetingEdit({
       });
     }
 
+    const externalInformeesByMeetingId = new Map<string, string[]>();
+    const meetingIdsForInformees = meetingDiffs.map(diff => diff.meeting_id);
+    if (meetingIdsForInformees.length > 0) {
+      const { data: informeeMeetings, error: informeeMeetingsError } = await supabase
+        .from('meetings')
+        .select('id, external_informees')
+        .in('id', meetingIdsForInformees);
+      if (informeeMeetingsError) throw informeeMeetingsError;
+      for (const meeting of informeeMeetings || []) {
+        const row = meeting as { id: string; external_informees?: string[] | null };
+        externalInformeesByMeetingId.set(row.id, Array.isArray(row.external_informees) ? row.external_informees : []);
+      }
+    }
+
     const bulkMeetingDetails = new Map<string, {
       subject: string;
       request_date: string;
@@ -508,6 +522,21 @@ export async function commitCalendarMeetingEdit({
             'cancel',
             diff.meeting_id,
             `${operationId}:${diff.meeting_id}:external:cancel`,
+          ));
+        }
+
+        const externalInformees = externalInformeesByMeetingId.get(diff.meeting_id) || [];
+        if (!isFirstSchedule && (meetingChangeSet?.importantFields.length ?? 0) > 0 && externalInformees.length > 0) {
+          const informeeChangeFallback = `تغییر جلسه: «${meetingSubject}» | تاریخ: ${jalaliDate || meetingDateStr} | ساعت: ${currentTime}${currentPlaceholders.location_part}`;
+          externalSmsResults.push(await sendSmsToExternals(
+            externalInformees,
+            contacts,
+            informeeChangeFallback,
+            userId,
+            currentPlaceholders,
+            'informee_change',
+            diff.meeting_id,
+            `${operationId}:${diff.meeting_id}:external-informee:change`,
           ));
         }
       }

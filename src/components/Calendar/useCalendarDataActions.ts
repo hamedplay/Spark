@@ -358,16 +358,22 @@ export function useCalendarDataActions(scope: Record<string, any>) {
 
       const sendExternalCancel = async (m: MeetingData) => {
         let externalNames = (m.external_participants || []) as string[];
-        if (!externalNames.length && m.id) {
+        let externalInformeeNames = ((m as MeetingData & { external_informees?: string[] | null }).external_informees || []) as string[];
+
+        if (m.id && (!externalNames.length || !externalInformeeNames.length)) {
           const { data: freshMeeting, error: freshMeetingError } = await supabase
             .from('meetings')
-            .select('external_participants')
+            .select('external_participants, external_informees')
             .eq('id', m.id)
             .maybeSingle();
           if (freshMeetingError) throw freshMeetingError;
-          externalNames = (freshMeeting?.external_participants || []) as string[];
+          if (!externalNames.length) externalNames = (freshMeeting?.external_participants || []) as string[];
+          if (!externalInformeeNames.length) {
+            externalInformeeNames = ((freshMeeting as { external_informees?: string[] | null } | null)?.external_informees || []) as string[];
+          }
         }
-        if (!externalNames.length) return;
+
+        if (!externalNames.length && !externalInformeeNames.length) return;
 
         const { data: contacts, error: contactsError } = await supabase
           .from('contacts_email')
@@ -375,27 +381,37 @@ export function useCalendarDataActions(scope: Record<string, any>) {
           .eq('user_id', user.id);
         if (contactsError) throw contactsError;
 
-        const wantedNames = new Set(externalNames.map(normalizeExternalName));
-        const mobiles = Array.from(new Set(
-          (contacts || [])
-            .filter((contact: any) => wantedNames.has(normalizeExternalName(contact.name || '')))
-            .map((contact: any) => String(contact.phone || '').trim())
-            .filter(Boolean)
-        ));
-        if (!mobiles.length) return;
+        const participantNames = new Set(externalNames.map(normalizeExternalName));
+        externalInformeeNames = externalInformeeNames.filter(name => !participantNames.has(normalizeExternalName(name)));
 
-        const { data: smsResult, error: smsError } = await supabase.functions.invoke('send-sms', {
-          body: {
-            mode: 'external',
-            mobiles,
-            meetingId: m.id,
-            category: 'meeting',
-            eventType: 'cancel',
-            triggeredByUserId: user.id,
-          },
-        });
-        if (smsError) throw smsError;
-        if (smsResult?.ok === false) throw new Error(smsResult?.error || 'ارسال لغو جلسه برای مهمانان خارج سازمان ناموفق بود');
+        const sendGroup = async (names: string[], eventType: 'cancel' | 'informee_cancel', errorText: string) => {
+          if (!names.length) return;
+          const wantedNames = new Set(names.map(normalizeExternalName));
+          const mobiles = Array.from(new Set(
+            (contacts || [])
+              .filter((contact: any) => wantedNames.has(normalizeExternalName(contact.name || '')))
+              .map((contact: any) => String(contact.phone || '').trim())
+              .filter(Boolean)
+          ));
+          if (!mobiles.length) return;
+
+          const { data: smsResult, error: smsError } = await supabase.functions.invoke('send-sms', {
+            body: {
+              mode: 'external',
+              mobiles,
+              meetingId: m.id,
+              category: 'meeting',
+              eventType,
+              eventKey: `${m.id}:external:${eventType}`,
+              triggeredByUserId: user.id,
+            },
+          });
+          if (smsError) throw smsError;
+          if (smsResult?.ok === false) throw new Error(smsResult?.error || errorText);
+        };
+
+        await sendGroup(externalNames, 'cancel', 'ارسال لغو جلسه برای شرکت‌کنندگان خارج سازمان ناموفق بود');
+        await sendGroup(externalInformeeNames, 'informee_cancel', 'ارسال لغو جلسه برای مطلعین خارج سازمان ناموفق بود');
       };
 
       // Helper: send cancel notification to all participants/observers and external guests.
@@ -427,7 +443,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         if (mode === 'revert') {
           const { data: fullMtg } = await supabase
             .from('meetings')
-            .select('subject, location, representative, phone, notes, priority, participant_user_ids, notify_users, external_participants, meeting_manager')
+            .select('subject, location, representative, phone, notes, priority, participant_user_ids, notify_users, external_participants, external_informees, meeting_manager')
             .eq('id', id)
             .maybeSingle();
           if (!fullMtg) throw new Error('جلسه یافت نشد');
@@ -448,6 +464,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
               participant_user_ids: fullMtg.participant_user_ids ?? [],
               notify_users: fullMtg.notify_users ?? [],
               external_participants: fullMtg.external_participants ?? [],
+              external_informees: (fullMtg as any).external_informees ?? [],
               meeting_manager: fullMtg.meeting_manager ?? null,
               user_id: user.id,
               status: 'open',
@@ -493,7 +510,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
           // Notify participants of each repeating meeting before bulk delete
           const { data: repeatingMeetings } = await supabase
             .from('meetings')
-            .select('id,subject,participant_user_ids,notify_users,external_participants,request_date,start_time,end_time')
+            .select('id,subject,participant_user_ids,notify_users,external_participants,external_informees,request_date,start_time,end_time')
             .eq('user_id', user.id)
             .eq('subject', meeting.subject)
             .neq('repeat_type', 'none');
