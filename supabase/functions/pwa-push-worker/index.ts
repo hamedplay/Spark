@@ -41,15 +41,26 @@ Deno.serve(async (req: Request) => {
   );
   if (tokenError || tokenOk !== true) return json({ error: "Unauthorized" }, 401);
 
-  const { data: vapid, error: vapidError } = await service.rpc("get_pwa_vapid_config_service");
-  if (vapidError || !vapid?.public_key || !vapid?.private_key) {
-    return json({ error: "VAPID_NOT_CONFIGURED" }, 503);
+  const { data: existingVapid, error: vapidError } = await service.rpc("get_pwa_vapid_config_service");
+  if (vapidError) return json({ error: "VAPID_CONFIG_READ_FAILED" }, 500);
+
+  let publicKey = typeof existingVapid?.public_key === "string" ? existingVapid.public_key : "";
+  let privateKey = typeof existingVapid?.private_key === "string" ? existingVapid.private_key : "";
+  if (!publicKey || !privateKey) {
+    const generated = webpush.generateVAPIDKeys();
+    publicKey = generated.publicKey;
+    privateKey = generated.privateKey;
+    const { error: setError } = await service.rpc("set_pwa_vapid_config_service", {
+      p_public_key: publicKey,
+      p_private_key: privateKey,
+    });
+    if (setError) return json({ error: "VAPID_CONFIG_WRITE_FAILED" }, 500);
   }
 
   webpush.setVapidDetails(
     "mailto:spark-notifications@localhost.invalid",
-    String(vapid.public_key),
-    String(vapid.private_key),
+    publicKey,
+    privateKey,
   );
 
   const { data: claimed, error: claimError } = await service.rpc(
