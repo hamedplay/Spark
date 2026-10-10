@@ -22,7 +22,7 @@ export async function sendSmsToExternals(
   message: string,
   triggeredByUserId?: string | null,
   placeholders?: Record<string, string>,
-  eventType: 'invite' | 'change' | 'cancel' = 'invite',
+  eventType: 'invite' | 'change' | 'cancel' | 'informee_invite' | 'informee_change' | 'informee_cancel' = 'invite',
   meetingId?: string | null,
   eventKey?: string | null,
 ): Promise<ExternalSmsResult> {
