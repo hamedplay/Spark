@@ -153,8 +153,8 @@ export async function createRepeatMeetings({
   repeatMonthlyMode,
   repeatMonthlyNth,
   repeatMonthlyNthWeekday,
-}: RepeatOptions) {
-  if (!endDate) return;
+}: RepeatOptions): Promise<string[]> {
+  if (!endDate) return [];
   let endMs: number;
   if (endDate.includes('/') && endDate.split('/').length === 3) {
     const [year, month, day] = endDate.split('/').map(Number);
@@ -164,7 +164,7 @@ export async function createRepeatMeetings({
   } else {
     endMs = new Date(endDate).getTime();
   }
-  if (Number.isNaN(endMs)) return;
+  if (Number.isNaN(endMs)) return [];
 
   const baseDate = new Date(baseRecord.request_date);
   const repeatMeetings: any[] = [];
@@ -232,7 +232,7 @@ export async function createRepeatMeetings({
     }
   }
 
-  if (repeatMeetings.length === 0) return;
+  if (repeatMeetings.length === 0) return [];
   const { data: inserted, error: repeatError } = await supabase
     .from('meetings')
     .insert(repeatMeetings)
@@ -240,7 +240,7 @@ export async function createRepeatMeetings({
   if (repeatError) {
     console.error('Repeat insert error:', repeatError);
     toast.error('خطا در ایجاد جلسات تکراری: ' + repeatError.message);
-    return;
+    return [];
   }
 
   toast.success(`${repeatMeetings.length} جلسه تکراری ایجاد شد`);
@@ -253,4 +253,6 @@ export async function createRepeatMeetings({
     }
   }
   if (inboxRows.length > 0) await supabase.from('meeting_inbox').insert(inboxRows);
+
+  return repeatMeetings.map(row => row.request_jalaali_date as string);
 }
