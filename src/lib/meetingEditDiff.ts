@@ -121,6 +121,18 @@ export function computeMeetingChangeSet(existing: Record<string, any>, next: Rec
   return { importantFields, minorFields, participantChanged, notifyUsersChanged, externalChanged, hasNonParticipantChanges, hasAnyChanges };
 }
 
+export function computeScopedMeetingChangeSet(
+  existing: Record<string, any>,
+  next: Record<string, any>,
+  preserveOccurrenceDate: boolean,
+): MeetingChangeSet {
+  if (!preserveOccurrenceDate) return computeMeetingChangeSet(existing, next);
+  return computeMeetingChangeSet(existing, {
+    ...next,
+    request_date: existing.request_date,
+  });
+}
+
 function computeRecipientDiff(prevIds: string[], nextIds: string[]): RecipientDiff {
   const prev = new Set(prevIds.filter(x => !!x));
   const next = new Set(nextIds.filter(x => !!x));
