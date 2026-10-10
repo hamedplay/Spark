@@ -1,0 +1,27 @@
+name: Temporary PWA validation
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Notification tests
+        run: |
+          npm run test:notification-model
+          npm run test:notification-lifecycle
+          npm run test:notification-producer
+      - name: Build
+        run: npm run build
