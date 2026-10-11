@@ -531,3 +531,161 @@ test_full_validation() {
   echo "== Scheduler =="
   test_schedulers || return 1
 }
+
+# -----------------------------------------------------------------------------
+# Host-agnostic Supabase Studio access.
+# Studio stays behind Nginx on 8443, but no DNS or Let's Encrypt certificate is
+# required. A local self-signed certificate is generated once and reused.
+# -----------------------------------------------------------------------------
+
+SPARK_STUDIO_CERT_DIR="${CONFIG_DIR}/studio-tls"
+
+spark_universal_studio_host() {
+  printf '%s\n' "${TURN_PUBLIC_IP:-${AIRGAP_SERVER_IP:-${API_DOMAIN:-127.0.0.1}}}"
+}
+
+spark_universal_ensure_studio_cert() {
+  local ip cert key
+  ip="$(spark_universal_local_ipv4)" || ip="127.0.0.1"
+  cert="${SPARK_STUDIO_CERT_DIR}/fullchain.pem"
+  key="${SPARK_STUDIO_CERT_DIR}/privkey.pem"
+  mkdir -p "$SPARK_STUDIO_CERT_DIR"
+  chmod 700 "$SPARK_STUDIO_CERT_DIR"
+  if [[ -s "$cert" && -s "$key" ]] && openssl x509 -in "$cert" -noout -checkend 86400 >/dev/null 2>&1; then
+    return 0
+  fi
+  openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 825 \
+    -keyout "$key" -out "$cert" \
+    -subj '/CN=Spark Supabase Studio' \
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:${ip}" >/dev/null 2>&1 || return 1
+  chmod 600 "$key"
+  chmod 644 "$cert"
+}
+
+write_supabase_studio_gateway() {
+  spark_universal_ensure_studio_cert || return 1
+  cat >/etc/nginx/sites-available/spark-supabase-admin <<EOF_NGINX
+server {
+    listen 8443 ssl default_server;
+    server_name _;
+    server_tokens off;
+
+    ssl_certificate ${SPARK_STUDIO_CERT_DIR}/fullchain.pem;
+    ssl_certificate_key ${SPARK_STUDIO_CERT_DIR}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 50m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$spark_connection_upgrade;
+        proxy_set_header Host 127.0.0.1:8000;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_read_timeout 3600s;
+    }
+}
+EOF_NGINX
+}
+
+studio_external_is_open() {
+  [[ -L /etc/nginx/sites-enabled/spark-supabase-admin ]] || return 1
+  ss -lnt 2>/dev/null | grep -Eq '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):8443[[:space:]]'
+}
+
+spark_universal_studio_health() {
+  local dashboard_user dashboard_password
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  [[ -n "$dashboard_password" ]] || return 1
+  curl --noproxy '*' -fsSkL --connect-timeout 5 --max-time 15 \
+    -u "${dashboard_user}:${dashboard_password}" \
+    -H 'Host: studio.spark.local' https://127.0.0.1:8443/ -o /dev/null
+}
+
+spark_universal_enable_studio() {
+  external_access_requirements || return 1
+  [[ "$(docker inspect -f '{{.State.Running}}' supabase-studio 2>/dev/null || true)" == "true" ]] || {
+    fail "supabase-studio container is not running."
+    return 1
+  }
+  [[ -e /etc/nginx/sites-enabled/spark ]] || {
+    fail "Production Nginx is not active."
+    return 1
+  }
+  if studio_external_is_open && spark_universal_studio_health; then
+    return 0
+  fi
+  firewall_optional_allow_port 8443 || return 1
+  write_supabase_studio_gateway || return 1
+  ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+  if ! nginx -t >>"$CURRENT_LOG" 2>&1 || ! systemctl reload nginx >>"$CURRENT_LOG" 2>&1; then
+    rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+    firewall_optional_close_port 8443
+    return 1
+  fi
+  if ! spark_universal_studio_health; then
+    rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+    firewall_optional_close_port 8443
+    nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    return 1
+  fi
+}
+
+show_studio_connection_info() {
+  local dashboard_user dashboard_password state host
+  external_access_requirements || return 1
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  [[ -n "$dashboard_password" ]] || { fail "DASHBOARD_PASSWORD not found."; return 1; }
+  host="$(spark_universal_studio_host)"
+  state="CLOSED"; studio_external_is_open && state="OPEN"
+  printf '\n%s%sSupabase Studio access%s\n' "$C_BOLD" "$C_CYAN" "$C_RESET"
+  printf '%s\n' '────────────────────────────────────────────────────────────'
+  printf 'State    : %s\n' "$state"
+  printf 'URL      : https://%s:8443\n' "$host"
+  printf 'Username : %s\n' "$dashboard_user"
+  printf 'Password : %s\n' "$dashboard_password"
+  printf '%s\n' '────────────────────────────────────────────────────────────'
+  warn "Studio uses a local self-signed certificate; direct browsers may show a trust warning."
+}
+
+open_supabase_studio_access() {
+  local mode="${1:-interactive}" host
+  host="$(spark_universal_studio_host)"
+  if [[ "$mode" != "auto" ]]; then
+    if ! confirm_word "Supabase Studio on https://${host}:8443 opens." "OPEN"; then
+      warn "canceled."
+      return 1
+    fi
+  fi
+  spark_universal_enable_studio || {
+    fail "Supabase Studio listener could not be enabled."
+    return 1
+  }
+  ok "Supabase Studio is running and reachable on HTTPS/8443."
+  [[ "$mode" == "auto" ]] || show_studio_connection_info
+}
+
+# Step 12 owns both public Nginx routes and the administrative Studio listener.
+# Re-declare it here so a fresh install leaves Studio ready without a second
+# manual action.
+install_step_12() {
+  title
+  new_log "install-12-host-agnostic-nginx"
+  spark_apply_nginx_gzip_profile || return 1
+  spark_universal_write_nginx || return 1
+  run_logged "Nginx syntax" nginx -t || return 1
+  run_logged "Reload Nginx" systemctl reload nginx || return 1
+  run_logged "Validate wildcard-host frontend" spark_universal_test_nginx || { unmark_step 12; return 1; }
+  if ! open_supabase_studio_access auto; then
+    unmark_step 12
+    return 1
+  fi
+  mark_step 12
+}
