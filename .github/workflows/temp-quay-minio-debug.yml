@@ -11,20 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test Quay image access paths
+      - name: Test Docker Hub MinIO client replacement
         shell: bash
         run: |
           set -Eeuo pipefail
-          image='quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z'
-          echo '=== buildx imagetools inspect ==='
-          docker buildx imagetools inspect "$image" || true
-          echo '=== docker manifest inspect ==='
-          docker manifest inspect "$image" || true
-          echo '=== docker pull linux/amd64 ==='
+          image='minio/mc:RELEASE.2025-08-13T08-35-41Z'
           docker pull --platform linux/amd64 "$image"
-          echo '=== local inspect ==='
           docker image inspect --format 'id={{.Id}} os={{.Os}} arch={{.Architecture}} repo={{json .RepoDigests}}' "$image"
-          echo '=== save/create ==='
+          docker run --rm --platform linux/amd64 "$image" --version
           docker image save "$image" >/tmp/minio-mc.tar
           test -s /tmp/minio-mc.tar
           cid="$(docker create --pull=never --entrypoint /bin/true "$image")"
