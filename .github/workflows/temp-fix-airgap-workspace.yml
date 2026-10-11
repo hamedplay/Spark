@@ -1,0 +1,48 @@
+name: temp-fix-airgap-workspace
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/temp-fix-airgap-workspace.yml
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply scoped workspace fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('deploy/spark-cli/lib/airgap-build.sh')
+          s = p.read_text()
+          old = '''  mkdir -p "$output_root"\n  work="$(mktemp -d)"\n'''
+          new = '''  mkdir -p "$output_root"\n  # Keep the multi-GB raw bundle workspace on the selected output filesystem.\n  # /tmp may be a small tmpfs (common on production hosts) and cannot safely\n  # hold docker-images.tar.gz while the final bundle is being assembled.\n  work="$(mktemp -d "${output_root}/.spark-airgap-build.XXXXXX")"\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'expected exactly one Air-Gap workspace anchor, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Validate scoped change
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/spark-cli/lib/airgap-build.sh
+          git diff --check
+          test "$(git diff --name-only)" = 'deploy/spark-cli/lib/airgap-build.sh'
+          grep -F 'mktemp -d "${output_root}/.spark-airgap-build.XXXXXX"' deploy/spark-cli/lib/airgap-build.sh
+          ! grep -A2 'mkdir -p "$output_root"' deploy/spark-cli/lib/airgap-build.sh | grep -Fx '  work="$(mktemp -d)"'
+      - name: Commit fix to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name spark-maintenance
+          git config user.email spark-maintenance@users.noreply.github.com
+          git add deploy/spark-cli/lib/airgap-build.sh
+          git commit -m 'fix(airgap): keep bundle workspace off tmpfs'
+          git push origin HEAD:main
