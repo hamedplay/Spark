@@ -6,65 +6,170 @@ on:
     paths:
       - '.github/workflows/temp-quay-minio-debug.yml'
 
+permissions:
+  contents: write
+
 jobs:
   debug:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build and validate pinned MinIO fallback images
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply scoped Air-Gap MinIO fallback
         shell: bash
         run: |
           set -Eeuo pipefail
-          work="$(mktemp -d)"
-          trap 'rm -rf "$work"' EXIT
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('deploy/spark-cli/lib/airgap-build.sh')
+          s = p.read_text()
+          marker = '''airgap_prepare_bundle_image() {\n'''
+          if marker not in s:
+              raise SystemExit('airgap_prepare_bundle_image marker not found')
+          helper = r'''airgap_prepare_pinned_minio_image() (
+            local image="$1" work release asset_url expected_sha binary_name entrypoint platform version_output cid
+            work="$(mktemp -d)" || return 1
+            trap 'rm -rf -- "$work"' EXIT
 
-          server_tag='RELEASE.2025-04-22T22-12-26Z'
-          server_image="quay.io/minio/minio:${server_tag}"
-          server_sha='53e2a2cb16c5366ea6fbbc479c19ddb4c6a0948273e752f740fb1fbf27bb817c'
-          curl -fL --retry 3 --retry-delay 2 \
-            "https://github.com/minio/minio/releases/download/${server_tag}/minio.linux-amd64.${server_tag}" \
-            -o "$work/minio"
-          echo "${server_sha}  $work/minio" | sha256sum -c -
-          cat >"$work/Dockerfile.server" <<'EOF_SERVER'
+            case "$image" in
+              quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z)
+                release="RELEASE.2025-04-22T22-12-26Z"
+                binary_name="minio"
+                entrypoint="minio"
+                expected_sha="53e2a2cb16c5366ea6fbbc479c19ddb4c6a0948273e752f740fb1fbf27bb817c"
+                asset_url="https://github.com/minio/minio/releases/download/${release}/minio.linux-amd64.${release}"
+                ;;
+              quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z)
+                release="RELEASE.2025-08-13T08-35-41Z"
+                binary_name="mc"
+                entrypoint="mc"
+                expected_sha="01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891"
+                asset_url="https://github.com/minio/mc/releases/download/${release}/mc.linux-amd64.${release}"
+                ;;
+              *)
+                return 2
+                ;;
+            esac
+
+            info "Building ${image} from the official pinned MinIO linux/amd64 release binary."
+            curl -fL --retry 4 --retry-delay 3 "$asset_url" -o "${work}/${binary_name}" || {
+              fail "Unable to download pinned MinIO release asset for ${image}."
+              return 1
+            }
+            printf '%s  %s\n' "$expected_sha" "${work}/${binary_name}" | sha256sum -c - >/dev/null || {
+              fail "Pinned MinIO release checksum mismatch for ${image}."
+              return 1
+            }
+
+            if [[ "$entrypoint" == "minio" ]]; then
+              cat >"${work}/Dockerfile" <<'MINIO_SERVER_DOCKERFILE'
           FROM ubuntu:24.04
-          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+          ENV DEBIAN_FRONTEND=noninteractive
+          RUN apt-get update \
+              && apt-get install -y --no-install-recommends ca-certificates curl \
+              && rm -rf /var/lib/apt/lists/*
           COPY minio /usr/local/bin/minio
           RUN chmod 0755 /usr/local/bin/minio
           ENTRYPOINT ["minio"]
-          EOF_SERVER
-          docker build --platform linux/amd64 --pull -f "$work/Dockerfile.server" -t "$server_image" "$work"
-          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$server_image")" = linux/amd64
-          docker run --rm --entrypoint minio "$server_image" --version | tee /tmp/minio-version.txt
-          grep -F "$server_tag" /tmp/minio-version.txt
-          cid="$(docker run -d --rm -e MINIO_ROOT_USER=testaccess -e MINIO_ROOT_PASSWORD=testsecret123 "$server_image" server /data --address :9000)"
-          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
-          for i in $(seq 1 20); do
-            if docker exec "$cid" curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then break; fi
-            sleep 1
-          done
-          docker exec "$cid" curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null
-          docker rm -f "$cid" >/dev/null
-
-          mc_tag='RELEASE.2025-08-13T08-35-41Z'
-          mc_image="quay.io/minio/mc:${mc_tag}"
-          mc_sha='01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891'
-          curl -fL --retry 3 --retry-delay 2 \
-            "https://github.com/minio/mc/releases/download/${mc_tag}/mc.linux-amd64.${mc_tag}" \
-            -o "$work/mc"
-          echo "${mc_sha}  $work/mc" | sha256sum -c -
-          cat >"$work/Dockerfile.mc" <<'EOF_MC'
+          MINIO_SERVER_DOCKERFILE
+            else
+              cat >"${work}/Dockerfile" <<'MINIO_MC_DOCKERFILE'
           FROM ubuntu:24.04
           COPY mc /usr/local/bin/mc
           RUN chmod 0755 /usr/local/bin/mc
           ENTRYPOINT ["mc"]
-          EOF_MC
-          docker build --platform linux/amd64 --pull -f "$work/Dockerfile.mc" -t "$mc_image" "$work"
-          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$mc_image")" = linux/amd64
-          docker run --rm --entrypoint mc "$mc_image" --version | tee /tmp/mc-version.txt
-          grep -F "$mc_tag" /tmp/mc-version.txt
-          docker run --rm --entrypoint /bin/sh "$mc_image" -ec 'command -v mc; mc --version >/dev/null'
+          MINIO_MC_DOCKERFILE
+            fi
 
-          docker image save "$server_image" >/tmp/minio-server.tar
-          docker image save "$mc_image" >/tmp/minio-mc.tar
-          test -s /tmp/minio-server.tar
-          test -s /tmp/minio-mc.tar
+            docker build --platform linux/amd64 --pull -t "$image" "$work" >/dev/null || {
+              fail "Unable to build pinned Air-Gap MinIO image ${image}."
+              return 1
+            }
+            platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image" 2>/dev/null || true)"
+            [[ "$platform" == "linux/amd64" ]] || {
+              fail "Pinned Air-Gap MinIO image ${image} is not linux/amd64 (reported: ${platform:-unknown})."
+              return 1
+            }
+            version_output="$(docker run --rm --pull=never --entrypoint "$entrypoint" "$image" --version 2>&1)" || {
+              fail "Pinned Air-Gap MinIO image ${image} cannot execute ${entrypoint} --version."
+              return 1
+            }
+            grep -Fq "$release" <<<"$version_output" || {
+              fail "Pinned Air-Gap MinIO image ${image} reports an unexpected version."
+              return 1
+            }
+            docker image save "$image" >/dev/null || {
+              fail "Pinned Air-Gap MinIO image ${image} is not exportable."
+              return 1
+            }
+            cid="$(docker create --pull=never --entrypoint /bin/true "$image" 2>/dev/null)" || {
+              fail "Pinned Air-Gap MinIO image ${image} cannot create a container."
+              return 1
+            }
+            docker rm -f "$cid" >/dev/null 2>&1 || true
+          )
+
+          '''
+          if 'airgap_prepare_pinned_minio_image()' in s:
+              raise SystemExit('helper already present')
+          s = s.replace(marker, helper + marker, 1)
+          old = '''airgap_prepare_bundle_image() {
+            local image="$1" meta="${2}/metadata/edge-runtime.env"
+            local runtime_image expected_id actual_id platform
+'''
+          new = '''airgap_prepare_bundle_image() {
+            local image="$1" meta="${2}/metadata/edge-runtime.env"
+            local runtime_image expected_id actual_id platform
+            case "$image" in
+              quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z|quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z)
+                airgap_prepare_pinned_minio_image "$image"
+                return $?
+                ;;
+            esac
+'''
+          if old not in s:
+              raise SystemExit('bundle image function prologue not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Syntax check
+        shell: bash
+        run: bash -n deploy/spark-cli/lib/airgap-build.sh
+      - name: Validate pinned MinIO bundle preparation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          fail(){ echo "FAIL: $*" >&2; }
+          info(){ echo "INFO: $*"; }
+          SCRIPT_DIR="$PWD/deploy/spark-cli"
+          source "$SCRIPT_DIR/lib/airgap-build.sh"
+          root="$(mktemp -d)"
+          mkdir -p "$root/metadata"
+          airgap_prepare_bundle_image 'quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z' "$root"
+          airgap_prepare_bundle_image 'quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z' "$root"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' 'quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z')" = linux/amd64
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' 'quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z')" = linux/amd64
+          docker run --rm --pull=never --entrypoint minio 'quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z' --version | grep -F 'RELEASE.2025-04-22T22-12-26Z'
+          docker run --rm --pull=never --entrypoint /bin/sh 'quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z' -ec 'mc --version' | grep -F 'RELEASE.2025-08-13T08-35-41Z'
+          printf '%s\n' \
+            'quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z' \
+            'quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z' >"$root/images.txt"
+          airgap_export_linux_amd64_images "$root/images.txt" "$root/images.tar"
+          test -s "$root/images.tar"
+      - name: Verify scoped diff
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          files="$(git diff --name-only | sort)"
+          test "$files" = 'deploy/spark-cli/lib/airgap-build.sh'
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name "hamedplay"
+          git config user.email "hamedkhaleghi493@gmail.com"
+          git add deploy/spark-cli/lib/airgap-build.sh
+          git rm .github/workflows/temp-quay-minio-debug.yml
+          git commit -m 'fix(airgap): build pinned MinIO images from releases'
+          git push origin HEAD:main
