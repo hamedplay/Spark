@@ -490,9 +490,6 @@ export function ChatConversationView({
         console.error('❌ Realtime timed out');
       }
 
-      if (status === 'CLOSED') {
-        console.warn('⚠️ Realtime channel closed');
-      }
     });
 
   channelRef.current = channel;
