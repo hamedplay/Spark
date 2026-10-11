@@ -83,18 +83,18 @@
   "dependencies": {
     "@react-oauth/google": "^0.13.5",
     "@supabase/supabase-js": "^2.117.2",
-    "docx": "^9.8.1",
+    "docx": "^9.10.0",
     "exceljs": "^4.4.0",
     "html-to-image": "^1.11.13",
-    "livekit-client": "^2.22.3",
-    "lucide-react": "^1.49.0",
+    "livekit-client": "^2.22.4",
+    "lucide-react": "^1.55.0",
     "moment": "^2.31.0",
     "moment-jalaali": "^0.10.5",
     "react": "^19.3.0",
     "react-datepicker": "^9.1.0",
     "react-dom": "^19.3.0",
     "react-hot-toast": "^2.6.1",
-    "uuid": "^14.0.2"
+    "uuid": "^14.0.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
@@ -103,12 +103,12 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.6.1",
-    "dotenv": "^18.0.5",
-    "oxlint": "^1.86.0",
-    "postcss": "^8.5.28",
+    "dotenv": "^18.0.7",
+    "oxlint": "^1.87.0",
+    "postcss": "^8.5.29",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.2"
+    "vite": "^8.3.4"
   }
 }
