@@ -21,7 +21,7 @@ export const EMPTY_MEETING_CARD_READ_MODEL: MeetingCardPrefetchedReadModel = {
   delegateNames: {},
 };
 
-function chunk<T>(items: T[], size = 100): T[][] {
+function chunk<T>(items: T[], size = 25): T[][] {
   const result: T[][] = [];
   for (let index = 0; index < items.length; index += size) {
     result.push(items.slice(index, index + size));
