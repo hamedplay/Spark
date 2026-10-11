@@ -333,9 +333,98 @@ airgap_prepare_linux_amd64_image() {
   docker rm -f "$cid" >/dev/null 2>&1 || true
 }
 
+airgap_prepare_pinned_minio_image() (
+  local image="$1" work release asset_url expected_sha binary_name entrypoint platform version_output cid
+  work="$(mktemp -d)" || return 1
+  trap 'rm -rf -- "$work"' EXIT
+
+  case "$image" in
+    quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z)
+      release="RELEASE.2025-04-22T22-12-26Z"
+      binary_name="minio"
+      entrypoint="minio"
+      expected_sha="53e2a2cb16c5366ea6fbbc479c19ddb4c6a0948273e752f740fb1fbf27bb817c"
+      asset_url="https://github.com/minio/minio/releases/download/${release}/minio.linux-amd64.${release}"
+      ;;
+    quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z)
+      release="RELEASE.2025-08-13T08-35-41Z"
+      binary_name="mc"
+      entrypoint="mc"
+      expected_sha="01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891"
+      asset_url="https://github.com/minio/mc/releases/download/${release}/mc.linux-amd64.${release}"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+
+  info "Building ${image} from the official pinned MinIO linux/amd64 release binary."
+  curl -fL --retry 4 --retry-delay 3 "$asset_url" -o "${work}/${binary_name}" || {
+    fail "Unable to download pinned MinIO release asset for ${image}."
+    return 1
+  }
+  printf '%s  %s\n' "$expected_sha" "${work}/${binary_name}" | sha256sum -c - >/dev/null || {
+    fail "Pinned MinIO release checksum mismatch for ${image}."
+    return 1
+  }
+
+  if [[ "$entrypoint" == "minio" ]]; then
+    cat >"${work}/Dockerfile" <<'MINIO_SERVER_DOCKERFILE'
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY minio /usr/local/bin/minio
+RUN chmod 0755 /usr/local/bin/minio
+ENTRYPOINT ["minio"]
+MINIO_SERVER_DOCKERFILE
+  else
+    cat >"${work}/Dockerfile" <<'MINIO_MC_DOCKERFILE'
+FROM ubuntu:24.04
+COPY mc /usr/local/bin/mc
+RUN chmod 0755 /usr/local/bin/mc
+ENTRYPOINT ["mc"]
+MINIO_MC_DOCKERFILE
+  fi
+
+  docker build --platform linux/amd64 --pull -t "$image" "$work" >/dev/null || {
+    fail "Unable to build pinned Air-Gap MinIO image ${image}."
+    return 1
+  }
+  platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image" 2>/dev/null || true)"
+  [[ "$platform" == "linux/amd64" ]] || {
+    fail "Pinned Air-Gap MinIO image ${image} is not linux/amd64 (reported: ${platform:-unknown})."
+    return 1
+  }
+  version_output="$(docker run --rm --pull=never --entrypoint "$entrypoint" "$image" --version 2>&1)" || {
+    fail "Pinned Air-Gap MinIO image ${image} cannot execute ${entrypoint} --version."
+    return 1
+  }
+  grep -Fq "$release" <<<"$version_output" || {
+    fail "Pinned Air-Gap MinIO image ${image} reports an unexpected version."
+    return 1
+  }
+  docker image save "$image" >/dev/null || {
+    fail "Pinned Air-Gap MinIO image ${image} is not exportable."
+    return 1
+  }
+  cid="$(docker create --pull=never --entrypoint /bin/true "$image" 2>/dev/null)" || {
+    fail "Pinned Air-Gap MinIO image ${image} cannot create a container."
+    return 1
+  }
+  docker rm -f "$cid" >/dev/null 2>&1 || true
+)
+
 airgap_prepare_bundle_image() {
   local image="$1" meta="${2}/metadata/edge-runtime.env"
   local runtime_image expected_id actual_id platform
+  case "$image" in
+    quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z|quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z)
+      airgap_prepare_pinned_minio_image "$image"
+      return $?
+      ;;
+  esac
   if [[ -f "$meta" ]]; then
     runtime_image="$(sed -n 's/^EDGE_RUNTIME_IMAGE=//p' "$meta")"
     if [[ "$image" == "$runtime_image" ]]; then
