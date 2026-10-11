@@ -688,7 +688,10 @@ airgap_build_bundle() {
   cert_source=""
 
   mkdir -p "$output_root"
-  work="$(mktemp -d)"
+  # Keep the multi-GB raw bundle workspace on the selected output filesystem.
+  # /tmp may be a small tmpfs (common on production hosts) and cannot safely
+  # hold docker-images.tar.gz while the final bundle is being assembled.
+  work="$(mktemp -d "${output_root}/.spark-airgap-build.XXXXXX")"
 
   spark_commit="$(git -C "$SPARK_ROOT" rev-parse HEAD)"
   spark_short="${spark_commit:0:12}"
