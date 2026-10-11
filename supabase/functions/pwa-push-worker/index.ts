@@ -133,7 +133,13 @@ Deno.serve(async (req: Request) => {
           ? Number((error as { statusCode?: unknown }).statusCode)
           : 0;
         const message = error instanceof Error ? error.message : String(error);
-        errors.push(`${statusCode || "ERR"}:${message}`);
+        const providerBody = typeof error === "object" && error !== null && "body" in error
+          ? String((error as { body?: unknown }).body ?? "").trim()
+          : "";
+        const diagnostic = providerBody
+          ? `${message} | provider_body=${providerBody}`
+          : message;
+        errors.push(`${statusCode || "ERR"}:${diagnostic}`);
 
         if (statusCode === 404 || statusCode === 410) {
           await service
