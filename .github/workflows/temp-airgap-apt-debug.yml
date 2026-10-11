@@ -1,0 +1,24 @@
+name: Temporary Airgap APT Debug
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/temp-airgap-apt-debug.yml'
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Reproduce Ubuntu 26.04 APT payload builder
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          fail(){ echo "FAIL: $*" >&2; }
+          info(){ echo "INFO: $*"; }
+          SCRIPT_DIR="$PWD/deploy/spark-cli"
+          source "$SCRIPT_DIR/lib/airgap-build.sh"
+          airgap_build_apt_payload /tmp/spark-airgap-debug 26.04
