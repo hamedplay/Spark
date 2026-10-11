@@ -216,20 +216,8 @@ Deno.serve(async (req: Request) => {
       phone: phoneCheck.data !== true,
     };
 
-    const dispatchLogId = await createRegistrationDispatchLog(supabase, {
-      phoneDigits,
-      providerId: provider.id,
-      providerName: provider.title ?? "",
-    });
-    if (!dispatchLogId) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
-
     const hasConflict = conflicts.username || conflicts.email || conflicts.phone;
     if (hasConflict) {
-      await updateRegistrationDispatchLog(supabase, dispatchLogId, {
-        status: "skipped",
-        error_text: "REGISTRATION_IDENTIFIER_CONFLICT",
-      });
-
       return await json({
         ok: false,
         error: registrationConflictMessage(conflicts),
@@ -237,6 +225,13 @@ Deno.serve(async (req: Request) => {
         conflicts,
       }, 409);
     }
+
+    const dispatchLogId = await createRegistrationDispatchLog(supabase, {
+      phoneDigits,
+      providerId: provider.id,
+      providerName: provider.title ?? "",
+    });
+    if (!dispatchLogId) return await json({ error: "ثبت‌نام در حال حاضر فعال نیست" }, 503);
 
     const challengeId = crypto.randomUUID();
     const otp = generateOtp();
