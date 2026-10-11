@@ -11,13 +11,60 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test MinIO server image as mc init
+      - name: Build and validate pinned MinIO fallback images
         shell: bash
         run: |
           set -Eeuo pipefail
-          image='quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z'
-          docker pull --platform linux/amd64 "$image"
-          docker image inspect --format 'id={{.Id}} os={{.Os}} arch={{.Architecture}} repo={{json .RepoDigests}} entry={{json .Config.Entrypoint}} cmd={{json .Config.Cmd}}' "$image"
-          docker run --rm --platform linux/amd64 --entrypoint /bin/sh "$image" -ec 'command -v mc; mc --version'
-          docker image save "$image" >/tmp/minio-server.tar
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+
+          server_tag='RELEASE.2025-04-22T22-12-26Z'
+          server_image="quay.io/minio/minio:${server_tag}"
+          server_sha='53e2a2cb16c5366ea6fbbc479c19ddb4c6a0948273e752f740fb1fbf27bb817c'
+          curl -fL --retry 3 --retry-delay 2 \
+            "https://github.com/minio/minio/releases/download/${server_tag}/minio.linux-amd64.${server_tag}" \
+            -o "$work/minio"
+          echo "${server_sha}  $work/minio" | sha256sum -c -
+          cat >"$work/Dockerfile.server" <<'EOF_SERVER'
+          FROM ubuntu:24.04
+          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+          COPY minio /usr/local/bin/minio
+          RUN chmod 0755 /usr/local/bin/minio
+          ENTRYPOINT ["minio"]
+          EOF_SERVER
+          docker build --platform linux/amd64 --pull -f "$work/Dockerfile.server" -t "$server_image" "$work"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$server_image")" = linux/amd64
+          docker run --rm --entrypoint minio "$server_image" --version | tee /tmp/minio-version.txt
+          grep -F "$server_tag" /tmp/minio-version.txt
+          cid="$(docker run -d --rm -e MINIO_ROOT_USER=testaccess -e MINIO_ROOT_PASSWORD=testsecret123 "$server_image" server /data --address :9000)"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+          for i in $(seq 1 20); do
+            if docker exec "$cid" curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null; then break; fi
+            sleep 1
+          done
+          docker exec "$cid" curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null
+          docker rm -f "$cid" >/dev/null
+
+          mc_tag='RELEASE.2025-08-13T08-35-41Z'
+          mc_image="quay.io/minio/mc:${mc_tag}"
+          mc_sha='01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891'
+          curl -fL --retry 3 --retry-delay 2 \
+            "https://github.com/minio/mc/releases/download/${mc_tag}/mc.linux-amd64.${mc_tag}" \
+            -o "$work/mc"
+          echo "${mc_sha}  $work/mc" | sha256sum -c -
+          cat >"$work/Dockerfile.mc" <<'EOF_MC'
+          FROM ubuntu:24.04
+          COPY mc /usr/local/bin/mc
+          RUN chmod 0755 /usr/local/bin/mc
+          ENTRYPOINT ["mc"]
+          EOF_MC
+          docker build --platform linux/amd64 --pull -f "$work/Dockerfile.mc" -t "$mc_image" "$work"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$mc_image")" = linux/amd64
+          docker run --rm --entrypoint mc "$mc_image" --version | tee /tmp/mc-version.txt
+          grep -F "$mc_tag" /tmp/mc-version.txt
+          docker run --rm --entrypoint /bin/sh "$mc_image" -ec 'command -v mc; mc --version >/dev/null'
+
+          docker image save "$server_image" >/tmp/minio-server.tar
+          docker image save "$mc_image" >/tmp/minio-mc.tar
           test -s /tmp/minio-server.tar
+          test -s /tmp/minio-mc.tar
