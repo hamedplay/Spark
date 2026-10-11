@@ -39,6 +39,8 @@ spark_universal_apply_compat_values() {
   TURN_MIN_PORT="${TURN_MIN_PORT:-49160}"
   TURN_MAX_PORT="${TURN_MAX_PORT:-49200}"
 
+  # Compatibility-only values for legacy helpers. They are never used to bind
+  # the frontend/API public origin or Nginx server_name.
   APP_DOMAIN="$ip"
   WWW_DOMAIN="$ip"
   API_DOMAIN="$ip"
@@ -73,6 +75,8 @@ install_step_1() {
   title
   new_log "install-01-host-agnostic"
   configure_values_interactive || return 1
+  # configure_values_interactive derives and persists the only required local
+  # values; avoid immediately running the same validation a second time.
   mark_step 1
   ok "Host-agnostic installation configuration is ready."
 }
@@ -109,6 +113,8 @@ spark_install_latest_connected_packages() {
   info "Latest Node.js release track detected: ${node_major}.x"
 
   run_logged "Update Linux package indexes" apt-get update || return 1
+  # Full OS upgrades belong to Linux System maintenance. Installation only
+  # installs/upgrades the packages Spark actually requires so first startup is fast.
   run_logged "Install latest required base packages" apt-get install -y \
     ca-certificates curl git gnupg jq openssl ufw rsync python3 python3-yaml nginx certbot coturn || return 1
 
@@ -259,6 +265,8 @@ server {
     root /var/www/spark;
     index index.html;
     client_max_body_size 50m;
+    # Compress textual frontend assets. Hashed JS/CSS dominate mobile transfer
+    # size; fonts/images are already compressed and intentionally excluded.
     gzip on;
     gzip_comp_level 6;
     gzip_min_length 1024;
@@ -271,6 +279,7 @@ server {
         application/json
         application/manifest+json
         image/svg+xml;
+
 
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
@@ -389,6 +398,8 @@ install_step_13() {
 install_step_14() {
   title
   new_log "install-14-host-agnostic-nginx"
+  # Step 12 already writes, syntax-checks, reloads and smoke-tests the same
+  # host-agnostic configuration. Do not repeat that work in the normal chain.
   if [[ -f "${STEP_DIR}/12.ok" ]]; then
     spark_apply_nginx_gzip_profile || return 1
     run_logged "Nginx syntax" nginx -t || return 1
@@ -398,6 +409,7 @@ install_step_14() {
     return 0
   fi
 
+  # Standalone execution still self-heals by running the authoritative step.
   install_step_12 || return 1
   mark_step 14
 }
