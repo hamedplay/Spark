@@ -63,7 +63,7 @@ curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dea
 chmod a+r /etc/apt/keyrings/nodesource.gpg
 latest_node_major="$(curl -fsSL https://nodejs.org/dist/index.json | python3 -c 'import json,sys,re; data=json.load(sys.stdin); 
 for item in data:
- v=str(item.get("version","")); m=re.fullmatch(r"v(\\d+)\\.\\d+\\.\\d+",v)
+ v=str(item.get("version","")); m=re.fullmatch(r"v(\d+)\.\d+\.\d+",v)
  if m: print(m.group(1)); break
 else: raise SystemExit(1)')"
 cat >/etc/apt/sources.list.d/nodesource.list <<EOF_NODE
@@ -148,7 +148,7 @@ curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dea
 chmod a+r /etc/apt/keyrings/nodesource.gpg
 latest_node_major="$(curl -fsSL https://nodejs.org/dist/index.json | python3 -c 'import json,sys,re; data=json.load(sys.stdin); 
 for item in data:
- v=str(item.get("version","")); m=re.fullmatch(r"v(\\d+)\\.\\d+\\.\\d+",v)
+ v=str(item.get("version","")); m=re.fullmatch(r"v(\d+)\.\d+\.\d+",v)
  if m: print(m.group(1)); break
 else: raise SystemExit(1)')"
 cat >/etc/apt/sources.list.d/nodesource.list <<EOF_NODE
