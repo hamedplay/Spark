@@ -1,0 +1,197 @@
+name: temp-fix-studio-database
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/temp-fix-studio-database.yml
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply scoped Studio fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('deploy/spark-cli/lib/installation-universal.sh')
+          s = p.read_text()
+
+          anchor = '''spark_universal_studio_health() {
+            local dashboard_user dashboard_password
+            dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+            dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+            dashboard_user="${dashboard_user:-supabase}"
+            [[ -n "$dashboard_password" ]] || return 1
+            curl --noproxy '*' -fsSL --connect-timeout 5 --max-time 15 \\
+              -u "${dashboard_user}:${dashboard_password}" \\
+              http://127.0.0.1:8443/ -o /dev/null
+          }
+          '''
+          replacement = anchor + '''
+          spark_universal_studio_gateway_health() {
+            local dashboard_user dashboard_password
+            dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+            dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+            dashboard_user="${dashboard_user:-supabase}"
+            [[ -n "$dashboard_password" ]] || return 1
+            curl --noproxy '*' -fsSL --connect-timeout 5 --max-time 15 \\
+              -u "${dashboard_user}:${dashboard_password}" \\
+              http://127.0.0.1:8000/ -o /dev/null
+          }
+          '''
+          if anchor not in s:
+              raise SystemExit('studio health anchor not found')
+          s = s.replace(anchor, replacement, 1)
+
+          old_enable = '''spark_universal_enable_studio() {
+            external_access_requirements || return 1
+            [[ "$(docker inspect -f '{{.State.Running}}' supabase-studio 2>/dev/null || true)" == "true" ]] || {
+              fail "supabase-studio container is not running."
+              return 1
+            }
+            [[ -e /etc/nginx/sites-enabled/spark ]] || {
+              fail "Production Nginx is not active."
+              return 1
+            }
+            if studio_external_is_open && spark_universal_studio_health; then
+              return 0
+            fi
+            firewall_optional_allow_port 8443 || return 1
+            write_supabase_studio_gateway || return 1
+            ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+            if ! nginx -t >>"$CURRENT_LOG" 2>&1 || ! systemctl reload nginx >>"$CURRENT_LOG" 2>&1; then
+              rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+              firewall_optional_close_port 8443
+              return 1
+            fi
+            if ! spark_universal_studio_health; then
+              rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+              firewall_optional_close_port 8443
+              nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+              return 1
+            fi
+          }
+          '''
+          new_enable = '''spark_universal_enable_studio() {
+            require_file "${SUPABASE_ROOT}/.env" || return 1
+            require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
+            [[ "$(docker inspect -f '{{.State.Running}}' supabase-studio 2>/dev/null || true)" == "true" ]] || {
+              fail "supabase-studio container is not running."
+              return 1
+            }
+            [[ "$(docker inspect -f '{{.State.Running}}' supabase-envoy 2>/dev/null || true)" == "true" ]] || {
+              fail "supabase-envoy container is not running."
+              return 1
+            }
+            [[ -e /etc/nginx/sites-enabled/spark ]] || {
+              fail "Production Nginx is not active."
+              return 1
+            }
+            if ! spark_universal_studio_gateway_health; then
+              fail "Supabase Studio is not reachable through the local Envoy gateway on 127.0.0.1:8000."
+              return 1
+            fi
+            if studio_external_is_open && spark_universal_studio_health; then
+              return 0
+            fi
+            firewall_optional_allow_port 8443 || return 1
+            write_supabase_studio_gateway || return 1
+            ln -sfn /etc/nginx/sites-available/spark-supabase-admin /etc/nginx/sites-enabled/spark-supabase-admin
+            if ! nginx -t >>"$CURRENT_LOG" 2>&1 || ! systemctl reload nginx >>"$CURRENT_LOG" 2>&1; then
+              rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+              firewall_optional_close_port 8443
+              fail "Supabase Studio Nginx listener on TCP/8443 could not be activated."
+              return 1
+            fi
+            if ! spark_universal_studio_health; then
+              rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+              rm -f /etc/nginx/sites-available/spark-supabase-admin
+              firewall_optional_close_port 8443
+              nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+              fail "Supabase Studio did not pass the authenticated HTTP/8443 health probe."
+              return 1
+            fi
+          }
+          '''
+          if old_enable not in s:
+              raise SystemExit('enable function not found')
+          s = s.replace(old_enable, new_enable, 1)
+
+          s = s.replace('''show_studio_connection_info() {\n  local dashboard_user dashboard_password state host\n  external_access_requirements || return 1\n''', '''show_studio_connection_info() {\n  local dashboard_user dashboard_password state host\n  require_file "${SUPABASE_ROOT}/.env" || return 1\n''', 1)
+
+          close_anchor = '''open_supabase_studio_access() {
+            local mode="${1:-interactive}" host
+            host="$(spark_universal_studio_host)"
+            if [[ "$mode" != "auto" ]]; then
+              if ! confirm_word "Supabase Studio on http://${host}:8443 opens." "OPEN"; then
+                warn "canceled."
+                return 1
+              fi
+            fi
+            spark_universal_enable_studio || {
+              fail "Supabase Studio listener could not be enabled."
+              return 1
+            }
+            ok "Supabase Studio is running and reachable on HTTP/8443."
+            [[ "$mode" == "auto" ]] || show_studio_connection_info
+          }
+          '''
+          close_replacement = close_anchor + '''
+          close_supabase_studio_access() {
+            rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+            rm -f /etc/nginx/sites-available/spark-supabase-admin
+            firewall_optional_close_port 8443
+            if ! nginx -t >>"$CURRENT_LOG" 2>&1 || ! systemctl reload nginx >>"$CURRENT_LOG" 2>&1; then
+              fail "Supabase Studio TCP/8443 listener could not be disabled cleanly."
+              return 1
+            fi
+            if ss -lnt 2>/dev/null | grep -Eq '(^|[[:space:]])(0\\.0\\.0\\.0|\\*|\\[::\\]):8443[[:space:]]'; then
+              fail "TCP/8443 is still listening after disabling Supabase Studio."
+              return 1
+            fi
+            ok "Supabase Studio HTTP/8443 access is disabled. Supabase API routes remain active."
+          }
+          '''
+          if close_anchor not in s:
+              raise SystemExit('open function anchor not found')
+          s = s.replace(close_anchor, close_replacement, 1)
+          p.write_text(s)
+
+          p = Path('deploy/spark-cli/spark-ui-base.py')
+          s = p.read_text()
+          old = 'core.Action("security-studio-open", "Enable Supabase Studio", "Enable Studio on the API domain over HTTPS/443.", "confirm")'
+          new = 'core.Action("security-studio-open", "Enable Supabase Studio", "Enable Studio on the server over authenticated HTTP/8443.", "confirm")'
+          if old not in s:
+              raise SystemExit('Studio UI open action text not found')
+          s = s.replace(old, new, 1)
+          s = s.replace('core.Action("security-studio-close", "Disable Supabase Studio", "Disable Studio root access while keeping Supabase API routes active.", "controlled")',
+                        'core.Action("security-studio-close", "Disable Supabase Studio", "Disable the managed Studio HTTP/8443 listener while keeping Supabase API routes active.", "controlled")', 1)
+          s = s.replace('.replace("Studio 8443", "Studio 443")', '', 1)
+          p.write_text(s)
+          PY
+      - name: Validate scoped change
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/spark-cli/lib/installation-universal.sh
+          python3 -m py_compile deploy/spark-cli/spark-ui-base.py deploy/spark-cli/spark-ui.py deploy/spark-cli/spark-ui-core.py
+          python3 deploy/spark-cli/spark-ui.py --self-test
+          git diff --check
+          git diff -- deploy/spark-cli/lib/installation-universal.sh deploy/spark-cli/spark-ui-base.py
+          test "$(git diff --name-only | sort)" = $'deploy/spark-cli/lib/installation-universal.sh\ndeploy/spark-cli/spark-ui-base.py'
+      - name: Commit fix to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name spark-maintenance
+          git config user.email spark-maintenance@users.noreply.github.com
+          git add deploy/spark-cli/lib/installation-universal.sh deploy/spark-cli/spark-ui-base.py
+          git commit -m 'fix(manager): repair Supabase Studio database actions'
+          git push origin HEAD:main
