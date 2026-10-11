@@ -280,8 +280,8 @@ def patch_categories() -> None:
                 core.Action("security-db-open", "Open Database TCP/5432", "Open managed external PostgreSQL access after verification.", "confirm"),
                 core.Action("security-db-close", "Close Database TCP/5432", "Close managed external PostgreSQL access.", "controlled"),
                 core.Action("security-studio-info", "Supabase Studio credentials", "Show Studio URL, access state, username and password. Credentials are displayed only in task output and are not written to Manager logs."),
-                core.Action("security-studio-open", "Enable Supabase Studio", "Enable Studio on the API domain over HTTPS/443.", "confirm"),
-                core.Action("security-studio-close", "Disable Supabase Studio", "Disable Studio root access while keeping Supabase API routes active.", "controlled"),
+                core.Action("security-studio-open", "Enable Supabase Studio", "Enable Studio on the server over authenticated HTTP/8443.", "confirm"),
+                core.Action("security-studio-close", "Disable Supabase Studio", "Disable the managed Studio HTTP/8443 listener while keeping Supabase API routes active.", "controlled"),
                 core.Action("security-report", "Security / Firewall status", "Show database, Studio and firewall access state."),
                 core.Action("security-account-unlock", "Unlock user account", "Reset login lock state by username, email or phone.", "confirm"),
                 core.Action("diagnostic-exposure", "Public exposure check", "Verify internal database and API ports are not unintentionally public."),
@@ -415,7 +415,7 @@ def logical_draw_details(self):
 
     def patched_safe_add(win, y, x, text, *args, **kwargs):
         if isinstance(text, str):
-            text = sanitize_backend_text(text).replace("Studio 8443", "Studio 443")
+            text = sanitize_backend_text(text)
         return original_safe_add(win, y, x, text, *args, **kwargs)
 
     self.safe_add = patched_safe_add

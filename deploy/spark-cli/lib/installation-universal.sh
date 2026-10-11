@@ -49,16 +49,36 @@ spark_universal_studio_health() {
     http://127.0.0.1:8443/ -o /dev/null
 }
 
+spark_universal_studio_gateway_health() {
+  local dashboard_user dashboard_password
+  dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
+  dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
+  dashboard_user="${dashboard_user:-supabase}"
+  [[ -n "$dashboard_password" ]] || return 1
+  curl --noproxy '*' -fsSL --connect-timeout 5 --max-time 15 \
+    -u "${dashboard_user}:${dashboard_password}" \
+    http://127.0.0.1:8000/ -o /dev/null
+}
+
 spark_universal_enable_studio() {
-  external_access_requirements || return 1
+  require_file "${SUPABASE_ROOT}/.env" || return 1
+  require_file "${SUPABASE_ROOT}/docker-compose.yml" || return 1
   [[ "$(docker inspect -f '{{.State.Running}}' supabase-studio 2>/dev/null || true)" == "true" ]] || {
     fail "supabase-studio container is not running."
+    return 1
+  }
+  [[ "$(docker inspect -f '{{.State.Running}}' supabase-envoy 2>/dev/null || true)" == "true" ]] || {
+    fail "supabase-envoy container is not running."
     return 1
   }
   [[ -e /etc/nginx/sites-enabled/spark ]] || {
     fail "Production Nginx is not active."
     return 1
   }
+  if ! spark_universal_studio_gateway_health; then
+    fail "Supabase Studio is not reachable through the local Envoy gateway on 127.0.0.1:8000."
+    return 1
+  fi
   if studio_external_is_open && spark_universal_studio_health; then
     return 0
   fi
@@ -68,19 +88,22 @@ spark_universal_enable_studio() {
   if ! nginx -t >>"$CURRENT_LOG" 2>&1 || ! systemctl reload nginx >>"$CURRENT_LOG" 2>&1; then
     rm -f /etc/nginx/sites-enabled/spark-supabase-admin
     firewall_optional_close_port 8443
+    fail "Supabase Studio Nginx listener on TCP/8443 could not be activated."
     return 1
   fi
   if ! spark_universal_studio_health; then
     rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+    rm -f /etc/nginx/sites-available/spark-supabase-admin
     firewall_optional_close_port 8443
     nginx -t >>"$CURRENT_LOG" 2>&1 && systemctl reload nginx >>"$CURRENT_LOG" 2>&1 || true
+    fail "Supabase Studio did not pass the authenticated HTTP/8443 health probe."
     return 1
   fi
 }
 
 show_studio_connection_info() {
   local dashboard_user dashboard_password state host
-  external_access_requirements || return 1
+  require_file "${SUPABASE_ROOT}/.env" || return 1
   dashboard_user="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_USERNAME)"
   dashboard_password="$(env_get "${SUPABASE_ROOT}/.env" DASHBOARD_PASSWORD)"
   dashboard_user="${dashboard_user:-supabase}"
@@ -111,6 +134,21 @@ open_supabase_studio_access() {
   }
   ok "Supabase Studio is running and reachable on HTTP/8443."
   [[ "$mode" == "auto" ]] || show_studio_connection_info
+}
+
+close_supabase_studio_access() {
+  rm -f /etc/nginx/sites-enabled/spark-supabase-admin
+  rm -f /etc/nginx/sites-available/spark-supabase-admin
+  firewall_optional_close_port 8443
+  if ! nginx -t >>"$CURRENT_LOG" 2>&1 || ! systemctl reload nginx >>"$CURRENT_LOG" 2>&1; then
+    fail "Supabase Studio TCP/8443 listener could not be disabled cleanly."
+    return 1
+  fi
+  if ss -lnt 2>/dev/null | grep -Eq '(^|[[:space:]])(0\.0\.0\.0|\*|\[::\]):8443[[:space:]]'; then
+    fail "TCP/8443 is still listening after disabling Supabase Studio."
+    return 1
+  fi
+  ok "Supabase Studio HTTP/8443 access is disabled. Supabase API routes remain active."
 }
 
 install_step_12() {
