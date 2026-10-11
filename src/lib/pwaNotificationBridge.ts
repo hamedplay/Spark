@@ -9,10 +9,26 @@ type NotificationRow = {
   type?: string | null;
 };
 
+type PushStatus =
+  | 'unsupported'
+  | 'not-installed'
+  | 'permission-required'
+  | 'permission-denied'
+  | 'disabled-by-preference'
+  | 'registering'
+  | 'ready'
+  | 'error';
+
 let activeUserId: string | null = null;
 let removeChannel: (() => void) | null = null;
 let pushSubscriptionReady = false;
 let pushSubscriptionPromise: Promise<boolean> | null = null;
+
+function emitPushStatus(status: PushStatus, message?: string): void {
+  window.dispatchEvent(new CustomEvent('pwa-push-status-changed', {
+    detail: { status, message: message || null },
+  }));
+}
 
 function isInstalledPwa(): boolean {
   if (typeof window === 'undefined') return false;
@@ -27,6 +43,17 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const output = new Uint8Array(rawData.length);
   for (let i = 0; i < rawData.length; i += 1) output[i] = rawData.charCodeAt(i);
   return output;
+}
+
+function sameApplicationServerKey(subscription: PushSubscription, expected: Uint8Array): boolean {
+  const current = subscription.options?.applicationServerKey;
+  if (!current) return true;
+  const currentBytes = new Uint8Array(current);
+  if (currentBytes.length !== expected.length) return false;
+  for (let i = 0; i < expected.length; i += 1) {
+    if (currentBytes[i] !== expected[i]) return false;
+  }
+  return true;
 }
 
 async function notificationsEnabled(userId: string): Promise<boolean> {
@@ -53,26 +80,58 @@ async function disableLocalPushSubscription(): Promise<void> {
 }
 
 async function ensurePushSubscription(userId: string): Promise<boolean> {
-  if (!isInstalledPwa()) return false;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
-  if (!(await notificationsEnabled(userId))) return false;
-  if (pushSubscriptionReady) return true;
+  if (!isInstalledPwa()) {
+    emitPushStatus('not-installed');
+    return false;
+  }
+  if (typeof Notification === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    emitPushStatus('unsupported');
+    return false;
+  }
+  if (Notification.permission === 'default') {
+    emitPushStatus('permission-required');
+    return false;
+  }
+  if (Notification.permission !== 'granted') {
+    emitPushStatus('permission-denied');
+    return false;
+  }
+  if (!(await notificationsEnabled(userId))) {
+    emitPushStatus('disabled-by-preference');
+    return false;
+  }
+  if (pushSubscriptionReady) {
+    emitPushStatus('ready');
+    return true;
+  }
   if (pushSubscriptionPromise) return pushSubscriptionPromise;
 
   pushSubscriptionPromise = (async () => {
+    emitPushStatus('registering');
     try {
       const { data: config, error: configError } = await supabase.functions.invoke('pwa-push-config', {
         body: {},
       });
-      if (configError || typeof config?.publicKey !== 'string' || !config.publicKey) return false;
+      if (configError || typeof config?.publicKey !== 'string' || !config.publicKey) {
+        throw new Error(configError?.message || 'PWA push configuration is unavailable');
+      }
 
+      const applicationServerKey = urlBase64ToUint8Array(config.publicKey);
       const registration = await navigator.serviceWorker.ready;
       let subscription = await registration.pushManager.getSubscription();
+
+      // Push subscriptions are bound to the VAPID applicationServerKey. If the
+      // backend key changed, re-create the browser subscription instead of
+      // silently persisting an unusable endpoint.
+      if (subscription && !sameApplicationServerKey(subscription, applicationServerKey)) {
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(config.publicKey) as BufferSource,
+          applicationServerKey: applicationServerKey as BufferSource,
         });
       }
 
@@ -80,7 +139,9 @@ async function ensurePushSubscription(userId: string): Promise<boolean> {
       const endpoint = serialized.endpoint || subscription.endpoint;
       const p256dh = serialized.keys?.p256dh || '';
       const authKey = serialized.keys?.auth || '';
-      if (!endpoint || !p256dh || !authKey) return false;
+      if (!endpoint || !p256dh || !authKey) {
+        throw new Error('Browser returned an incomplete push subscription');
+      }
 
       const { error: saveError } = await supabase.rpc('upsert_my_pwa_push_subscription', {
         p_endpoint: endpoint,
@@ -88,12 +149,16 @@ async function ensurePushSubscription(userId: string): Promise<boolean> {
         p_auth_key: authKey,
         p_user_agent: navigator.userAgent,
       });
-      if (saveError) return false;
+      if (saveError) throw saveError;
 
       pushSubscriptionReady = true;
+      emitPushStatus('ready');
       return true;
     } catch (error) {
+      pushSubscriptionReady = false;
+      const message = error instanceof Error ? error.message : String(error);
       console.warn('PWA Web Push subscription failed:', error);
+      emitPushStatus('error', message);
       return false;
     } finally {
       pushSubscriptionPromise = null;
@@ -109,8 +174,6 @@ async function showSystemNotification(row: NotificationRow): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
 
   // Once durable Web Push is registered, the server worker owns OS notifications.
-  // Realtime remains subscribed for the app's own notification UI, but must not
-  // produce a second system notification for the same event.
   if (pushSubscriptionReady) return;
 
   const registration = await navigator.serviceWorker.ready;
@@ -136,7 +199,10 @@ async function subscribe(userId: string): Promise<void> {
   removeChannel = null;
   activeUserId = userId;
 
-  if (!(await notificationsEnabled(userId))) return;
+  if (!(await notificationsEnabled(userId))) {
+    emitPushStatus('disabled-by-preference');
+    return;
+  }
 
   void ensurePushSubscription(userId);
 
@@ -174,9 +240,16 @@ export function startPwaNotificationBridge(): () => void {
   let disposed = false;
 
   const handlePermissionChanged = () => {
+    pushSubscriptionReady = false;
+    if (!disposed && activeUserId) void ensurePushSubscription(activeUserId);
+  };
+  const handleRetry = () => {
+    pushSubscriptionReady = false;
+    pushSubscriptionPromise = null;
     if (!disposed && activeUserId) void ensurePushSubscription(activeUserId);
   };
   window.addEventListener('pwa-notification-permission-changed', handlePermissionChanged);
+  window.addEventListener('pwa-push-retry', handleRetry);
 
   void supabase.auth.getUser().then(({ data }) => {
     if (!disposed && data.user) void subscribe(data.user.id);
@@ -190,6 +263,7 @@ export function startPwaNotificationBridge(): () => void {
       removeChannel?.();
       removeChannel = null;
       activeUserId = null;
+      emitPushStatus('not-installed');
       void disableLocalPushSubscription();
     }
   });
@@ -197,6 +271,7 @@ export function startPwaNotificationBridge(): () => void {
   return () => {
     disposed = true;
     window.removeEventListener('pwa-notification-permission-changed', handlePermissionChanged);
+    window.removeEventListener('pwa-push-retry', handleRetry);
     authListener.subscription.unsubscribe();
     removeChannel?.();
     removeChannel = null;
