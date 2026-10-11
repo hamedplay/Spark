@@ -11,15 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Test Docker Hub MinIO client replacement
+      - name: Test MinIO server image as mc init
         shell: bash
         run: |
           set -Eeuo pipefail
-          image='minio/mc:RELEASE.2025-08-13T08-35-41Z'
+          image='quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z'
           docker pull --platform linux/amd64 "$image"
-          docker image inspect --format 'id={{.Id}} os={{.Os}} arch={{.Architecture}} repo={{json .RepoDigests}}' "$image"
-          docker run --rm --platform linux/amd64 "$image" --version
-          docker image save "$image" >/tmp/minio-mc.tar
-          test -s /tmp/minio-mc.tar
-          cid="$(docker create --pull=never --entrypoint /bin/true "$image")"
-          docker rm -f "$cid" >/dev/null
+          docker image inspect --format 'id={{.Id}} os={{.Os}} arch={{.Architecture}} repo={{json .RepoDigests}} entry={{json .Config.Entrypoint}} cmd={{json .Config.Cmd}}' "$image"
+          docker run --rm --platform linux/amd64 --entrypoint /bin/sh "$image" -ec 'command -v mc; mc --version'
+          docker image save "$image" >/tmp/minio-server.tar
+          test -s /tmp/minio-server.tar
