@@ -22,9 +22,10 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $spark_connection_upgrade;
-        proxy_set_header Host 127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-Host $host;
-        proxy_set_header X-Forwarded-Proto http;
+        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_read_timeout 3600s;
     }
@@ -45,7 +46,7 @@ spark_universal_studio_health() {
   [[ -n "$dashboard_password" ]] || return 1
   curl --noproxy '*' -fsSL --connect-timeout 5 --max-time 15 \
     -u "${dashboard_user}:${dashboard_password}" \
-    -H 'Host: studio.spark.local' http://127.0.0.1:8443/ -o /dev/null
+    http://127.0.0.1:8443/ -o /dev/null
 }
 
 spark_universal_enable_studio() {
