@@ -130,7 +130,10 @@ airgap_build_bundle() (
   # IP-only bundles never export staging-host configuration or private TLS keys.
 
   mkdir -p "$output_root"
-  work="$(mktemp -d)"
+  # This is the final airgap_build_bundle override loaded by spark-airgap. Keep
+  # the multi-GB workspace on the operator-selected output filesystem instead
+  # of /tmp, which is commonly a small tmpfs on production hosts.
+  work="$(mktemp -d "${output_root}/.spark-airgap-build.XXXXXX")"
   trap '[[ -z "${work:-}" ]] || rm -rf -- "$work"' EXIT
 
   spark_commit="$(git -C "$SPARK_ROOT" rev-parse HEAD)"
