@@ -2,7 +2,6 @@ import './lib/browserCryptoCompat';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
-import { startPwaNotificationBridge } from './lib/pwaNotificationBridge';
 import './index.css';
 import './responsive.css';
 import './meeting-mobile-fixes.css';
@@ -31,8 +30,6 @@ try {
   // Storage can be unavailable in hardened/private browser contexts. In that
   // case the application safely falls back to the light loader until mounted.
 }
-
-startPwaNotificationBridge();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
