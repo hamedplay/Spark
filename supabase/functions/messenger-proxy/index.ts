@@ -281,10 +281,15 @@ Deno.serve(async (req) => {
         }, 400);
       }
 
-      if (parsedUrl.protocol !== 'https:') {
+      const isInternalApiGateway =
+        parsedUrl.protocol === 'http:' &&
+        parsedUrl.hostname === 'api-gw' &&
+        parsedUrl.port === '8000';
+
+      if (parsedUrl.protocol !== 'https:' && !isInternalApiGateway) {
         return json({
           ok: false,
-          description: 'Supabase URL باید با https شروع شود.',
+          description: 'Supabase URL باید HTTPS باشد؛ فقط api-gw داخلی روی پورت 8000 با HTTP مجاز است.',
         }, 400);
       }
 
