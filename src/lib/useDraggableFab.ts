@@ -90,7 +90,7 @@ export function useDraggableFab(storageKey: string, side: 'left' | 'right', fabS
   return { pos, onDragStart, wasDragged };
 }
 
-/** Compute where to anchor the open panel relative to the FAB position */
+/** Compute where to anchor the open panel relative to the FAB position. */
 export function panelStyle(
   pos: FabPos,
   panelWidth: number,
@@ -98,11 +98,14 @@ export function panelStyle(
   fabSize = DEFAULT_FAB_SIZE,
 ): React.CSSProperties {
   const gap = 8;
+  // Floating panels are rendered inside the application shell. Keep them below
+  // the fixed top bar so an ancestor's clipping/stacking context cannot hide the header.
+  const topInset = 64;
   const left = Math.max(gap, Math.min(window.innerWidth - panelWidth - gap, pos.x));
-  const spaceAbove = pos.y - gap;
+  const spaceAbove = pos.y - gap - topInset;
   const preferredTop = spaceAbove >= panelHeight
     ? pos.y - panelHeight - gap
     : Math.min(pos.y + fabSize + gap, window.innerHeight - panelHeight - gap);
-  const top = Math.max(gap, preferredTop);
+  const top = Math.max(topInset, preferredTop);
   return { position: 'fixed', top, left, zIndex: 60, width: panelWidth };
 }
