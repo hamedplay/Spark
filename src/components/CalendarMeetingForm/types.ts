@@ -31,10 +31,12 @@ export type CommitSnapshot = {
   gregDate: string;
   selectedParticipantIds: string[];
   selectedExternal: string[];
+  selectedExternalInformees: string[];
   sendSms: boolean;
   agendaEnabled: boolean;
   agendaItems: AgendaItem[];
   prevExternalByMeetingId: Record<string, string[]>;
+  prevExternalInformeesByMeetingId: Record<string, string[]>;
   isOnline: boolean;
   wasOnline: boolean;
   prevRoomId: string | null;
@@ -64,6 +66,7 @@ export interface CalendarMeetingFormProps {
     participantUserIds?: string[];
     notifyUserIds?: string[];
     externalParticipants?: string[];
+    externalInformees?: string[];
     meetingManager?: string;
     reminderMinutes?: number;
     isOnline?: boolean;
