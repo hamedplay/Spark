@@ -14,6 +14,7 @@ import { CalendarSelectorSection } from './CalendarSelectorSection';
 import { DateTimeSection } from './DateTimeSection';
 import { CoreFieldsSection } from './CoreFieldsSection';
 import { ExternalParticipantsSection } from './ExternalParticipantsSection';
+import { ExternalInformeesSection } from './ExternalInformeesSection';
 import { MeetingManagerSection } from './MeetingManagerSection';
 import { RepeatSection } from './RepeatSection';
 import { ReminderSection } from './ReminderSection';
@@ -106,6 +107,14 @@ interface CalendarMeetingFormViewProps {
   newExternalPosition: string;
   setNewExternalPosition: Dispatch<SetStateAction<string>>;
   addQuickExternal: () => void;
+  externalInformeeSearchRef: RefObject<HTMLDivElement | null>;
+  selectedExternalInformees: string[];
+  setSelectedExternalInformees: Dispatch<SetStateAction<string[]>>;
+  externalInformeeSearch: string;
+  setExternalInformeeSearch: Dispatch<SetStateAction<string>>;
+  showExternalInformeeDropdown: boolean;
+  setShowExternalInformeeDropdown: Dispatch<SetStateAction<boolean>>;
+  filteredExternalInformees: ExternalOption[];
   meetingManager: string;
   setMeetingManager: Dispatch<SetStateAction<string>>;
   managerDisplayName: string;
@@ -227,6 +236,14 @@ export function CalendarMeetingFormView({
   newExternalPosition,
   setNewExternalPosition,
   addQuickExternal,
+  externalInformeeSearchRef,
+  selectedExternalInformees,
+  setSelectedExternalInformees,
+  externalInformeeSearch,
+  setExternalInformeeSearch,
+  showExternalInformeeDropdown,
+  setShowExternalInformeeDropdown,
+  filteredExternalInformees,
   meetingManager,
   setMeetingManager,
   managerDisplayName,
@@ -326,6 +343,7 @@ export function CalendarMeetingFormView({
           allContacts={allContacts}
           setPhone={setPhone}
           phone={phone}
+          setPhone={setPhone}
           priority={priority}
           setPriority={setPriority}
           notes={notes}
@@ -376,6 +394,17 @@ export function CalendarMeetingFormView({
           newExternalPosition={newExternalPosition}
           setNewExternalPosition={setNewExternalPosition}
           addQuickExternal={addQuickExternal}
+        />
+
+        <ExternalInformeesSection
+          searchRef={externalInformeeSearchRef}
+          selected={selectedExternalInformees}
+          setSelected={setSelectedExternalInformees}
+          search={externalInformeeSearch}
+          setSearch={setExternalInformeeSearch}
+          showDropdown={showExternalInformeeDropdown}
+          setShowDropdown={setShowExternalInformeeDropdown}
+          options={filteredExternalInformees}
         />
 
         <MeetingManagerSection
