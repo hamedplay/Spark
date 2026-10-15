@@ -1,0 +1,87 @@
+name: Temporary dependency update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/temp-dependency-update.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-dependencies:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Set requested dependency versions
+        run: |
+          npm pkg set 'dependencies.@supabase/supabase-js=2.118.0'
+          npm pkg set 'dependencies.react=^19.3.1'
+          npm pkg set 'dependencies.react-dom=^19.3.1'
+          npm pkg set 'devDependencies.dotenv=^18.0.8'
+
+      - name: Regenerate lockfile for requested updates
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify requested versions
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const l = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const expected = {
+            '@supabase/supabase-js': '2.118.0',
+            react: '19.3.1',
+            'react-dom': '19.3.1',
+            dotenv: '18.0.8',
+          };
+          for (const [name, version] of Object.entries(expected)) {
+            const entry = l.packages[`node_modules/${name}`];
+            if (!entry || entry.version !== version) {
+              throw new Error(`${name}: expected ${version}, got ${entry?.version ?? 'missing'}`);
+            }
+          }
+          if (p.dependencies['@supabase/supabase-js'] !== '2.118.0') throw new Error('Supabase manifest spec changed unexpectedly');
+          if (p.dependencies.react !== '^19.3.1') throw new Error('React manifest spec changed unexpectedly');
+          if (p.dependencies['react-dom'] !== '^19.3.1') throw new Error('React DOM manifest spec changed unexpectedly');
+          if (p.devDependencies.dotenv !== '^18.0.8') throw new Error('dotenv manifest spec changed unexpectedly');
+          NODE
+
+      - name: Ensure scope is limited
+        run: |
+          changed="$(git diff --name-only)"
+          echo "$changed"
+          unexpected="$(printf '%s\n' "$changed" | grep -vE '^(package\.json|package-lock\.json)$' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected changed files:"
+            echo "$unexpected"
+            exit 1
+          fi
+
+      - name: Commit dependency update and remove temporary workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/temp-dependency-update.yml
+          git add package.json package-lock.json
+          git commit -m 'chore(deps): update Supabase React and dotenv'
+          git push origin HEAD:main
