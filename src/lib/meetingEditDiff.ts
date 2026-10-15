@@ -56,6 +56,7 @@ export const FIELD_LABELS: Record<string, string> = {
   repeat_type: 'تنظیمات تکرار',
   agenda: 'دستور جلسه',
   external_participants: 'شرکت‌کنندگان خارجی',
+  external_informees: 'مطلعین خارج سازمان',
 };
 
 function normalizeStr(v: unknown): string {
@@ -102,6 +103,8 @@ export function computeMeetingChangeSet(existing: Record<string, any>, next: Rec
   }
 
   const externalChanged = !externalArraysEqual(existing.external_participants || [], next.external_participants || []);
+  const externalInformeesChanged = !externalArraysEqual(existing.external_informees || [], next.external_informees || []);
+  if (externalInformeesChanged) minorFields.push('external_informees');
 
   const prevParticipants = new Set<string>((existing.participant_user_ids || []).filter((x: string) => x));
   const nextParticipants = new Set<string>((next.participant_user_ids || []).filter((x: string) => x));
