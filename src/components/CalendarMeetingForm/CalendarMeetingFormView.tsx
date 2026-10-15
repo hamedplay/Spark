@@ -341,7 +341,6 @@ export function CalendarMeetingFormView({
           repPickerSearch={repPickerSearch}
           setRepPickerSearch={setRepPickerSearch}
           allContacts={allContacts}
-          setPhone={setPhone}
           phone={phone}
           setPhone={setPhone}
           priority={priority}
