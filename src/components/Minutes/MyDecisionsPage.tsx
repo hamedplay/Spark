@@ -193,11 +193,21 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
           {/* Desktop table */}
           <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800 lg:block">
             <div className="overflow-x-auto">
-              <table className="min-w-[980px] w-full text-sm">
+              <table className="w-full min-w-[1380px] table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[400px]" />
+                  <col className="w-[170px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[130px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[120px]" />
+                  <col className="w-[190px]" />
+                </colgroup>
                 <thead className="border-b border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-700/50">
                   <tr>
                     {['عنوان مصوبه','جلسه','اولویت','وضعیت','پیشرفت','مهلت','سررسید','اقدام'].map(h => (
-                      <th key={h} className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{h}</th>
+                      <th key={h} className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -296,21 +306,21 @@ function DecisionTableRow({ dec, onViewDetail, onAction, onNavigate }: RowProps)
 
   return (
     <tr className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/30">
-      <td className="px-4 py-3">
-        <div className="min-w-64 max-w-sm whitespace-normal break-words font-medium leading-5 text-gray-900 dark:text-white">{dec.title}</div>
+      <td className="px-4 py-3 align-top">
+        <div title={dec.title} className="line-clamp-2 break-words font-medium leading-5 text-gray-900 dark:text-white">{dec.title}</div>
         {dec.requires_followup && (
-          <span className="mt-0.5 inline-flex items-center gap-0.5 text-xs text-orange-500">
-            <Flag className="h-3 w-3" /> پیگیری
+          <span className="mt-1 inline-flex items-center gap-0.5 text-xs text-orange-500">
+            <Flag className="h-3 w-3 flex-shrink-0" /> پیگیری
           </span>
         )}
       </td>
       <td className="px-4 py-3">
-        <div className="max-w-32 truncate text-xs text-gray-500 dark:text-gray-400">{dec.minute_title}</div>
+        <div className="truncate text-xs text-gray-500 dark:text-gray-400" title={dec.minute_title}>{dec.minute_title}</div>
         <div className="whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}</div>
       </td>
       <td className="px-4 py-3"><DecisionPriorityBadge priority={dec.priority} /></td>
       <td className="px-4 py-3"><DecisionStatusBadge status={dec.status} /></td>
-      <td className="w-32 px-4 py-3">
+      <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <DecisionProgressBar percent={dec.progress_percent} />
           <span className="whitespace-nowrap text-xs text-gray-500">{toPersianDigits(String(dec.progress_percent))}٪</span>
@@ -321,11 +331,11 @@ function DecisionTableRow({ dec, onViewDetail, onAction, onNavigate }: RowProps)
       </td>
       <td className="px-4 py-3">
         {daysLabel ? (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${deadlineBadgeClass}`}>
+          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${deadlineBadgeClass}`}>
             {daysLabel}
           </span>
         ) : (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${deadlineBadgeClass}`}>
+          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${deadlineBadgeClass}`}>
             {DEADLINE_STATE_LABELS[deadlineState]}
           </span>
         )}
