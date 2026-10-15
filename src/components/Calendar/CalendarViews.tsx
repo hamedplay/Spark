@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { CalendarViewProps } from './CalendarViewTypes';
 import { renderPreviewPopup } from './CalendarViewShared';
 import { DayView } from './DayView';
@@ -32,7 +33,7 @@ export function CalendarViews(p: CalendarViewProps) {
 
   return (
     <>
-      {renderPreviewPopup(p)}
+      {typeof document !== 'undefined' && createPortal(renderPreviewPopup(p), document.body)}
       {viewMode === 'day' && <DayView {...p} />}
       {multiDay && <MultiDayView {...p} />}
       {viewMode === 'month' && <MonthView {...p} />}
