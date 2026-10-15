@@ -265,11 +265,24 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
           {/* Desktop table */}
           <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800 lg:block">
             <div className="overflow-x-auto">
-              <table className="min-w-[1180px] w-full text-sm">
+              <table className="w-full min-w-[1540px] table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[340px]" />
+                  <col className="w-[160px]" />
+                  <col className="w-[130px]" />
+                  <col className="w-[140px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[120px]" />
+                  <col className="w-[90px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[180px]" />
+                </colgroup>
                 <thead className="border-b border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-700/50">
                   <tr>
                     {['عنوان','جلسه','مسئول','واحد','وضعیت','پیشرفت','مهلت','سررسید','مانع','پیگیری','اقدام'].map(h => (
-                      <th key={h} className="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{h}</th>
+                      <th key={h} className="whitespace-nowrap px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -375,21 +388,21 @@ function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }
 
   return (
     <tr className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/30">
-      <td className="px-3 py-3">
-        <div className="min-w-56 max-w-xs whitespace-normal break-words font-medium leading-5 text-gray-900 dark:text-white">{dec.title}</div>
-        <div className="mt-0.5 flex items-center gap-1">
-          {dec.requires_followup && <Flag className="h-3 w-3 text-orange-400" />}
+      <td className="px-3 py-3 align-top">
+        <div title={dec.title} className="line-clamp-2 break-words font-medium leading-5 text-gray-900 dark:text-white">{dec.title}</div>
+        <div className="mt-1 flex items-center gap-1">
+          {dec.requires_followup && <Flag className="h-3 w-3 flex-shrink-0 text-orange-400" />}
           <DecisionPriorityBadge priority={dec.priority} />
         </div>
       </td>
       <td className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400">
-        <div className="max-w-32 truncate">{dec.minute_title}</div>
+        <div className="truncate" title={dec.minute_title}>{dec.minute_title}</div>
         <div className="whitespace-nowrap text-gray-400">{formatJalaliDateForDisplay(dec.meeting_date_snapshot)}</div>
       </td>
-      <td className="max-w-24 truncate px-3 py-3 text-xs text-gray-700 dark:text-gray-300">{dec.owner_name || '—'}</td>
-      <td className="max-w-28 truncate px-3 py-3 text-xs text-gray-500 dark:text-gray-400">{dec.responsible_unit_name_snapshot || '—'}</td>
+      <td className="truncate px-3 py-3 text-xs text-gray-700 dark:text-gray-300" title={dec.owner_name || undefined}>{dec.owner_name || '—'}</td>
+      <td className="truncate px-3 py-3 text-xs text-gray-500 dark:text-gray-400" title={dec.responsible_unit_name_snapshot || undefined}>{dec.responsible_unit_name_snapshot || '—'}</td>
       <td className="px-3 py-3"><DecisionStatusBadge status={dec.status} /></td>
-      <td className="w-28 px-3 py-3">
+      <td className="px-3 py-3">
         <div className="flex items-center gap-1.5">
           <DecisionProgressBar percent={dec.progress_percent} />
           <span className="whitespace-nowrap text-xs text-gray-500">{toPersianDigits(String(dec.progress_percent))}٪</span>
@@ -398,14 +411,14 @@ function TrackingTableRow({ dec, isManager, onViewDetail, onAction, onNavigate }
       <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-500">{dec.due_date ? formatJalaliDateForDisplay(dec.due_date) : '—'}</td>
       <td className="px-3 py-3">
         {daysLabel ? (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${deadlineCls}`}>{daysLabel}</span>
+          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${deadlineCls}`}>{daysLabel}</span>
         ) : (
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${deadlineCls}`}>{DEADLINE_STATE_LABELS[deadlineState]}</span>
+          <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${deadlineCls}`}>{DEADLINE_STATE_LABELS[deadlineState]}</span>
         )}
       </td>
       <td className="px-3 py-3">
         {dec.open_obstacle_count > 0 ? (
-          <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
+          <span className="inline-flex items-center gap-0.5 whitespace-nowrap rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
             <AlertTriangle className="h-3 w-3" /> {toPersianDigits(String(dec.open_obstacle_count))}
           </span>
         ) : '—'}
