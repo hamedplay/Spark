@@ -61,6 +61,11 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [showAddExternal, setShowAddExternal] = useState(false);
   const externalSearchRef = useRef<HTMLDivElement>(null);
 
+  const [externalInformeeSearch, setExternalInformeeSearch] = useState('');
+  const [selectedExternalInformees, setSelectedExternalInformees] = useState<string[]>([]);
+  const [showExternalInformeeDropdown, setShowExternalInformeeDropdown] = useState(false);
+  const externalInformeeSearchRef = useRef<HTMLDivElement>(null);
+
   const [allContacts, setAllContacts] = useState<ContactEmail[]>([]);
   const [showRepPicker, setShowRepPicker] = useState(false);
   const [repPickerSearch, setRepPickerSearch] = useState('');
@@ -209,6 +214,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (prefillData.externalParticipants && prefillData.externalParticipants.length > 0) {
       setSelectedExternal(prefillData.externalParticipants);
     }
+    if (prefillData.externalInformees) {
+      setSelectedExternalInformees(prefillData.externalInformees);
+    }
     if (prefillData.meetingManager !== undefined) setMeetingManager(prefillData.meetingManager);
     if (prefillData.reminderMinutes !== undefined) setReminderMinutes(prefillData.reminderMinutes);
     if (prefillData.isOnline !== undefined) setIsOnline(prefillData.isOnline);
@@ -228,7 +236,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   }, [prefillData]);
 
   const loadMeetingParticipants = async (meetingId: string) => {
-    const { data } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants, meeting_manager, is_online, conference_room_id, send_sms').eq('id', meetingId).maybeSingle();
+    const { data } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants, external_informees, meeting_manager, is_online, conference_room_id, send_sms').eq('id', meetingId).maybeSingle();
     if (!data) return;
     if (data.is_online !== undefined && data.is_online !== null) setIsOnline(!!data.is_online);
     if (data.send_sms !== undefined && data.send_sms !== null) setSendSms(!!data.send_sms);
@@ -240,9 +248,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       const notifyIds = data.notify_users as string[];
       setSelectedNotifyUsers(notifyIds.map((id: string) => ({ id, name: '' })));
     }
-    if ((data.external_participants || []).length > 0) {
-      setSelectedExternal(data.external_participants as string[]);
-    }
+    setSelectedExternal(Array.isArray(data.external_participants) ? data.external_participants as string[] : []);
+    setSelectedExternalInformees(Array.isArray(data.external_informees) ? data.external_informees as string[] : []);
     if (data.meeting_manager) setMeetingManager(data.meeting_manager);
 
     const { data: items } = await supabase
@@ -259,6 +266,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (externalSearchRef.current && !externalSearchRef.current.contains(e.target as Node)) setShowExternalDropdown(false);
+      if (externalInformeeSearchRef.current && !externalInformeeSearchRef.current.contains(e.target as Node)) setShowExternalInformeeDropdown(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -300,6 +308,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         notify_users: Array.from(new Set([userId, ...selectedNotifyUsers.map(u => u.id)])),
         participant_user_ids: selectedParticipants.map(p => p.id),
         external_participants: selectedExternal,
+        external_informees: selectedExternalInformees,
         repeat_type: repeatEnabled ? repeatType : 'none',
         repeat_interval: repeatEnabled ? repeatInterval : null,
         repeat_end_date: repeatEnabled ? repeatEndDate : null,
@@ -376,7 +385,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const bulkIds = prefillEditAllIds && prefillEditAllIds.length > 0 ? prefillEditAllIds : [prefillMeetingId];
         const { data: existingRows } = await supabase
           .from('meetings')
-          .select('id, subject, request_date, start_time, end_time, location, representative, phone, notes, priority, meeting_manager, is_online, conference_room_id, participant_user_ids, notify_users, external_participants, reminder_minutes, calendar_id, send_sms, members_only, repeat_type, repeat_interval, repeat_end_date, repeat_weekday')
+          .select('id, subject, request_date, start_time, end_time, location, representative, phone, notes, priority, meeting_manager, is_online, conference_room_id, participant_user_ids, notify_users, external_participants, external_informees, reminder_minutes, calendar_id, send_sms, members_only, repeat_type, repeat_interval, repeat_end_date, repeat_weekday')
           .in('id', bulkIds);
         const existingMap = new Map<string, any>();
         for (const row of existingRows || []) existingMap.set(row.id, row);
@@ -420,6 +429,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           participant_user_ids: selectedParticipants.map(p => p.id),
           notify_users: Array.from(new Set([userId, ...selectedNotifyUsers.map(u => u.id)])),
           external_participants: selectedExternal,
+          external_informees: selectedExternalInformees,
           reminder_minutes: reminderMinutes || null,
           calendar_id: selectedCalendarId || null,
           send_sms: sendSms,
@@ -474,6 +484,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           status: 'archived', status_type: 'scheduled',
           notify_users: Array.from(new Set([userId, ...selectedNotifyUsers.map(u => u.id)])),
           external_participants: selectedExternal,
+          external_informees: selectedExternalInformees,
           repeat_type: repeatEnabled ? repeatType : 'none',
           repeat_interval: repeatEnabled ? repeatInterval : null,
           repeat_end_date: repeatEnabled ? repeatEndDate : null,
@@ -497,6 +508,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
             status: 'archived', status_type: 'scheduled',
             notify_users: updateRecord.notify_users,
             external_participants: selectedExternal,
+            external_informees: selectedExternalInformees,
             repeat_type: updateRecord.repeat_type, repeat_interval: updateRecord.repeat_interval,
             repeat_end_date: updateRecord.repeat_end_date, repeat_weekday: updateRecord.repeat_weekday,
             reminder_minutes: reminderMinutes || null,
@@ -524,11 +536,19 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           prevAgendaByMeetingId,
           joinLink: editJoinLink, gregDate,
           selectedParticipantIds: selectedParticipants.map(p => p.id),
-          selectedExternal, sendSms, agendaEnabled, agendaItems,
+          selectedExternal,
+          selectedExternalInformees,
+          sendSms, agendaEnabled, agendaItems,
           prevExternalByMeetingId: Object.fromEntries(
             bulkIds.map((id: string) => [
               id,
               ((existingMap.get(id)?.external_participants || []) as string[]).filter((value: string) => !!value),
+            ]),
+          ),
+          prevExternalInformeesByMeetingId: Object.fromEntries(
+            bulkIds.map((id: string) => [
+              id,
+              ((existingMap.get(id)?.external_informees || []) as string[]).filter((value: string) => !!value),
             ]),
           ),
           isOnline,
@@ -647,9 +667,40 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           fallbackSms,
           userId,
           externalSmsPlaceholders,
+          'invite',
+          meeting?.id ?? null,
         );
       }
-      showSmsSummary(internalSmsResults, externalSmsResult);
+
+      let externalInformeeSmsResult: ExternalSmsResult | null = null;
+      if (selectedExternalInformees.length > 0) {
+        const meetingDatesText = recurringMeetingDates.join('، ');
+        const informeePlaceholders = {
+          ...smsPlaceholders,
+          meeting_date: meetingDatesText,
+        };
+        const dateLabel = recurringMeetingDates.length > 1 ? 'تاریخ‌ها' : 'تاریخ';
+        const fallbackSms = `جهت اطلاع شما جلسه «${subject}» | ${dateLabel}: ${meetingDatesText} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
+        externalInformeeSmsResult = await sendSmsToExternals(
+          selectedExternalInformees,
+          contacts,
+          fallbackSms,
+          userId,
+          informeePlaceholders,
+          'informee_invite',
+          meeting?.id ?? null,
+        );
+      }
+
+      const combinedExternalSmsResult = externalSmsResult || externalInformeeSmsResult
+        ? {
+            ok: (externalSmsResult?.ok ?? true) && (externalInformeeSmsResult?.ok ?? true),
+            sent: (externalSmsResult?.sent ?? 0) + (externalInformeeSmsResult?.sent ?? 0),
+            skipped: (externalSmsResult?.skipped ?? 0) + (externalInformeeSmsResult?.skipped ?? 0),
+            error: externalSmsResult?.error || externalInformeeSmsResult?.error,
+          }
+        : null;
+      showSmsSummary(internalSmsResults, combinedExternalSmsResult);
 
       if (saveContact && representative?.trim() && phone?.trim()) {
         const { error: contactError } = await supabase
@@ -700,6 +751,10 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const filteredExternal = externalOptions.filter(contact =>
     !selectedExternal.includes(contact.id) &&
     (contact.name.toLowerCase().includes(externalSearch.toLowerCase()) || (contact.sub ?? '').toLowerCase().includes(externalSearch.toLowerCase())),
+  );
+  const filteredExternalInformees = externalOptions.filter(contact =>
+    !selectedExternalInformees.includes(contact.id) &&
+    (contact.name.toLowerCase().includes(externalInformeeSearch.toLowerCase()) || (contact.sub ?? '').toLowerCase().includes(externalInformeeSearch.toLowerCase())),
   );
 
   const addQuickExternal = async () => {
@@ -797,6 +852,14 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       newExternalPosition={newExternalPosition}
       setNewExternalPosition={setNewExternalPosition}
       addQuickExternal={addQuickExternal}
+      externalInformeeSearchRef={externalInformeeSearchRef}
+      selectedExternalInformees={selectedExternalInformees}
+      setSelectedExternalInformees={setSelectedExternalInformees}
+      externalInformeeSearch={externalInformeeSearch}
+      setExternalInformeeSearch={setExternalInformeeSearch}
+      showExternalInformeeDropdown={showExternalInformeeDropdown}
+      setShowExternalInformeeDropdown={setShowExternalInformeeDropdown}
+      filteredExternalInformees={filteredExternalInformees}
       meetingManager={meetingManager}
       setMeetingManager={setMeetingManager}
       managerDisplayName={managerDisplayName}
