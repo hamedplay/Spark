@@ -100,8 +100,9 @@ export function panelStyle(
   const gap = 8;
   const left = Math.max(gap, Math.min(window.innerWidth - panelWidth - gap, pos.x));
   const spaceAbove = pos.y - gap;
-  const top = spaceAbove >= panelHeight
+  const preferredTop = spaceAbove >= panelHeight
     ? pos.y - panelHeight - gap
     : Math.min(pos.y + fabSize + gap, window.innerHeight - panelHeight - gap);
+  const top = Math.max(gap, preferredTop);
   return { position: 'fixed', top, left, zIndex: 60, width: panelWidth };
 }
