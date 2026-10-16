@@ -499,6 +499,7 @@ export function CalendarPage({
       meeting_time: meetingTimeStr,
       location: m.location || '',
       location_part: m.location ? ` | ${m.location}` : '',
+      agenda: '',
       sender_name: senderName,
       full_name: recipientName,
       representative: m.representative || '',
