@@ -13,26 +13,14 @@ export interface AuditPayload {
 
 let _cachedUserId: string | null = null;
 let _cachedUserName: string | null = null;
-let _cachedIp: string | null = null;
-
-async function getClientIp(): Promise<string | null> {
-  if (_cachedIp) return _cachedIp;
-  try {
-    const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    _cachedIp = data?.ip || null;
-    return _cachedIp;
-  } catch {
-    return null;
-  }
-}
 
 async function getActor(): Promise<{ userId: string | null; userName: string | null }> {
   if (_cachedUserId) return { userId: _cachedUserId, userName: _cachedUserName };
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return { userId: null, userName: null };
+
     _cachedUserId = user.id;
     const { data: profile } = await supabase
       .from('profiles')
@@ -46,22 +34,25 @@ async function getActor(): Promise<{ userId: string | null; userName: string | n
   }
 }
 
-// Reset cache on auth state change so next call re-fetches fresh user
+// Reset cache on auth state change so next call re-fetches fresh user.
 supabase.auth.onAuthStateChange(() => {
   _cachedUserId = null;
   _cachedUserName = null;
-  _cachedIp = null;
 });
 
 export async function logAudit(payload: AuditPayload): Promise<void> {
   try {
-    const [{ userId, userName }, ip] = await Promise.all([getActor(), getClientIp()]);
-    const ua = navigator.userAgent;
-    await supabase.from('audit_log').insert({
+    const { userId, userName } = await getActor();
+    // Do not issue a REST write while auth is being established or torn down.
+    // Those transient calls produced misleading 401s and never represented a
+    // valid auditable actor.
+    if (!userId) return;
+
+    const { error } = await supabase.from('audit_log').insert({
       user_id: userId,
       user_name: userName,
-      ip_address: ip,
-      user_agent: ua,
+      ip_address: null,
+      user_agent: navigator.userAgent,
       module: payload.module,
       action: payload.action,
       entity_name: payload.entity_name ?? null,
@@ -70,7 +61,11 @@ export async function logAudit(payload: AuditPayload): Promise<void> {
       severity: payload.severity ?? 'info',
       url: window.location.href,
     });
+
+    // Audit logging is best-effort and must never interfere with the action
+    // being audited. The error is intentionally consumed here.
+    void error;
   } catch {
-    // Audit logging must never break the main flow
+    // Audit logging must never break the main flow.
   }
 }
