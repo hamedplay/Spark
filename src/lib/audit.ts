@@ -11,59 +11,25 @@ export interface AuditPayload {
   severity?: AuditSeverity;
 }
 
-let _cachedUserId: string | null = null;
-let _cachedUserName: string | null = null;
-
-async function getActor(): Promise<{ userId: string | null; userName: string | null }> {
-  if (_cachedUserId) return { userId: _cachedUserId, userName: _cachedUserName };
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
-    if (!user) return { userId: null, userName: null };
-
-    _cachedUserId = user.id;
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('full_name, email')
-      .eq('user_id', user.id)
-      .maybeSingle();
-    _cachedUserName = profile?.full_name || profile?.email || user.email || null;
-    return { userId: _cachedUserId, userName: _cachedUserName };
-  } catch {
-    return { userId: null, userName: null };
-  }
-}
-
-// Reset cache on auth state change so next call re-fetches fresh user.
-supabase.auth.onAuthStateChange(() => {
-  _cachedUserId = null;
-  _cachedUserName = null;
-});
-
 export async function logAudit(payload: AuditPayload): Promise<void> {
   try {
-    const { userId, userName } = await getActor();
-    // Do not issue a REST write while auth is being established or torn down.
-    // Those transient calls produced misleading 401s and never represented a
-    // valid auditable actor.
-    if (!userId) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return;
 
-    const { error } = await supabase.from('audit_log').insert({
-      user_id: userId,
-      user_name: userName,
-      ip_address: null,
-      user_agent: navigator.userAgent,
-      module: payload.module,
-      action: payload.action,
-      entity_name: payload.entity_name ?? null,
-      entity_id: payload.entity_id ?? null,
-      details: payload.details ?? null,
-      severity: payload.severity ?? 'info',
-      url: window.location.href,
-    });
+    const { error } = await supabase.rpc('write_audit_log' as never, {
+      p_module: payload.module,
+      p_action: payload.action,
+      p_entity_name: payload.entity_name ?? null,
+      p_entity_id: payload.entity_id ?? null,
+      p_details: payload.details ?? null,
+      p_severity: payload.severity ?? 'info',
+      p_user_agent: navigator.userAgent,
+      p_url: window.location.href,
+      p_referrer: document.referrer || null,
+    } as never);
 
     // Audit logging is best-effort and must never interfere with the action
-    // being audited. The error is intentionally consumed here.
+    // being audited. Actor identity and client IP are derived server-side.
     void error;
   } catch {
     // Audit logging must never break the main flow.
