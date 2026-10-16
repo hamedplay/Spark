@@ -243,16 +243,39 @@ export async function createRepeatMeetings({
     return [];
   }
 
-  toast.success(`${repeatMeetings.length} جلسه تکراری ایجاد شد`);
   const inboxRows: { meeting_id: string; user_id: string; status: string }[] = [];
   for (const row of inserted || []) {
-    for (const participantId of row.participant_user_ids || []) {
+    const participantIds = Array.from(new Set((row.participant_user_ids || []) as string[]));
+    for (const participantId of participantIds) {
       if (participantId !== baseRecord.user_id) {
         inboxRows.push({ meeting_id: row.id, user_id: participantId, status: 'pending' });
       }
     }
   }
-  if (inboxRows.length > 0) await supabase.from('meeting_inbox').insert(inboxRows);
 
+  if (inboxRows.length > 0) {
+    const { error: inboxError } = await supabase
+      .from('meeting_inbox')
+      .upsert(inboxRows, {
+        onConflict: 'meeting_id,user_id',
+        ignoreDuplicates: true,
+      });
+
+    if (inboxError) {
+      console.error('Repeat inbox insert error:', inboxError);
+      const insertedIds = (inserted || []).map(row => row.id);
+      if (insertedIds.length > 0) {
+        const { error: rollbackError } = await supabase
+          .from('meetings')
+          .delete()
+          .in('id', insertedIds);
+        if (rollbackError) console.error('Repeat meeting rollback error:', rollbackError);
+      }
+      toast.error('جلسات تکراری ایجاد نشدند چون ساخت دعوت‌ها ناموفق بود: ' + inboxError.message);
+      return [];
+    }
+  }
+
+  toast.success(`${repeatMeetings.length} جلسه تکراری ایجاد شد`);
   return repeatMeetings.map(row => row.request_jalaali_date as string);
 }
