@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { usePermissions } from '../../context/PermissionsContext';
 import { supabase } from '../../lib/supabase';
 import {
   getMeetingIdFromUrl,
@@ -55,6 +56,7 @@ interface Props {
   mode: 'new' | 'edit';
   onNavigate: (page: string) => void;
   minuteId?: string;
+  adminCorrection?: boolean;
 }
 
 interface WorkingMinuteResult {
@@ -64,7 +66,10 @@ interface WorkingMinuteResult {
 
 const isDev = import.meta.env.DEV;
 
-export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
+export function MinutesFormPage({ mode, onNavigate, minuteId, adminCorrection = false }: Props) {
+  const { isAdmin } = usePermissions();
+  const isAdminCorrection = adminCorrection && isAdmin && mode === 'edit';
+  const [correctionReason, setCorrectionReason] = useState('');
   const [activeSection, setActiveSection] = useState(0);
   const [info, setInfo] = useState<DraftMeetingInfo>(defaultInfo);
   const [internalParticipants, setInternalParticipants] = useState<DraftInternalParticipant[]>([defaultInternalParticipant()]);
@@ -118,7 +123,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       try {
         const { data: minData, error: minErr } = await supabase
           .from('minutes')
-          .select('id, meeting_id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_id, org_unit_name_snapshot, secretary_user_id, secretary_name_snapshot, chair_user_id, chair_name_snapshot, notes, confidentiality, status, updated_at, approval_mode, revision_number, submitted_at')
+          .select('id, meeting_id, meeting_title_snapshot, meeting_date_snapshot, meeting_start_time_snapshot, meeting_end_time_snapshot, meeting_location_snapshot, meeting_type, org_unit_id, org_unit_name_snapshot, secretary_user_id, secretary_name_snapshot, chair_user_id, chair_name_snapshot, notes, confidentiality, status, updated_at, approval_mode, revision_number, submitted_at, admin_finalization')
           .eq('id', targetId)
           .maybeSingle();
         if (minErr) throw minErr;
@@ -131,6 +136,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
         const minute = minData as Record<string, unknown>;
         setEditMinuteId(minute.id as string);
         setEditUpdatedAt(minute.updated_at as string);
+        const savedFinalization = (minute as unknown as { admin_finalization?: Partial<DraftFinalization> }).admin_finalization;
+        if (savedFinalization) setFinalization({ ...defaultFinalization, ...savedFinalization });
         setInfo({
           meetingId: minute.meeting_id as string,
           meetingTitle: (minute.meeting_title_snapshot as string) || '',
@@ -279,6 +286,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             primaryOwnerUserId: (row.primary_owner_user_id as string) || '',
             responsibleUnitId: (row.responsible_unit_id as string) || null,
             responsibleUnitNameSnapshot: (row.responsible_unit_name_snapshot as string) || '',
+            status: row.status as import('./types').DecisionStatus,
+            progressPercent: Number(row.progress_percent ?? 0),
+            expectedUpdatedAt: row.updated_at as string,
             priority: (row.priority as DecisionPriority) || 'normal',
             startDate: (row.start_date as string) || '',
             dueDate: (row.due_date as string) || '',
@@ -470,7 +480,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
     profiles,
   });
   const makeDecisionsPayload = () => buildDecisionsPayload(decisions);
-  const validate = () => validateMinutesForm({ info, decisions, prefillLoading, prefillError });
+  const validate = () => isAdminCorrection && !correctionReason.trim()
+    ? 'دلیل اصلاح مدیریتی را وارد کنید.'
+    : validateMinutesForm({ info, decisions, prefillLoading, prefillError });
 
   const syncSignatories = async (targetMinuteId: string): Promise<boolean> => {
     const internalUserIds = Array.from(new Set(
@@ -640,14 +652,27 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       setSavingDraft(true);
       try {
         const updatePayload = makeDraftPayload();
-        const { data, error: rpcError } = await supabase.rpc('update_minutes_draft', {
+        const updateArgs = {
           p_minute_id: existingMinuteId,
           p_expected_updated_at: editUpdatedAt,
           p_payload: updatePayload,
           p_decisions: makeDecisionsPayload(),
           p_deleted_decision_ids: deletedDecisionIds,
           p_deleted_external_participant_ids: deletedExternalParticipantIds,
-        });
+        };
+        const { data, error: rpcError } = isAdminCorrection
+          ? await supabase.rpc('admin_correct_minutes', {
+              ...updateArgs, p_payload: { ...updatePayload, admin_finalization: { ...finalization } }, p_status: info.status, p_reason: correctionReason,
+              p_signatories: {
+                internal: internalParticipants.filter(p => p.isSignatory && p.userId).map(p => p.userId),
+                external: externalParticipants.filter(p => p.isSignatory && p.participantId).map(p => p.participantId!),
+              },
+              p_decision_states: decisions.filter(d => d.decisionId && d.title.trim() && d.status !== undefined).map(d => ({
+                id: d.decisionId!, status: d.status!, progress_percent: d.progressPercent ?? 0,
+                expected_updated_at: d.expectedUpdatedAt ?? null,
+              })),
+            })
+          : await supabase.rpc('update_minutes_draft', updateArgs);
         if (rpcError) {
           console.error('[MinutesUpdateRPC] update failed', {
             code: rpcError?.code,
@@ -667,6 +692,16 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             toast.error('این صورت‌جلسه توسط کاربر دیگری تغییر کرده است. اطلاعات را دوباره بارگذاری کنید.');
           } else if (code === 'MINUTES_NO_PERMISSION') {
             toast.error('شما اجازه ویرایش این صورت‌جلسه را ندارید.');
+          } else if (code === 'DECISION_VERSION_CONFLICT') {
+            toast.error('مصوبه هم‌زمان تغییر کرده است؛ اطلاعات را دوباره بارگذاری کنید.');
+          } else if (code === 'ADMIN_FULL_ACCESS_REQUIRED') {
+            toast.error('اصلاح مستقیم فقط برای ادمین با نشست ورود معتبر مجاز است.');
+          } else if (code === 'CORRECTION_REASON_REQUIRED') {
+            toast.error('دلیل اصلاح مدیریتی الزامی است.');
+          } else if (code === 'COMPLETION_REQUIRES_100_PERCENT') {
+            toast.error('برای تکمیل مصوبه، پیشرفت باید ۱۰۰٪ باشد.');
+          } else if (code === 'INVALID_PROGRESS') {
+            toast.error('درصد پیشرفت باید بین صفر و صد باشد.');
           } else if (code === 'MINUTE_NOT_FOUND') {
             toast.error('صورت‌جلسه یافت نشد.');
           } else {
@@ -680,7 +715,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
             toast.error('ذخیره آخرین تغییرات صورت‌جلسه ناموفق بود.');
             return null;
           }
-          if (!(await syncSignatories(existingMinuteId))) return null;
+          if (!isAdminCorrection && !(await syncSignatories(existingMinuteId))) return null;
           if (isDev) console.log('[MinutesUpdateRPC] Updated:', data.minute_id, returnedUpdatedAt);
           setEditUpdatedAt(returnedUpdatedAt);
           setWorkingMinuteId(existingMinuteId);
@@ -745,7 +780,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
       try {
         const saved = await ensureWorkingMinute({ saveCurrentValues: true });
         if (!saved) return;
-        toast.success('پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
+        toast.success(isAdminCorrection ? 'اصلاح مدیریتی و سابقه تغییرات ذخیره شد.' : 'پیش‌نویس صورت‌جلسه با موفقیت ذخیره شد.');
         setMinuteIdInUrl(saved.minuteId);
         onNavigate('minutes-detail');
       } catch (error) {
@@ -821,6 +856,9 @@ export function MinutesFormPage({ mode, onNavigate, minuteId }: Props) {
 
   return (
     <MinutesFormView
+      adminCorrection={isAdminCorrection}
+      correctionReason={correctionReason}
+      setCorrectionReason={setCorrectionReason}
       mode={mode}
       onNavigate={onNavigate}
       title={title}

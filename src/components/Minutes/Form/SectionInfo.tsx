@@ -7,6 +7,7 @@ import { SearchableSelect } from './SearchableSelect';
 import { gregorianToJalaliDate, normalizeClockTime, toPersianDigits } from '../../../lib/minutesDate';
 
 interface SectionInfoProps {
+  adminCorrection?: boolean;
   info: DraftMeetingInfo;
   setInfo: React.Dispatch<React.SetStateAction<DraftMeetingInfo>>;
   profiles: ProfileOption[];
@@ -31,6 +32,7 @@ interface SectionInfoProps {
 void 0;
 
 export function SectionInfo({
+  adminCorrection = false,
   info, setInfo,
   profiles, _profilesLoading, _profilesError,
   orgUnits, orgUnitsLoading, orgUnitsError,
@@ -402,7 +404,7 @@ export function SectionInfo({
             <div className="flex items-center gap-3">
               <select
                 value={info.approvalMode}
-                disabled={!!info.submittedAt || info.status !== 'draft'}
+                disabled={readOnly || (!adminCorrection && (!!info.submittedAt || info.status !== 'draft'))}
                 onChange={e => setInfo(prev => ({ ...prev, approvalMode: e.target.value as ApprovalMode | '' }))}
                 className="flex-1 px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:bg-gray-700 dark:text-white disabled:opacity-60 disabled:cursor-not-allowed"
               >
@@ -410,7 +412,7 @@ export function SectionInfo({
                 <option value="system">تأیید سیستمی</option>
                 <option value="in_person">تأیید حضوری</option>
               </select>
-              {(!!info.submittedAt || info.status !== 'draft') && (
+              {!adminCorrection && (!!info.submittedAt || info.status !== 'draft') && (
                 <span className="text-xs text-gray-400">غیرقابل تغییر پس از ارسال</span>
               )}
             </div>

@@ -1,15 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Signature as FileSignature, CloudUpload as UploadCloud, Loader as Loader2, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { DraftFinalization, DraftMeetingInfo, DraftInternalParticipant, DraftExternalParticipant, DraftAgendaItem, DraftDecision, ProfileOption, OrgUnitOption } from './types';
 import { InputField, TextareaField } from './fields';
 import { buildDocumentDataFromDraft } from '../MinutesDocumentFromDraft';
 import type { MinutesDocumentData, MinutesLayoutConfig } from '../MinutesDocumentData';
-import { uploadMinuteAttachment, validateAttachment, type AttachmentRow } from '../../../lib/minutesAttachments';
+import { listMinuteAttachments, deleteMinuteAttachment, uploadMinuteAttachment, validateAttachment, type AttachmentRow } from '../../../lib/minutesAttachments';
 import { JalaliDatePicker } from './JalaliDatePicker';
 import { FullScreenPreview } from '../Shared/FullScreenPreview';
 
 interface SectionFinalProps {
+  adminCorrection?: boolean;
   finalization: DraftFinalization;
   setFinalization: React.Dispatch<React.SetStateAction<DraftFinalization>>;
   info: DraftMeetingInfo;
@@ -27,6 +28,7 @@ interface SectionFinalProps {
 
 
 export function SectionFinal({
+  adminCorrection = false,
   finalization, setFinalization,
   info, internalParticipants, externalParticipants, agendaItems, decisions,
   profiles, orgUnits, logoUrl, config, minuteId, canManage,
@@ -35,6 +37,26 @@ export function SectionFinal({
   const [uploadingSigned, setUploadingSigned] = useState(false);
   const [signedProgress, setSignedProgress] = useState(0);
   const [signedFiles, setSignedFiles] = useState<AttachmentRow[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  useEffect(() => {
+    if (!adminCorrection || !minuteId) return;
+    let active = true;
+    void listMinuteAttachments(minuteId).then(rows => {
+      if (active) setSignedFiles(rows.filter(r => r.attachment_kind === 'signed_final'));
+    }).catch(() => { if (active) toast.error('بارگذاری نسخه‌های امضاشده ناموفق بود.'); });
+    return () => { active = false; };
+  }, [adminCorrection, minuteId]);
+  const removeSignedFile = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteMinuteAttachment(deleteTarget);
+      setSignedFiles(rows => rows.filter(r => r.id !== deleteTarget));
+      setDeleteTarget(null); toast.success('نسخه امضاشده حذف شد؛ سابقه حذف ثبت شد.');
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'حذف ناموفق بود.'); }
+    finally { setDeleting(false); }
+  };
   const signedInputRef = useRef<HTMLInputElement | null>(null);
 
   const update = (field: keyof DraftFinalization, value: string) =>
@@ -132,6 +154,7 @@ export function SectionFinal({
                   <FileSignature className="w-3 h-3" />
                   <span>{f.original_filename}</span>
                   {f.revision_number != null && <span>— نسخه {f.revision_number}</span>}
+                  {adminCorrection && <button type="button" className="text-red-600" onClick={() => setDeleteTarget(f.id)}>حذف نسخه</button>}
                 </div>
               ))}
             </div>
@@ -139,6 +162,11 @@ export function SectionFinal({
         </div>
       )}
 
+      {deleteTarget && <div role="alert" className="p-3 rounded-xl bg-red-50 text-red-700 text-sm">
+        این نسخه امضاشده حذف شود؟ سابقه حذف باقی می‌ماند.
+        <button type="button" disabled={deleting} onClick={() => void removeSignedFile()} className="px-3 py-2">حذف</button>
+        <button type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>انصراف</button>
+      </div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label htmlFor="sign-date" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">تاریخ امضا</label>

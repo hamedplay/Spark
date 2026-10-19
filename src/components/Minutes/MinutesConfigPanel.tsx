@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw, Upload, Trash2, Eye, FileText, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
@@ -13,6 +13,8 @@ import {
   validateMinutesConfigValue,
 } from './fetchMinutesConfig';
 import type { ConfigEntry } from '../PortalConfig/types';
+
+const AdminMinutesPanel = lazy(() => import('./AdminMinutesPanel').then(m => ({ default: m.AdminMinutesPanel })));
 
 const FONT_SIZE_MAP: Record<string, string> = {
   small: '12px',
@@ -311,6 +313,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
 
   return (
     <div className="space-y-5">
+      <Suspense fallback={<p>در حال بارگذاری مدیریت اسناد...</p>}><AdminMinutesPanel /></Suspense>
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5">
         <h4 className="font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
           <FileText className="w-4 h-4 text-blue-500" />

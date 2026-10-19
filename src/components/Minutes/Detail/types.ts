@@ -23,6 +23,7 @@ export interface MinuteDetail {
   secretary_confirmed_at: string | null;
   chair_confirmed_at: string | null;
   published_at: string | null;
+  admin_published_at?: string | null;
   created_at: string;
   updated_at: string;
 }

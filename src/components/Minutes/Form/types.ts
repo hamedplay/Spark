@@ -115,6 +115,9 @@ export type FollowupRecurrence = 'none' | 'weekly' | 'monthly';
 export type FollowupRecipientType = 'secretary' | 'owner';
 
 export interface DraftDecision {
+  status?: import("../types").DecisionStatus;
+  progressPercent?: number;
+  expectedUpdatedAt?: string;
   id: string;
   /** Stable DB identity. New unsaved decisions receive a UUID immediately so
    * parent/child relations can be sent atomically on the first draft save. */

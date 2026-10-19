@@ -15,6 +15,7 @@ import {
 } from '../../lib/minutesNavigation';
 import { PageHeader, TableSkeleton } from './MinutesShared';
 import { MinutesBackButton } from './MinutesBackButton';
+import { AdminMinutesControls } from './AdminMinutesControls';
 import { SectionInfo } from './Form/SectionInfo';
 import type { ExternalParticipantSuggestion } from './Form/SectionParticipants';
 
@@ -41,6 +42,9 @@ import type {
 } from './Form/types';
 
 interface MinutesFormViewProps {
+  adminCorrection?: boolean;
+  correctionReason?: string;
+  setCorrectionReason?: (value: string) => void;
   mode: 'new' | 'edit';
   onNavigate: (page: string) => void;
   title: string;
@@ -90,6 +94,7 @@ interface MinutesFormViewProps {
 }
 
 export function MinutesFormView({
+  adminCorrection = false, correctionReason = '', setCorrectionReason,
   mode,
   onNavigate,
   title,
@@ -192,7 +197,7 @@ export function MinutesFormView({
     );
   }
 
-  const isNonEditable = mode === 'edit' && info.status !== 'draft' && info.status !== 'changes_requested';
+  const isNonEditable = !adminCorrection && mode === 'edit' && info.status !== 'draft' && info.status !== 'changes_requested';
 
   return (
     <div dir="rtl" className="space-y-5">
@@ -228,6 +233,11 @@ export function MinutesFormView({
           </div>
         }
       />
+
+      {adminCorrection && setCorrectionReason && (
+        <AdminMinutesControls info={info} setInfo={setInfo} decisions={decisions} setDecisions={setDecisions}
+          reason={correctionReason} setReason={setCorrectionReason} disabled={savingDraft || submitting} />
+      )}
 
       <div className="flex gap-5">
         <div className="hidden lg:flex flex-col gap-1 w-48 flex-shrink-0">
@@ -275,6 +285,7 @@ export function MinutesFormView({
             <Suspense fallback={<div className="flex min-h-48 items-center justify-center text-sm text-gray-400">در حال آماده‌سازی بخش...</div>}>
             {activeSection === 0 && (
               <SectionInfo
+                adminCorrection={adminCorrection}
                 info={info}
                 setInfo={setInfo}
                 profiles={profiles}
@@ -366,6 +377,7 @@ export function MinutesFormView({
             )}
             {activeSection === 6 && (
               <SectionFinal
+                adminCorrection={adminCorrection}
                 finalization={finalization}
                 setFinalization={setFinalization}
                 info={info}
@@ -401,12 +413,12 @@ export function MinutesFormView({
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
-                {savingDraft ? 'در حال ذخیره...' : 'ذخیره پیش‌نویس'}
+                {savingDraft ? 'در حال ذخیره...' : adminCorrection ? 'ذخیره اصلاح مدیریتی' : 'ذخیره پیش‌نویس'}
               </button>
               {decisionsLoadFailed && (
                 <span className="text-xs text-red-500">ذخیره غیرفعال — بارگذاری مصوبات ناموفق بود</span>
               )}
-              {activeSection === MINUTES_FORM_SECTIONS.length - 1 ? (
+              {activeSection === MINUTES_FORM_SECTIONS.length - 1 && !adminCorrection ? (
                 <button
                   onClick={handleSubmitForApproval}
                   disabled={submitting || savingDraft || !info.approvalMode}

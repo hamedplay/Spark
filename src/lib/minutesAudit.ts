@@ -69,6 +69,7 @@ export interface AuditLogRow {
 }
 
 export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  admin_correction: 'اصلاح مستقیم توسط ادمین',
   minute_created: 'ایجاد صورت‌جلسه',
   minute_updated: 'ویرایش صورت‌جلسه',
   minute_deleted: 'حذف صورت‌جلسه',
@@ -168,6 +169,14 @@ export async function listMinuteAudit(
 }
 
 export function summarizeChange(row: AuditLogRow): string {
+  if (row.action === 'admin_correction') {
+    const before = row.old_values?.minute as Record<string, unknown> | undefined;
+    const after = row.new_values?.minute as Record<string, unknown> | undefined;
+    const reason = typeof row.metadata?.reason === 'string' ? row.metadata.reason : '';
+    const status = before?.status !== after?.status
+      ? ` · وضعیت: ${formatStatusByContext('minute', before?.status)} ← ${formatStatusByContext('minute', after?.status)}` : '';
+    return `اصلاح مستقیم توسط ادمین${status}${reason ? ` · دلیل: ${reason}` : ''}`;
+  }
   const action = AUDIT_ACTION_LABELS[row.action] || row.action;
   const entity = ENTITY_LABELS[row.entity_type] || row.entity_type;
   const parts: string[] = [action];

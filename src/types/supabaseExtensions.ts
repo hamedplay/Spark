@@ -1,4 +1,4 @@
-import type { Database as BaseDatabase } from './supabase';
+import type { Json, Database as BaseDatabase } from './supabase';
 
 type PublicSchema = BaseDatabase['public'];
 type ProfileTable = PublicSchema['Tables']['profiles'];
@@ -44,7 +44,13 @@ type ActionsV2TaskUpdate = TasksTable['Update'] & {
 
 export type Database = Omit<BaseDatabase, 'public'> & {
   public: Omit<PublicSchema, 'Tables' | 'Functions'> & {
-    Tables: Omit<PublicSchema['Tables'], 'profiles' | 'user_preferences' | 'minutes_approval_comments' | 'tasks'> & {
+    Tables: Omit<PublicSchema['Tables'], 'profiles' | 'user_preferences' | 'minutes_approval_comments' | 'tasks' | 'minutes'> & {
+      minutes: {
+        Row: PublicSchema['Tables']['minutes']['Row'] & { admin_finalization: Json; admin_published_at: string | null; admin_published_by_user_id: string | null };
+        Insert: PublicSchema['Tables']['minutes']['Insert'];
+        Update: PublicSchema['Tables']['minutes']['Update'];
+        Relationships: PublicSchema['Tables']['minutes']['Relationships'];
+      };
       profiles: {
         Row: ProfileTable['Row'] & {
           is_security_admin: boolean;
@@ -137,6 +143,15 @@ export type Database = Omit<BaseDatabase, 'public'> & {
       };
     };
     Functions: PublicSchema['Functions'] & {
+      admin_correct_minutes: {
+        Args: {
+          p_minute_id: string; p_expected_updated_at: string; p_payload: Json;
+          p_decisions: Json; p_deleted_decision_ids: string[]; p_deleted_external_participant_ids: string[];
+          p_status: string; p_reason: string; p_signatories: Json; p_decision_states: Json;
+        };
+        Returns: { success: boolean; error_code?: string; minute_id?: string; updated_at?: string; code?: string; message?: string };
+      };
+
       set_user_role_level: {
         Args: {
           p_target_user_id: string;

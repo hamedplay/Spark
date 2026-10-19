@@ -43,6 +43,7 @@ export function DetailHeader({
               </span>
             )}
           </div>
+          {minute.admin_published_at && <p className="text-xs text-amber-700 dark:text-amber-300 my-2">انتشار یا اصلاح با اختیار مستقیم ادمین؛ جزئیات در تاریخچه ثبت شده است.</p>}
           <h1 className="text-xl font-bold text-gray-900 dark:text-white leading-snug">{minute.meeting_title_snapshot}</h1>
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1.5">
