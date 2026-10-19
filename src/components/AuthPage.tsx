@@ -749,7 +749,7 @@ export function AuthPage({ onSuccess, initialAuthBootstrap = null }: AuthPagePro
                               type={showPassword ? 'text' : 'password'}
                               value={password}
                               onChange={event => setPassword(event.target.value)}
-                              placeholder="••••••••"
+                              placeholder="رمز عبور را وارد کنید"
                               autoComplete="current-password"
                               dir="ltr"
                               disabled={loading}
