@@ -34,6 +34,7 @@ const PAGE_SIZE = 25;
 
 export function MinutesReportsPage({ onNavigate }: Props) {
   const [reportType, setReportType] = useState<ReportType>('minutes');
+  const [textQuery, setTextQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [status, setStatus] = useState('');
@@ -51,6 +52,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
 
   const buildFilters = useCallback(() => {
     const f: Record<string, unknown> = {};
+    if (reportType === 'decisions' && textQuery.trim()) f.query = textQuery.trim();
     if (dateFrom) f.date_from = dateFrom;
     if (dateTo) f.date_to = dateTo;
     if (status) f.status = status;
@@ -60,7 +62,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
     if (hasDecisions === 'yes') f.has_decisions = true;
     if (hasDecisions === 'no') f.has_decisions = false;
     return f;
-  }, [dateFrom, dateTo, status, priority, confidentiality, overdueOnly, hasDecisions]);
+  }, [reportType, textQuery, dateFrom, dateTo, status, priority, confidentiality, overdueOnly, hasDecisions]);
 
   const runReport = useCallback(async (p: number) => {
     setRunning(true); setError(null);
@@ -88,7 +90,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
   }, [reportType, buildFilters]);
 
   const clearFilters = () => {
-    setDateFrom(''); setDateTo(''); setStatus(''); setPriority('');
+    setTextQuery(''); setDateFrom(''); setDateTo(''); setStatus(''); setPriority('');
     setConfidentiality(''); setOverdueOnly(false); setHasDecisions('');
     setRan(false); setRows([]); setTotalCount(0);
   };
@@ -134,7 +136,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const showingFrom = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
   const showingTo = Math.min((page + 1) * PAGE_SIZE, totalCount);
-  const activeFilterCount = [dateFrom, dateTo, status, priority, confidentiality, overdueOnly ? '1' : '', hasDecisions].filter(Boolean).length;
+  const activeFilterCount = [reportType === 'decisions' ? textQuery.trim() : '', dateFrom, dateTo, status, priority, confidentiality, overdueOnly ? '1' : '', hasDecisions].filter(Boolean).length;
 
   return (
     <div dir="rtl" className="space-y-4 sm:space-y-5">
@@ -182,6 +184,16 @@ export function MinutesReportsPage({ onNavigate }: Props) {
                 {REPORT_TYPES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
+            {reportType === 'decisions' && (
+              <div className="col-span-2">
+                <label htmlFor="decision-report-query" className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">جستجو در عنوان و متن مصوبات</label>
+                <input id="decision-report-query" type="search" value={textQuery} onChange={e => setTextQuery(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !running) { e.preventDefault(); void runReport(0); } }}
+                  placeholder="عبارت موردنظر در متن مصوبه یا بندهای آن"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 dark:border-gray-600 dark:bg-gray-700 dark:text-white" />
+                <p className="mt-1 text-xs text-gray-500">عنوان، توضیحات، نتیجه بحث، یادداشت‌ها و آخرین گزارش مصوبه و بندهای آن جستجو می‌شوند.</p>
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">از تاریخ</label>
               <JalaliDatePicker value={dateFrom || null} onChange={v => setDateFrom(v || '')} placeholder="تاریخ شروع" />
