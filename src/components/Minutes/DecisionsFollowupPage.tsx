@@ -72,6 +72,10 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
   const [obstacleUpdateId, setObstacleUpdateId] = useState<string | null>(null);
   const [detailDecision, setDetailDecision] = useState<FollowupRow | null>(null);
 
+  const updateFilters = (patch: Partial<DecisionFilterState>) => {
+    setFilters(previous => ({ ...previous, ...patch }));
+  };
+
   const applySummaryFilter = (patch: Partial<DecisionFilterState>) => {
     setFilters({ ...EMPTY_FILTERS, statusFilter: 'all', ...patch });
     setOffset(0);
