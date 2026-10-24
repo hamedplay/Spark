@@ -54,6 +54,8 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
   const [offset, setOffset]           = useState(0);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summary, setSummary]         = useState<FollowupSummary>({ total_count: 0, active_count: 0, completed_count: 0, stopped_count: 0, overdue_count: 0, open_obstacle_count: 0, requires_followup_count: 0 });
 
   // Filter options
@@ -70,7 +72,10 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
   const [obstacleUpdateId, setObstacleUpdateId] = useState<string | null>(null);
   const [detailDecision, setDetailDecision] = useState<FollowupRow | null>(null);
 
-  const updateFilters = (patch: Partial<DecisionFilterState>) => setFilters(f => ({ ...f, ...patch }));
+  const applySummaryFilter = (patch: Partial<DecisionFilterState>) => {
+    setFilters({ ...EMPTY_FILTERS, statusFilter: 'all', ...patch });
+    setOffset(0);
+  };
 
   // Fetch filter options from lightweight distinct RPC
   const fetchFilterOptions = useCallback(async () => {
@@ -87,6 +92,8 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
   }, []);
 
   const fetchSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    setSummaryError(null);
     try {
       const { data: sumData, error: sumErr } = await supabase.rpc('get_trackable_minutes_decisions_summary');
       if (sumErr) throw sumErr;
@@ -102,10 +109,12 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
           requires_followup_count: Number(row.requires_followup_count ?? 0),
         });
       } else {
-        setSummary({ total_count: 0, active_count: 0, completed_count: 0, stopped_count: 0, overdue_count: 0, open_obstacle_count: 0, requires_followup_count: 0 });
+        throw new Error('EMPTY_SUMMARY_RESPONSE');
       }
     } catch {
-      // silent
+      setSummaryError('دریافت آمار مصوبات ناموفق بود؛ دوباره بازآوری کنید.');
+    } finally {
+      setSummaryLoading(false);
     }
   }, []);
 
@@ -227,15 +236,17 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
         }
       />
 
-      {/* Stats */}
+      {/* Cards summarize the entire authorized scope; table filters are separate. */}
+      <p className="mb-2 text-xs text-gray-500">آمار کل مصوبات قابل پیگیری، مستقل از فیلترهای جدول</p>
+      {summaryError && <p role="alert" className="mb-2 text-sm text-red-600">{summaryError}</p>}
       <div className="mb-4 grid grid-cols-2 gap-2.5 sm:mb-6 sm:grid-cols-4 sm:gap-3 lg:grid-cols-7">
-        <StatCard label="کل" value={toPersianDigits(String(summary.total_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => updateFilters({ statusFilter: 'all' })} />
-        <StatCard label="در جریان" value={toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => updateFilters({ statusFilter: 'active', deadlineFilter: 'all', overdueOnly: false, followupOnly: false, hasObstacle: false, dueFrom: null, dueTo: null, search: '', priorityFilter: 'all', meetingFilter: '', unitFilter: '', ownerFilter: '', startFrom: null, startTo: null })} />
-        <StatCard label="تکمیل" value={toPersianDigits(String(summary.completed_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => updateFilters({ statusFilter: 'completed' })} />
-        <StatCard label="متوقف" value={toPersianDigits(String(summary.stopped_count ?? 0))} icon={<StopCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => updateFilters({ statusFilter: 'stopped' })} />
-        <StatCard label="عقب‌افتاده" value={toPersianDigits(String(summary.overdue_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => { updateFilters({ overdueOnly: true, statusFilter: 'all' }); }} />
-        <StatCard label="مانع باز" value={toPersianDigits(String(summary.open_obstacle_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-orange-600 bg-orange-100 dark:bg-orange-900/30" onClick={() => updateFilters({ hasObstacle: true })} />
-        <StatCard label="پیگیری" value={toPersianDigits(String(summary.requires_followup_count ?? 0))} icon={<Flag className="w-5 h-5" />} colorClass="text-purple-600 bg-purple-100 dark:bg-purple-900/30" onClick={() => updateFilters({ followupOnly: true })} />
+        <StatCard label="کل" value={summaryLoading || summaryError ? '—' : toPersianDigits(String(summary.total_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-blue-600 bg-blue-100 dark:bg-blue-900/30" onClick={() => applySummaryFilter({ statusFilter: 'all' })} />
+        <StatCard label="در جریان" value={summaryLoading || summaryError ? '—' : toPersianDigits(String(summary.active_count ?? 0))} icon={<TrendingUp className="w-5 h-5" />} colorClass="text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30" onClick={() => applySummaryFilter({ statusFilter: 'active' })} />
+        <StatCard label="تکمیل" value={summaryLoading || summaryError ? '—' : toPersianDigits(String(summary.completed_count ?? 0))} icon={<CheckCircle2 className="w-5 h-5" />} colorClass="text-green-600 bg-green-100 dark:bg-green-900/30" onClick={() => applySummaryFilter({ statusFilter: 'completed' })} />
+        <StatCard label="متوقف" value={summaryLoading || summaryError ? '—' : toPersianDigits(String(summary.stopped_count ?? 0))} icon={<StopCircle className="w-5 h-5" />} colorClass="text-gray-600 bg-gray-100 dark:bg-gray-700" onClick={() => applySummaryFilter({ statusFilter: 'stopped' })} />
+        <StatCard label="عقب‌افتاده" value={summaryLoading || summaryError ? '—' : toPersianDigits(String(summary.overdue_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-red-600 bg-red-100 dark:bg-red-900/30" onClick={() => { applySummaryFilter({ overdueOnly: true, statusFilter: 'all' }); }} />
+        <StatCard label="مانع باز" value={summaryLoading || summaryError ? '—' : toPersianDigits(String(summary.open_obstacle_count ?? 0))} icon={<AlertTriangle className="w-5 h-5" />} colorClass="text-orange-600 bg-orange-100 dark:bg-orange-900/30" onClick={() => applySummaryFilter({ hasObstacle: true })} />
+        <StatCard label="پیگیری" value={summaryLoading || summaryError ? '—' : toPersianDigits(String(summary.requires_followup_count ?? 0))} icon={<Flag className="w-5 h-5" />} colorClass="text-purple-600 bg-purple-100 dark:bg-purple-900/30" onClick={() => applySummaryFilter({ followupOnly: true })} />
       </div>
 
       <DecisionFilters
