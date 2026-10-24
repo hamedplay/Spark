@@ -1,3 +1,4 @@
+import { readSmsFunctionError } from '../../features/meetings/services/readSmsFunctionError';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
@@ -65,12 +66,12 @@ export async function sendSmsToExternals(
         eventType,
       },
     });
-    if (functionError) throw new Error(functionError.message ?? String(functionError));
+    if (functionError) throw new Error(await readSmsFunctionError(functionError));
     return {
       ok: result?.ok === true,
       sent: result?.sent ?? 0,
       skipped: (result?.skipped ?? 0) + skippedNoPhone,
-      error: result?.ok ? undefined : (result?.error ?? 'خطای ناشناخته'),
+      error: result?.ok ? undefined : (result?.error ?? result?.errorCode ?? 'خطای ناشناخته'),
     };
   } catch (error: unknown) {
     const messageText = error instanceof Error ? error.message : String(error);
@@ -93,7 +94,8 @@ export function showSmsSummary(
   if (skipped > 0) parts.push(`${skipped} نفر پیامک ندارند یا قانونی برایشان تعریف نشده`);
   if (failed > 0) parts.push(`ارسال برای ${failed} نفر ناموفق بود`);
 
-  if (failed > 0) toast.error('جلسه ثبت شد. ' + parts.join(' — '), { duration: 6000 });
+  if (failed > 0) toast.error('جلسه ثبت شد. ' + parts.join(' — ')
+    + (externalResult?.error ? ` — ${externalResult.error}` : ''), { duration: 6000 });
   else toast.success('جلسه ثبت شد. ' + parts.join(' — '), { duration: 5000 });
 }
 

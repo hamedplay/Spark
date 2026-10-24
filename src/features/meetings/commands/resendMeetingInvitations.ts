@@ -26,12 +26,16 @@ export async function resendMeetingInvitations(
     throw error;
   }
 
-  const { data: pendingRows } =
+  const { data: pendingRows, error: pendingError } =
     await supabase
       .from('meeting_inbox')
       .select('user_id')
       .eq('meeting_id', input.meetingId)
       .eq('status', 'pending');
+
+  if (pendingError) {
+    throw new Error('دعوت‌ها بازنشانی شدند، اما دریافت گیرندگان اعلان ناموفق بود: ' + pendingError.message);
+  }
 
   const notifyIds = (pendingRows ?? []).map(
     (row: InboxRow) => row.user_id

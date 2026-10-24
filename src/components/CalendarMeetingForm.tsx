@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
+import { MeetingCreationRecoveryError, saveNewMeetingDetails } from '../features/meetings/services/saveNewMeetingDetails';
 import { insertNotification } from '../lib/notifications';
 import type { SmsDispatchResult } from '../lib/notifications';
 import { getMeetingTemplateKey } from '../config/templateCatalog';
@@ -29,6 +30,7 @@ export type { CommitSnapshot } from './CalendarMeetingForm/types';
 
 export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendars = [] }: CalendarMeetingFormProps) {
   const [loading, setLoading] = useState(false);
+  const creationRecoveryErrorRef = useRef<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
   const [subject, setSubject] = useState('');
@@ -276,6 +278,10 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (creationRecoveryErrorRef.current) {
+      toast.error(creationRecoveryErrorRef.current, { duration: 10000 });
+      return;
+    }
     if (!userId) { toast.error('لطفا وارد شوید'); return; }
     if (!subject.trim()) { toast.error('موضوع جلسه را وارد کنید'); return; }
     if (!scheduleDate) { toast.error('تاریخ جلسه مشخص نیست'); return; }
@@ -569,12 +575,18 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
       const { data: meeting, error: meetingError } = await supabase.from('meetings').insert([record]).select().single();
       if (meetingError) throw meetingError;
-      if (meeting) {
-        if (selectedParticipants.length > 0) {
-          await supabase.from('participants').insert(participantDisplayItems.map(p => ({ meeting_id: meeting.id, name: p.name })));
-        }
-        if (agendaEnabled && agendaItems.length > 0) {
-          await supabase.from('meeting_agenda_items').insert(
+      if (!meeting) throw new Error('جلسه ثبت نشد؛ لطفاً دوباره تلاش کنید');
+      await saveNewMeetingDetails({
+        saveParticipants: async () => {
+          if (participantDisplayItems.length === 0) return;
+          const { error } = await supabase.from('participants').insert(
+            participantDisplayItems.map(p => ({ meeting_id: meeting.id, name: p.name })),
+          );
+          if (error) throw new Error('خطا در ثبت شرکت‌کنندگان: ' + error.message);
+        },
+        saveAgenda: async () => {
+          if (!agendaEnabled || agendaItems.length === 0) return;
+          const { error } = await supabase.from('meeting_agenda_items').insert(
             agendaItems.map((item, idx) => ({
               meeting_id: meeting.id,
               title: item.title,
@@ -584,14 +596,25 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
               sort_order: idx,
             })),
           );
-        }
-        const inboxUserIds = selectedParticipants.map(p => p.id).filter(id => id !== userId);
-        if (inboxUserIds.length > 0) {
-          await supabase.from('meeting_inbox').insert(
-            inboxUserIds.map(uid => ({ meeting_id: meeting.id, user_id: uid, status: 'pending' })),
-          );
-        }
-      }
+          if (error) throw new Error('خطا در ثبت دستور جلسه: ' + error.message);
+        },
+        rollback: async () => {
+          // Only the meeting just created by this submission is eligible for cleanup.
+          // Inbox has an ON DELETE SET NULL FK, so remove its invitations first.
+          const { error: inboxError } = await supabase.from('meeting_inbox')
+            .delete().eq('meeting_id', meeting.id);
+          if (inboxError) throw inboxError;
+          const { data: deleted, error } = await supabase.from('meetings')
+            .delete().eq('id', meeting.id).select('id');
+          if (error) throw error;
+          if (!deleted?.some(row => row.id === meeting.id)) {
+            throw new Error('حذف جلسه ناقص تأیید نشد');
+          }
+        },
+        meetingId: meeting.id,
+      });
+      // meetings_sync_inbox_from_participants creates invitations in the same
+      // database transaction as the meeting. Do not insert them again here.
 
       let recurringMeetingDates = [meetingDateStr];
       if (repeatEnabled && meeting && repeatEndDate) {
@@ -721,6 +744,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       }
       onSuccess(subject, false);
     } catch (err: any) {
+      if (err instanceof MeetingCreationRecoveryError) {
+        creationRecoveryErrorRef.current = err.message;
+      }
       toast.error(err?.message || 'خطا در ثبت جلسه');
     } finally {
       setLoading(false);
