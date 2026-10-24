@@ -1,3 +1,4 @@
+import { buildCalendarGoogleEventUrl, openGoogleCalendarWindow } from './googleCalendarExport';
 import { buildRevertedMeetingTiming } from '../../features/meetings/builders/buildRevertedMeetingTiming';
 // @ts-nocheck
 import React, { useEffect, useCallback, useRef } from 'react';
@@ -535,49 +536,59 @@ export function useCalendarDataActions(scope: Record<string, any>) {
   };
 
   const handleSendToGoogleCalendar = async (m: MeetingData) => {
-    const title = encodeURIComponent(m.subject);
-    const loc = encodeURIComponent(m.location || '');
-    const dateStr = parseRequestDateToDateStr(m.request_date);
-    if (!dateStr || !m.start_time || !m.end_time) { toast.error('زمان جلسه تنظیم نشده'); return; }
-    const start = dateStr.replace(/-/g, '') + 'T' + m.start_time.replace(':', '') + '00';
-    const end = dateStr.replace(/-/g, '') + 'T' + m.end_time.replace(':', '') + '00';
+    try {
+      // Validate timing before reserving a new tab.
+      const calendarUrl = new URL(buildCalendarGoogleEventUrl({
+        title: m.subject, location: m.location || '', details: '',
+        date: parseRequestDateToDateStr(m.request_date), startTime: m.start_time, endTime: m.end_time,
+      }));
+      await openGoogleCalendarWindow(async () => {
+        const participantNames = (m.participant_user_ids || [])
+          .map(uid => resolveName(uid))
+          .join('، ');
+        const notifyNames = ((m.notify_users || []) as string[])
+          .map(uid => resolveName(uid))
+          .join('، ');
+        const externalNames = (m.external_participants || []).join('، ');
 
-    const participantNames = (m.participant_user_ids || [])
-      .map(uid => resolveName(uid))
-      .join('، ');
-    const notifyNames = ((m.notify_users || []) as string[])
-      .map(uid => resolveName(uid))
-      .join('، ');
-    const externalNames = (m.external_participants || []).join('، ');
+        const { data: agendaRows, error: agendaError } = await supabase
+          .from('meeting_agenda_items')
+          .select('title, presenter, duration_minutes, sort_order')
+          .eq('meeting_id', m.id)
+          .order('sort_order', { ascending: true });
+        if (agendaError) throw new Error('AGENDA_LOAD_FAILED');
+        const agendaText = (agendaRows && agendaRows.length > 0)
+          ? 'دستور جلسه:\n' + agendaRows.map((item: any, idx: number) => {
+              const parts = [`${idx + 1}. ${item.title}`];
+              if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
+              if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
+              return parts.join(' | ');
+            }).join('\n')
+          : '';
 
-    const { data: agendaRows } = await supabase
-      .from('meeting_agenda_items')
-      .select('title, presenter, duration_minutes, sort_order')
-      .eq('meeting_id', m.id)
-      .order('sort_order', { ascending: true });
-    const agendaText = (agendaRows && agendaRows.length > 0)
-      ? 'دستور جلسه:\n' + agendaRows.map((item: any, idx: number) => {
-          const parts = [`${idx + 1}. ${item.title}`];
-          if (item.presenter) parts.push(`ارائه‌دهنده: ${item.presenter}`);
-          if (item.duration_minutes) parts.push(`${item.duration_minutes} دقیقه`);
-          return parts.join(' | ');
-        }).join('\n')
-      : '';
+        const detailLines = [
+          m.representative ? `نماینده: ${m.representative}` : '',
+          m.phone ? `تلفن تماس: ${m.phone}` : '',
+          participantNames ? `شرکت‌کنندگان: ${participantNames}` : '',
+          notifyNames ? `مطلعین: ${notifyNames}` : '',
+          externalNames ? `خارج سازمان: ${externalNames}` : '',
+          m.is_online && m.conference_room_id ? `جلسه آنلاین: ${window.location.origin}/?conference=${m.conference_room_id}` : '',
+          m.notes ? `یادداشت: ${m.notes}` : '',
+          m.priority ? `اولویت: ${{ high: 'بالا', medium: 'متوسط', low: 'پایین' }[m.priority] || m.priority}` : '',
+          agendaText,
+        ].filter(Boolean).join('\n');
 
-    const detailLines = [
-      m.representative ? `نماینده: ${m.representative}` : '',
-      m.phone ? `تلفن تماس: ${m.phone}` : '',
-      participantNames ? `شرکت‌کنندگان: ${participantNames}` : '',
-      notifyNames ? `مطلعین: ${notifyNames}` : '',
-      externalNames ? `خارج سازمان: ${externalNames}` : '',
-      m.is_online && m.conference_room_id ? `جلسه آنلاین: ${window.location.origin}/?conference=${m.conference_room_id}` : '',
-      m.notes ? `یادداشت: ${m.notes}` : '',
-      m.priority ? `اولویت: ${{ high: 'بالا', medium: 'متوسط', low: 'پایین' }[m.priority] || m.priority}` : '',
-      agendaText,
-    ].filter(Boolean).join('\n');
-
-    const details = encodeURIComponent(detailLines);
-    window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}&location=${loc}`, '_blank');
+        calendarUrl.searchParams.set('details', detailLines);
+        return calendarUrl.toString();
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      toast.error(code === 'GOOGLE_CALENDAR_POPUP_BLOCKED'
+        ? 'مرورگر باز شدن گوگل کلندر را مسدود کرد؛ اجازه باز شدن پنجره جدید را فعال کنید.'
+        : code === 'INVALID_MEETING_TIME'
+          ? 'تاریخ یا ساعت جلسه معتبر نیست؛ زمان جلسه را بررسی کنید.'
+          : 'دریافت اطلاعات جلسه برای گوگل کلندر ناموفق بود؛ دوباره تلاش کنید.');
+    }
   };
 
   const openEditForm = (m: MeetingData & { _editAllIds?: string[] }) => {
