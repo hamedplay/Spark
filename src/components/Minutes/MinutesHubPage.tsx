@@ -1,3 +1,4 @@
+import { FOLLOWUP_SCOPE_PARAM } from './followupHubScope';
 import { useCallback, useEffect, useState } from 'react';
 import '../../management-dashboard-theme.css';
 import type { ElementType } from 'react';
@@ -203,10 +204,12 @@ const EMPTY_COUNTS: HubCounts = {
 
 const MINUTES_SCOPE_PARAM = 'minutes_scope';
 
-function setMinutesListScope(scope: 'open' | null) {
+function setMinutesListScope(scope: 'open' | null, followupRequired = false) {
   const url = new URL(window.location.href);
   if (scope) url.searchParams.set(MINUTES_SCOPE_PARAM, scope);
   else url.searchParams.delete(MINUTES_SCOPE_PARAM);
+  if (followupRequired) url.searchParams.set(FOLLOWUP_SCOPE_PARAM, 'required');
+  else url.searchParams.delete(FOLLOWUP_SCOPE_PARAM);
   window.history.replaceState(null, '', url.toString());
 }
 
@@ -241,23 +244,6 @@ function getSingleStat(counts: HubCounts, key: CardStatKey): CardStats {
     case 'reports':
       return { total: counts.reports_total, open: counts.reports_open, closed: counts.reports_closed };
   }
-}
-
-function getCardStats(counts: HubCounts, card: HubCard): CardStats {
-  if (card.statKeys) {
-    return card.statKeys.reduce<CardStats>(
-      (acc, key) => {
-        const stat = getSingleStat(counts, key);
-        return {
-          total: acc.total + stat.total,
-          open: acc.open + stat.open,
-          closed: acc.closed + stat.closed,
-        };
-      },
-      { total: 0, open: 0, closed: 0 },
-    );
-  }
-  return card.statKey ? getSingleStat(counts, card.statKey) : { total: 0, open: 0, closed: 0 };
 }
 
 function getPrimaryBadgeLabel(card: HubCard): string {
@@ -442,7 +428,7 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
                   key={item.id}
                   type="button"
                   onClick={() => {
-                    setMinutesListScope(item.id === 'minutes' ? 'open' : null);
+                    setMinutesListScope(item.id === 'minutes' ? 'open' : null, item.id === 'minutes-followup');
                     onNavigate(item.id);
                   }}
                   className={`relative min-w-0 overflow-hidden rounded-2xl border p-3.5 text-right shadow-[0_12px_40px_rgba(0,0,0,0.12)] transition hover:-translate-y-0.5 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-violet-500/30 ${styles.card} ${hasAttention ? 'ring-1 ring-rose-400/50' : ''}`}
@@ -478,7 +464,9 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
           {cards.map(card => {
             const styles = toneClasses[card.tone];
             const Icon = card.icon;
-            const stats = getCardStats(counts, card);
+            const statGroups = card.statKeys
+              ? card.statKeys.map(key => ({ label: key === 'dashboard_minutes' ? 'صورت‌جلسات' : 'مصوبات', stats: getSingleStat(counts, key) }))
+              : [{ label: '', stats: card.statKey ? getSingleStat(counts, card.statKey) : { total: 0, open: 0, closed: 0 } }];
             const primaryBadge = card.badgeKey ? counts[card.badgeKey] : 0;
             const secondaryBadge = card.secondaryBadgeKey ? counts[card.secondaryBadgeKey] : 0;
             const hasNew = !loading && primaryBadge > 0;
@@ -525,15 +513,20 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
                         </span>
                       ) : (
                         <>
-                          <span className="rounded-lg border border-slate-700/80 bg-slate-950/30 px-2.5 py-1 text-[10px] text-slate-400">
-                            کل <strong className="font-bold text-slate-200">{nf.format(stats.total)}</strong>
-                          </span>
-                          <span className={`rounded-lg border border-slate-600/60 bg-slate-950/20 px-2.5 py-1 text-[10px] ${styles.accent}`}>
-                            باز <strong className="font-bold">{nf.format(stats.open)}</strong>
-                          </span>
-                          <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-2.5 py-1 text-[10px] text-emerald-300">
-                            بسته <strong className="font-bold">{nf.format(stats.closed)}</strong>
-                          </span>
+                          {statGroups.map(({ label, stats }) => (
+                            <div key={label} className="flex w-full flex-wrap items-center gap-2">
+                              {label && <span className="text-[10px] font-semibold text-slate-400">{label}</span>}
+                              <span className="rounded-lg border border-slate-700/80 bg-slate-950/30 px-2.5 py-1 text-[10px] text-slate-400">
+                                کل <strong className="font-bold text-slate-200">{nf.format(stats.total)}</strong>
+                              </span>
+                              <span className={`rounded-lg border border-slate-600/60 bg-slate-950/20 px-2.5 py-1 text-[10px] ${styles.accent}`}>
+                                باز <strong className="font-bold">{nf.format(stats.open)}</strong>
+                              </span>
+                              <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-2.5 py-1 text-[10px] text-emerald-300">
+                                بسته <strong className="font-bold">{nf.format(stats.closed)}</strong>
+                              </span>
+                            </div>
+                          ))}
                           {secondaryBadge > 0 && (
                             <span className="rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-200">
                               {nf.format(secondaryBadge)} فعال

@@ -1,3 +1,4 @@
+import { getInitialFollowupFilter } from './followupHubScope';
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Eye, TrendingUp, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Flag, ChevronRight, ChevronLeft, MessageSquare, SquareArrowUpRight, CircleStop as StopCircle, RotateCcw, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -64,7 +65,7 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
   const [ownerOptions, setOwnerOptions]     = useState<SearchableOption[]>([]);
 
   // Filters
-  const [filters, setFilters]               = useState<DecisionFilterState>(EMPTY_FILTERS);
+  const [filters, setFilters]               = useState<DecisionFilterState>(() => ({ ...EMPTY_FILTERS, ...getInitialFollowupFilter(typeof window === 'undefined' ? '' : window.location.search) }));
 
   // Modals
   const [actionDecision, setActionDecision] = useState<FollowupRow | null>(null);
