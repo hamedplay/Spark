@@ -82,7 +82,7 @@ export function InformeeAddParticipantModal({
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 px-4" dir="rtl" onClick={onClose}>
+    <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 px-4" dir="rtl" onClick={event => { event.stopPropagation(); onClose(); }}>
       <div
         className="flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900"
         onClick={event => event.stopPropagation()}
@@ -92,7 +92,7 @@ export function InformeeAddParticipantModal({
             <h3 className="text-base font-bold text-gray-900 dark:text-white">افزودن شرکت‌کننده</h3>
             <p className="mt-0.5 text-xs text-gray-400">فقط افراد جدید به همین جلسه اضافه می‌شوند.</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 transition hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="بستن">
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 transition hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="بستن">
             <X className="h-5 w-5 text-gray-500" />
           </button>
         </div>
@@ -134,6 +134,7 @@ export function InformeeAddParticipantModal({
                       {(position || unit) && <p className="truncate text-xs text-gray-400">{[position, unit].filter(Boolean).join(' · ')}</p>}
                     </div>
                     <button
+                      type="button"
                       onClick={() => void handleAdd(user.user_id, displayName)}
                       disabled={addingUserId !== null}
                       className="inline-flex flex-shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"

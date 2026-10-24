@@ -44,6 +44,7 @@ export function MeetingDetailModal({
   const isManager = m.meeting_manager === currentUserId;
   const canEdit = isOwner || isManager;
   const isInformee = Boolean(currentUserId && ((m.notify_users || []) as string[]).includes(currentUserId));
+  const canAddParticipants = isOwner || isInformee;
   const cal = [...calendars, ...subscribedCalendars].find(c => c.id === m.calendar_id);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
@@ -858,7 +859,7 @@ const getJalaliDate = (): string => {
           <button onClick={() => onGoogleCalendar(m)} className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-sm font-medium hover:bg-orange-100 transition-colors">
             <ExternalLink className="w-4 h-4" />گوگل کلندر
           </button>
-          {isInformee && currentUserId && (
+          {canAddParticipants && currentUserId && (
             <button
               onClick={() => setShowInformeeParticipantModal(true)}
               className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
@@ -938,7 +939,7 @@ const getJalaliDate = (): string => {
         />
       )}
 
-      {showInformeeParticipantModal && isInformee && currentUserId && (
+      {showInformeeParticipantModal && canAddParticipants && currentUserId && (
         <InformeeAddParticipantModal
           meetingId={m.id}
           currentUserId={currentUserId}
