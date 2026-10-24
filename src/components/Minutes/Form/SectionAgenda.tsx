@@ -1,4 +1,6 @@
-import { Plus, Trash2, GripVertical } from 'lucide-react';
+import { ReorderableAgendaList } from '../../Agenda/ReorderableAgendaList';
+import { reorderMinutesAgenda } from '../../Agenda/reorderAgenda';
+import { Plus, Trash2 } from 'lucide-react';
 import type { DraftAgendaItem, DraftInternalParticipant, DraftExternalParticipant } from './types';
 import { defaultAgendaItem } from './defaults';
 import { InputField, TextareaField, LoadingRow, EmptyState } from './fields';
@@ -57,10 +59,11 @@ export function SectionAgenda({
       ) : agendaItems.length === 0 ? (
         <EmptyState message="هیچ دستور جلساتی یافت نشد." />
       ) : (
-      agendaItems.map((item, idx) => (
-        <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-2xl">
+      <ReorderableAgendaList items={agendaItems} getKey={item => item.id} onMove={(from, to) => setAgendaItems(prev => reorderMinutesAgenda(prev, from, to))}>
+      {(item, idx, handle) => (
+        <div className="border border-gray-200 dark:border-gray-600 rounded-2xl">
           <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 rounded-t-2xl">
-            <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
+            {handle}
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">دستور {idx + 1}</span>
             {item.meetingAgendaItemId && (
               <span className="text-xs text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">از دستور جلسات جلسه</span>
@@ -92,7 +95,8 @@ export function SectionAgenda({
             </div>
           </div>
         </div>
-      ))
+      )}
+      </ReorderableAgendaList>
       )}
     </div>
   );

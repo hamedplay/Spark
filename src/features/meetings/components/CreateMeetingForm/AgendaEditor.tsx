@@ -1,3 +1,5 @@
+import { ReorderableAgendaList } from '../../../../components/Agenda/ReorderableAgendaList';
+import { reorderMeetingAgenda } from '../../../../components/Agenda/reorderAgenda';
 import { useState } from 'react';
 import { ClipboardList, Pencil, Trash2, Check, Plus, UserCheck, Clock } from 'lucide-react';
 import type { AgendaItem } from '../../../../types';
@@ -46,9 +48,10 @@ export function AgendaEditor({
       {enabled && (
         <div className="space-y-3 mt-3">
           {items.length > 0 && (
-            <div className="space-y-2">
-              {items.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-2 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 text-sm">
+            <ReorderableAgendaList items={items} disabled={showForm} onMove={(from, to) => onItemsChange(reorderMeetingAgenda(items, from, to))}>
+              {(item, idx, handle) => (
+                <div className="flex items-center gap-2 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 text-sm">
+                  {handle}
                   <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-center font-bold flex-shrink-0">
                     {idx + 1}
                   </span>
@@ -78,8 +81,8 @@ export function AgendaEditor({
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              ))}
-            </div>
+              )}
+            </ReorderableAgendaList>
           )}
 
           {showForm ? (

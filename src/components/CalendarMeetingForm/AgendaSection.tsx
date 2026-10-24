@@ -1,3 +1,5 @@
+import { ReorderableAgendaList } from '../Agenda/ReorderableAgendaList';
+import { reorderMeetingAgenda } from '../Agenda/reorderAgenda';
 import { ClipboardList, UserCheck, Clock, Pencil, Trash2, Check, Plus } from 'lucide-react';
 import type { AgendaItem } from '../../types';
 
@@ -36,8 +38,10 @@ export function AgendaSection(props: {
       </div>
       {agendaEnabled && (
         <div className="space-y-2 mt-3">
-          {agendaItems.map((item, idx) => (
-            <div key={idx} className="flex items-start gap-2 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+          <ReorderableAgendaList items={agendaItems} getKey={item => item.id} disabled={showAgendaForm} onMove={(from, to) => setAgendaItems(prev => reorderMeetingAgenda(prev, from, to))}>
+          {(item, idx, handle) => (
+            <div className="flex items-start gap-2 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+              {handle}
               <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{idx + 1}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
@@ -65,7 +69,8 @@ export function AgendaSection(props: {
                 </button>
               </div>
             </div>
-          ))}
+          )}
+          </ReorderableAgendaList>
           {showAgendaForm ? (
             <div className="p-3 bg-white dark:bg-gray-700 rounded-lg border border-blue-200 dark:border-blue-700 space-y-2">
               <input type="text" value={agendaForm.title} onChange={e => setAgendaForm(f => ({ ...f, title: e.target.value }))}
