@@ -19,7 +19,7 @@ export const PERMISSION_REGISTRY: PermissionGroup[] = [
     label: 'ماژول‌های اصلی',
     color: 'text-blue-500',
     items: [
-      { key: 'management_dashboard', label: 'داشبورد مدیریتی', description: 'مشاهده نمای تجمیعی مدیریتی تسک‌ها، جلسات، مصوبات و عملکرد واحدها بدون اعطای دسترسی Admin', category: 'ماژول‌های اصلی', isSensitive: true },
+      { key: 'management_dashboard', label: 'داشبورد مدیریتی', description: 'مشاهده اطلاعات خود و افراد زیر سمت در چارت سازمانی؛ برای همه کاربران با ورود کامل، بدون اعطای دسترسی Admin', category: 'ماژول‌های اصلی', isSensitive: true },
       { key: 'meetings', label: 'جلسات و برنامه‌ریزی', description: 'دسترسی به بخش جلسات', category: 'ماژول‌های اصلی', isSensitive: false },
       { key: 'calendar', label: 'تقویم', description: 'دسترسی به تقویم سازمانی', category: 'ماژول‌های اصلی', isSensitive: false },
       { key: 'chat', label: 'چت سازمانی', description: 'دسترسی به چت', category: 'ماژول‌های اصلی', isSensitive: false },
@@ -36,9 +36,9 @@ export const PERMISSION_REGISTRY: PermissionGroup[] = [
     label: 'مدیریت زیرمجموعه سازمانی',
     color: 'text-violet-600',
     items: [
-      { key: 'management_decisions.view', label: 'مشاهده مصوبات زیرمجموعه', description: 'مشاهده فهرست، جزئیات و تاریخچه کامل مصوبات فقط در محدوده واحد سازمانی و زیرواحدهای مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+      { key: 'management_decisions.view', label: 'مشاهده مصوبات زیرمجموعه', description: 'مشاهده فهرست، جزئیات و تاریخچه کامل مصوبات فقط برای خود کاربر و افراد زیر سمت او در چارت سازمانی', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
       { key: 'management_decisions.manage', label: 'مدیریت مصوبات زیرمجموعه', description: 'ثبت بروزرسانی مدیریتی وضعیت، پیشرفت و گزارش روی مصوبات داخل محدوده سازمانی مجاز؛ متن رسمی مصوبه تغییر نمی‌کند', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
-      { key: 'management_tasks.view', label: 'مشاهده اقدامات زیرمجموعه', description: 'مشاهده فهرست، جزئیات، گردش کار، چک‌لیست و وابستگی اقدامات کاربران داخل محدوده سازمانی مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
+      { key: 'management_tasks.view', label: 'مشاهده اقدامات زیرمجموعه', description: 'مشاهده فهرست، جزئیات، گردش کار، چک‌لیست و وابستگی اقدامات خود کاربر و افراد زیر سمت او در چارت سازمانی', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
       { key: 'management_tasks.manage', label: 'مدیریت اقدامات زیرمجموعه', description: 'مدیریت وضعیت، پیشرفت، اولویت، موعد و مسئول اقدام فقط در محدوده سازمانی مجاز', category: 'مدیریت زیرمجموعه سازمانی', isSensitive: true },
     ],
   },

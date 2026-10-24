@@ -18,34 +18,11 @@ interface SavePermissionsResult {
 }
 
 const MANAGEMENT_DASHBOARD_PERMISSION_KEY = 'management_dashboard';
-const MANAGEMENT_SCOPE_PERMISSION_KEYS = [
-  'management_decisions.view',
-  'management_decisions.manage',
-  'management_tasks.view',
-  'management_tasks.manage',
-] as const;
-
 export function AccessPanel({ group, onBack }: { group: UserGroup; onBack: () => void }) {
   const [perms, setPerms] = useState<Record<string, boolean>>(group.permissions || {});
   const [saving, setSaving] = useState(false);
 
   const toggle = (key: string) => setPerms(p => ({ ...p, [key]: !p[key] }));
-
-  const toggleManagementDashboard = () => {
-    setPerms(current => {
-      const enabling = !current[MANAGEMENT_DASHBOARD_PERMISSION_KEY];
-      if (!enabling) {
-        return { ...current, [MANAGEMENT_DASHBOARD_PERMISSION_KEY]: false };
-      }
-
-      const next: Record<string, boolean> = {
-        ...current,
-        [MANAGEMENT_DASHBOARD_PERMISSION_KEY]: true,
-      };
-      MANAGEMENT_SCOPE_PERMISSION_KEYS.forEach(key => { next[key] = true; });
-      return next;
-    });
-  };
 
   const toggleModule = (moduleKey: string) => {
     const newVal = !perms[moduleKey];
@@ -77,7 +54,7 @@ export function AccessPanel({ group, onBack }: { group: UserGroup; onBack: () =>
   const visiblePermissionGroups = PERMISSION_REGISTRY
     .map(permissionGroup => ({
       ...permissionGroup,
-      items: permissionGroup.items.filter(item => item.key !== MANAGEMENT_DASHBOARD_PERMISSION_KEY),
+      items: permissionGroup.items.filter(item => ![MANAGEMENT_DASHBOARD_PERMISSION_KEY, 'management_decisions.view', 'management_tasks.view'].includes(item.key)),
     }))
     .filter(permissionGroup => permissionGroup.items.length > 0);
 
@@ -136,7 +113,7 @@ export function AccessPanel({ group, onBack }: { group: UserGroup; onBack: () =>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-200/70 px-4 py-3 dark:border-violet-800/60 sm:px-5">
             <div className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-              <span className="text-sm font-semibold text-violet-700 dark:text-violet-300">دسترسی ویژه مدیریت</span>
+              <span className="text-sm font-semibold text-violet-700 dark:text-violet-300">مشاهده زیرمجموعه سازمانی</span>
             </div>
             <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-violet-600 shadow-sm ring-1 ring-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-700">
               مستقل از Admin
@@ -152,18 +129,12 @@ export function AccessPanel({ group, onBack }: { group: UserGroup; onBack: () =>
                 {managementDashboardPermission.description}
               </p>
               <p className="mt-2 text-[11px] font-medium text-violet-600 dark:text-violet-400">
-                فعال‌کردن این مجوز، کاربر را Admin نمی‌کند؛ فقط اعضای این گروه داشبورد مدیریتی را مشاهده می‌کنند.
+                همه کاربران با ورود کامل، اطلاعات خود و افراد زیر سمتشان را می‌بینند. مجوز تغییر مصوبات و اقدامات همچنان جداگانه تعیین می‌شود.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={toggleManagementDashboard}
-              aria-pressed={Boolean(perms[MANAGEMENT_DASHBOARD_PERMISSION_KEY])}
-              aria-label={`${perms[MANAGEMENT_DASHBOARD_PERMISSION_KEY] ? 'غیرفعال کردن' : 'فعال کردن'} داشبورد مدیریتی برای این گروه`}
-              className={`relative h-6 w-12 flex-shrink-0 rounded-full transition-colors ${perms[MANAGEMENT_DASHBOARD_PERMISSION_KEY] ? 'bg-violet-600' : 'bg-gray-200 dark:bg-gray-600'}`}
-            >
-              <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${perms[MANAGEMENT_DASHBOARD_PERMISSION_KEY] ? 'translate-x-7' : 'translate-x-1'}`} />
-            </button>
+            <span className="shrink-0 text-xs font-medium text-violet-600 dark:text-violet-300">
+              فعال برای همه کاربران
+            </span>
           </div>
         </div>
       )}
