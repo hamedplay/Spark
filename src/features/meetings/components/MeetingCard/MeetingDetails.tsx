@@ -1,3 +1,4 @@
+import { formatMeetingRequestDate } from '../../formatMeetingRequestDate';
 import { Calendar as CalendarIcon, Clock, MapPin, User, Phone, ClipboardList, UserCheck, ChevronDown, StickyNote } from 'lucide-react';
 import { Meeting } from '../../../../types';
 import type { AgendaItem } from '../../../../types';
@@ -12,7 +13,7 @@ export function MeetingDetails({ meeting, agendaItems }: MeetingDetailsProps) {
     {
       key: 'date',
       Icon: CalendarIcon,
-      value: new Date(meeting.requestDate).toLocaleDateString('fa-IR'),
+      value: formatMeetingRequestDate(meeting.requestDate, meeting.request_jalaali_date),
     },
     {
       key: 'time',

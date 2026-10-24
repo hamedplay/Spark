@@ -1,3 +1,4 @@
+import { formatMeetingRequestDate } from '../../formatMeetingRequestDate';
 import { forwardRef } from 'react';
 import { Meeting } from '../../../../types';
 import type { AgendaItem } from '../../../../types';
@@ -16,7 +17,7 @@ export const MeetingShareCard = forwardRef<HTMLDivElement, MeetingShareCardProps
         : { label: 'درخواست‌شده', color: '#b45309', bg: '#fffbeb', border: '#fde68a' };
 
     const rows = [
-      { label: 'تاریخ', value: new Date(meeting.requestDate).toLocaleDateString('fa-IR') },
+      { label: 'تاریخ', value: formatMeetingRequestDate(meeting.requestDate, meeting.request_jalaali_date) },
       { label: 'زمان', value: meeting.start_time && meeting.end_time ? `${meeting.start_time} — ${meeting.end_time}` : meeting.duration },
       { label: 'محل برگزاری', value: meeting.location },
       { label: 'نماینده', value: meeting.representative },

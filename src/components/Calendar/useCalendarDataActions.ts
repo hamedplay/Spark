@@ -1,3 +1,4 @@
+import { buildRevertedMeetingTiming } from '../../features/meetings/builders/buildRevertedMeetingTiming';
 // @ts-nocheck
 import React, { useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -443,7 +444,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         if (mode === 'revert') {
           const { data: fullMtg } = await supabase
             .from('meetings')
-            .select('subject, location, representative, phone, notes, priority, participant_user_ids, notify_users, external_participants, external_informees, meeting_manager')
+            .select('subject, location, representative, phone, notes, priority, participant_user_ids, notify_users, external_participants, external_informees, meeting_manager, request_date, request_jalaali_date')
             .eq('id', id)
             .maybeSingle();
           if (!fullMtg) throw new Error('جلسه یافت نشد');
@@ -469,10 +470,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
               user_id: user.id,
               status: 'open',
               status_type: 'approved',
-              request_date: null,
-              start_time: null,
-              end_time: null,
-              duration: null,
+              ...buildRevertedMeetingTiming(fullMtg),
               repeat_type: null,
               repeat_interval: null,
               repeat_end_date: null,

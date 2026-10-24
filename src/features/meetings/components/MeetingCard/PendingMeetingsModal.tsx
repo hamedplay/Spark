@@ -1,3 +1,4 @@
+import { formatMeetingRequestDate } from '../../formatMeetingRequestDate';
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, User, X, Check, Loader as Loader2, CircleAlert as AlertCircle, RefreshCw, Phone } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
@@ -81,7 +82,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
           try {
             const { data: meetingData, error: meetingError } = await supabase
               .from('meetings')
-              .select('subject, request_date, duration, location, representative, phone, notes, priority')
+              .select('subject, request_date, request_jalaali_date, duration, location, representative, phone, notes, priority')
               .eq('id', item.meeting_id)
               .single();
             
@@ -134,6 +135,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
         .insert([{
           subject: meetingData.subject,
           request_date: meetingData.request_date,
+          request_jalaali_date: meetingData.request_jalaali_date,
           duration: meetingData.duration,
           location: meetingData.location,
           representative: meetingData.representative,
@@ -253,7 +255,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
                       <div className="grid grid-cols-2 gap-3 mb-4">
                         <div className="flex items-center text-gray-600 dark:text-gray-300">
                           <Calendar className="w-4 h-4 ml-2 flex-shrink-0" />
-                          <span className="text-sm">{new Date(pendingMeeting.meeting.request_date).toLocaleString('fa-IR')}</span>
+                          <span className="text-sm">{formatMeetingRequestDate(pendingMeeting.meeting.request_date, pendingMeeting.meeting.request_jalaali_date)}</span>
                         </div>
                         <div className="flex items-center text-gray-600 dark:text-gray-300">
                           <Clock className="w-4 h-4 ml-2 flex-shrink-0" />

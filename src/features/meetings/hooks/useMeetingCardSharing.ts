@@ -1,3 +1,4 @@
+import { formatMeetingRequestDate } from '../formatMeetingRequestDate';
 import { useState, useRef, useEffect, type RefObject } from 'react';
 import type { Meeting, AgendaItem } from '../../../types';
 import { sendMeetingToTelegram } from '../../../lib/telegram';
@@ -93,7 +94,7 @@ export function useMeetingCardSharing({ meeting, agendaItems, setLoading }: UseM
 
   const handleShareText = async () => {
     setShowShareMenu(false);
-    const dateStr = new Date(meeting.requestDate).toLocaleDateString('fa-IR');
+    const dateStr = formatMeetingRequestDate(meeting.requestDate, meeting.request_jalaali_date);
     const timeStr = meeting.start_time && meeting.end_time ? `${meeting.start_time} - ${meeting.end_time}` : meeting.duration;
     const agendaText = agendaItems.length > 0
       ? `📌 دستور جلسه:\n` + agendaItems.map((item, idx) => {

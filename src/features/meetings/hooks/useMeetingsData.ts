@@ -79,6 +79,7 @@ export function useMeetingsData(enabled: boolean, userId: string | null): Meetin
         id: meeting.id,
         subject: meeting.subject,
         requestDate: meeting.request_date,
+        request_jalaali_date: meeting.request_jalaali_date,
         duration: meeting.duration,
         location: meeting.location,
         representative: meeting.representative,
