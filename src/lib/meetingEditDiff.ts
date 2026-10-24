@@ -1,3 +1,4 @@
+import moment from 'moment-jalaali';
 import type { AgendaItem } from '../types';
 
 export type MeetingChangeSet = {
@@ -87,7 +88,14 @@ export function computeMeetingChangeSet(existing: Record<string, any>, next: Rec
   const minorFields: string[] = [];
 
   for (const f of IMPORTANT_FIELDS) {
-    if (normalizeStr(existing[f]) !== normalizeStr(next[f])) {
+    // request_date carries a legacy time component, but meeting time is stored
+    // separately. Compare the calendar day shown by the form, not that component.
+    const normalize = (value: unknown) => {
+      const text = normalizeStr(value);
+      if (f === 'request_date' && text && moment(text).isValid()) return moment(text).format('YYYY-MM-DD');
+      return text;
+    };
+    if (normalize(existing[f]) !== normalize(next[f])) {
       importantFields.push(f);
     }
   }

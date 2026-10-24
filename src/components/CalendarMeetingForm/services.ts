@@ -155,7 +155,7 @@ export async function createRepeatMeetings({
   repeatMonthlyMode,
   repeatMonthlyNth,
   repeatMonthlyNthWeekday,
-}: RepeatOptions): Promise<string[]> {
+}: RepeatOptions): Promise<{ id: string; request_jalaali_date: string }[]> {
   if (!endDate) return [];
   let endMs: number;
   if (endDate.includes('/') && endDate.split('/').length === 3) {
@@ -238,7 +238,7 @@ export async function createRepeatMeetings({
   const { data: inserted, error: repeatError } = await supabase
     .from('meetings')
     .insert(repeatMeetings)
-    .select('id, participant_user_ids');
+    .select('id, participant_user_ids, request_jalaali_date');
   if (repeatError) {
     console.error('Repeat insert error:', repeatError);
     toast.error('خطا در ایجاد جلسات تکراری: ' + repeatError.message);
@@ -279,5 +279,5 @@ export async function createRepeatMeetings({
   }
 
   toast.success(`${repeatMeetings.length} جلسه تکراری ایجاد شد`);
-  return repeatMeetings.map(row => row.request_jalaali_date as string);
+  return (inserted || []).map(row => ({ id: row.id, request_jalaali_date: row.request_jalaali_date }));
 }
