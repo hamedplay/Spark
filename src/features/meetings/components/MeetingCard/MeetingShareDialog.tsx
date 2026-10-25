@@ -6,15 +6,20 @@ interface MeetingShareDialogProps {
   onClose: () => void;
   onShare: () => void | Promise<void>;
   onDownload: () => void;
+  zIndex?: number;
 }
 
-export function MeetingShareDialog({ imageUrl, onClose, onShare, onDownload }: MeetingShareDialogProps) {
+export function MeetingShareDialog({ imageUrl, onClose, onShare, onDownload, zIndex = 100 }: MeetingShareDialogProps) {
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5"
-      onClick={onClose}
+      className="fixed inset-0 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-5"
+      style={{ zIndex }}
+      onClick={event => {
+        event.stopPropagation();
+        onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="meeting-share-title"

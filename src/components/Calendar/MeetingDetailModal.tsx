@@ -932,6 +932,7 @@ const getJalaliDate = (): string => {
 
       {shareImageUrl && (
         <MeetingShareDialog
+          zIndex={400}
           imageUrl={shareImageUrl}
           onClose={() => setShareImageUrl(null)}
           onShare={handleNativeShareImage}
