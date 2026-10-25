@@ -89,12 +89,20 @@ export function MultiDayView(input: CalendarViewProps) {
     const timer = window.setTimeout(() => {
       const el = p.timeScrollRef.current;
       if (!el) return;
+      if (zoom.enabled) {
+        if (zoom.zoom === 1) {
+          const start = Math.max(p.visibleStartHour * 60, p.workStartMin);
+          const offset = p.hideOffHours ? p.visibleStartHour * 60 : 0;
+          el.scrollTop = Math.max(0, (start - offset) / 30 * p.slotHeight);
+        }
+        return;
+      }
       const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
       const targetSlot = Math.max(nowMinutes, 6 * 60) / 30;
       el.scrollTop = Math.max(0, targetSlot * p.slotHeight - el.clientHeight / 2);
     }, 50);
     return () => window.clearTimeout(timer);
-  }, [p.viewMode]);
+  }, [p.viewMode, zoom.enabled, zoom.enabled ? zoom.zoom : null, zoom.enabled ? p.slotHeight : null, zoom.enabled ? p.workStartMin : null, zoom.enabled ? p.visibleStartHour : null, zoom.enabled ? p.hideOffHours : null]);
 
   const setGridRef = (el: HTMLDivElement | null) => {
     (p.weekGridRef as any).current = el;

@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CalendarViewProps } from './CalendarViewTypes';
-import { clampWeekZoom, weekZoomHeight } from './weekZoom';
+import { clampWeekZoom, weekZoomHeight, fitWeekSlotHeight } from './weekZoom';
 
 // Only resize events and completed pinches enter React. Touch moves update two
 // inherited CSS variables at most once per animation frame, without rerendering meetings.
 export function useMobileWeekZoom(p: CalendarViewProps) {
   const [width, setWidth] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [timeHeight, setTimeHeight] = useState(0);
   const live = useRef(p);
   live.current = p;
   const committed = useRef(1);
@@ -22,11 +23,30 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
   useLayoutEffect(() => {
     const el = p.timeScrollRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => setWidth(el.clientWidth));
+    const header = el.querySelector<HTMLElement>('[data-week-header]');
+    const measure = () => {
+      if (el.dataset.weekPinching === 'true') return;
+      setWidth(el.clientWidth);
+      setTimeHeight(Math.max(0, el.clientHeight - (header?.offsetHeight || 0) - 2));
+    };
+    const observer = new ResizeObserver(measure);
     observer.observe(el);
-    setWidth(el.clientWidth);
+    if (header) observer.observe(header);
+    measure();
     return () => observer.disconnect();
   }, [p.timeScrollRef]);
+
+
+  useLayoutEffect(() => {
+    if (!enabled || zoom !== 1 || !timeHeight || p.timeScrollRef.current?.dataset.weekPinching === 'true') return;
+    const start = Math.max(p.visibleStartHour * 60, p.workStartMin);
+    const end = Math.min(p.visibleEndHour * 60, p.workEndMin);
+    const fitted = fitWeekSlotHeight(timeHeight, start, end);
+    if (fitted === null) return;
+    if (Math.abs(p.slotHeight - fitted) > 0.05) {
+      p.adjustSlotHeight(fitted - p.slotHeight);
+    }
+  }, [enabled, zoom, timeHeight, p.slotHeight, p.workStartMin, p.workEndMin, p.visibleStartHour, p.visibleEndHour]);
 
   useEffect(() => {
     const el = p.timeScrollRef.current;
@@ -47,7 +67,7 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
       if (!gesture) return;
       const g = gesture;
       const x = g.value / g.base;
-      const y = weekZoomHeight(g.value / g.base, g.slotHeight) / g.slotHeight;
+      const y = weekZoomHeight(g.value / g.base, g.slotHeight, 4) / g.slotHeight;
       el.style.setProperty('--calendar-week-x', String(x));
       el.style.setProperty('--calendar-week-y', String(y));
       // RTL scrollLeft is zero at the right edge and negative toward later columns.
@@ -101,7 +121,7 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
         if (frame) cancelAnimationFrame(frame);
         paint();
         const value = gesture.value;
-        const height = weekZoomHeight(value / gesture.base, gesture.slotHeight);
+        const height = weekZoomHeight(value / gesture.base, gesture.slotHeight, 4);
         live.current.adjustSlotHeight(height - live.current.slotHeight);
         gesture = null;
         // Persist the final geometry; unchanged gestures only need CSS cleanup.

@@ -304,7 +304,8 @@ export function CalendarPage({
   // Adjustable slot height (px per 30-min slot) — wheel/pinch on hour column
   const [slotHeight, setSlotHeight] = useState(SLOT_HEIGHT);
   const adjustSlotHeight = (delta: number) => {
-    setSlotHeight(prev => Math.min(120, Math.max(20, prev + delta)));
+    const minimum = viewMode === 'week' && window.matchMedia('(max-width: 767px)').matches ? 4 : 20;
+    setSlotHeight(prev => Math.min(120, Math.max(minimum, prev + delta)));
   };
 
   // Pinch-to-zoom state

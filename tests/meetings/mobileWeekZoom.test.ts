@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import test from 'node:test';
-import { clampWeekZoom, weekZoomHeight, weekZoomPixels } from '../../src/components/Calendar/weekZoom';
+import { clampWeekZoom, weekZoomHeight, weekZoomPixels, fitWeekSlotHeight } from '../../src/components/Calendar/weekZoom';
 
 // Exercise the actual native event handlers with a deterministic frame scheduler.
 // No live authentication or meeting writes are needed for the gesture lifecycle.
@@ -102,4 +102,17 @@ test('cancelled pinch cleans the pending frame and suppresses compatibility clic
   assert.equal(f.result().stateCommits, 1);
   assert.equal(f.el.dataset.weekPinching, undefined);
   f.cleanup();
+});
+
+
+test('fits the configured working day into the available time area on short and tall phones', () => {
+  for (const available of [250, 360, 520, 700]) {
+    const slot = fitWeekSlotHeight(available, 7 * 60, 19 * 60 + 30)!;
+    assert.equal(slot * 25, available);
+    assert.ok(slot < 44);
+    assert.equal(weekZoomHeight(1, slot, 4), slot);
+    assert.ok(weekZoomHeight(4, slot, 4) > slot);
+  }
+  assert.equal(fitWeekSlotHeight(400, 600, 600), null);
+  assert.equal(fitWeekSlotHeight(0, 420, 1170), null);
 });
