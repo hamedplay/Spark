@@ -48,6 +48,7 @@ export function YearView(p: CalendarViewProps) {
                   const hasMeeting = p.getMeetings(p.currentJy, jm, day).length > 0;
                   return (
                     <button
+                      data-calendar-date-button
                       key={`${jm}-${day}`} data-calendar-today={today || undefined}
                       type="button"
                       onClick={() => {

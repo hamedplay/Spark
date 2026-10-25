@@ -57,6 +57,7 @@ export function MonthView(p: CalendarViewProps) {
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                       setMonthDayPopup({ jy: currentJy, jm: currentJm, jd: day, x: rect.left, y: rect.bottom });
                     }}
+                    data-calendar-date-button
                     className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 sm:h-8 sm:w-8 sm:text-xs ${isTd
                       ? 'bg-violet-600 font-bold text-white shadow-sm dark:bg-violet-500'
                       : (isFri || hasHoliday)

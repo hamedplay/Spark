@@ -278,3 +278,10 @@ details > summary {
     order: -1;
   }
 }
+
+/* Calendar toolbar is a compact command bar, not a form. Keep each control's
+ * intended square geometry instead of forcing only its height to 44px. */
+@media (max-width: 640px) {
+  .app-responsive-content [data-calendar-toolbar] button,
+  .app-responsive-content [data-calendar-date-button] { min-height: 0; }
+}

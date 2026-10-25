@@ -1,5 +1,7 @@
+import { PRIMARY_NAVIGATION_ITEMS } from '../navigationMenu';
 import { useState, useRef, useEffect } from 'react';
 import {
+  Menu,
   LayoutGrid,
   Settings,
   Download,
@@ -85,6 +87,8 @@ function PortalButton({
 }
 
 export interface LayoutTopBarProps {
+  mobileNavigation?: boolean;
+  onOpenMobileMenu?: () => void;
   currentUserId?: string | null;
   userProfile: LayoutUserProfile | null;
   onPageChange: (page: PageId) => void;
@@ -99,6 +103,8 @@ export interface LayoutTopBarProps {
 }
 
 export function LayoutTopBar({
+  mobileNavigation = false,
+  onOpenMobileMenu,
   currentUserId = null,
   userProfile,
   onPageChange,
@@ -128,19 +134,24 @@ export function LayoutTopBar({
         }}
       />
       <div
-        className="flex items-center justify-between px-4 shadow-sm"
+        className="flex items-center gap-2 px-2.5 shadow-sm sm:px-4"
         style={{ height: '52px' }}
       >
-        {/* Left side */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {/* Mobile hamburger placeholder — keep width consistent */}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {mobileNavigation && (
+            <button type="button" onClick={onOpenMobileMenu} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700" aria-label="باز کردن منوی اصلی" aria-haspopup="dialog">
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
+          <p className="min-w-0 truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+            {PRIMARY_NAVIGATION_ITEMS.find(item => item.id === activePage)?.title || 'اسپارک'}
+          </p>
         </div>
-        {/* Right side: actions */}
-        <div className="flex items-center gap-1.5 flex-1 justify-end">
-          {installPrompt && (
+        <div className="flex shrink-0 items-center gap-1">
+          {installPrompt && !mobileNavigation && (
             <button
               onClick={() => void onPromptInstall()}
-              className="p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
               title="نصب اپلیکیشن"
               aria-label="نصب اپلیکیشن"
             >
@@ -154,8 +165,9 @@ export function LayoutTopBar({
               onPageChange={onPageChange}
             />
           )}
-          <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1" />
+          <div className="mx-0.5 h-5 w-px bg-gray-200 dark:bg-gray-700" />
           <ProfileDropdown
+            compact={mobileNavigation}
             currentUserId={currentUserId}
             userProfile={userProfile}
             onPageChange={onPageChange}

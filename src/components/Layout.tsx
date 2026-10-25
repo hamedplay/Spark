@@ -1,3 +1,4 @@
+import { useMobileNavigation } from '../app/layout/hooks/useMobileNavigation';
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
@@ -43,6 +44,7 @@ export function Layout({
     return saved !== null ? saved === 'true' : true;
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const mobileNavigation = useMobileNavigation();
   const userProfile = useLayoutUserPresence(currentUserId);
   const {
     installPrompt,
@@ -149,6 +151,8 @@ export function Layout({
         style={{ height: '100dvh' }}
       >
         <LayoutTopBar
+          mobileNavigation={mobileNavigation}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
           currentUserId={currentUserId}
           userProfile={userProfile}
           onPageChange={handlePageChange}

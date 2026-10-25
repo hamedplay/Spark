@@ -38,6 +38,7 @@ const STATUS_OPTIONS = [
 ] as const;
 
 export interface ProfileDropdownProps {
+  compact?: boolean;
   currentUserId?: string | null;
   userProfile: LayoutUserProfile | null;
   onPageChange: (page: PageId) => void;
@@ -49,6 +50,7 @@ export interface ProfileDropdownProps {
 }
 
 export function ProfileDropdown({
+  compact = false,
   currentUserId = null,
   userProfile,
   onPageChange,
@@ -181,7 +183,7 @@ export function ProfileDropdown({
             setOpen((v) => !v);
             setShowStatusFlyout(false);
           }}
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-white/60 dark:hover:bg-gray-700/60 transition-colors"
+          className={`${compact ? 'h-10 w-10 justify-center p-0' : 'gap-2 px-2.5 py-1.5'} flex shrink-0 items-center rounded-xl hover:bg-white/60 dark:hover:bg-gray-700/60 transition-colors`}
           aria-label="منوی پروفایل"
           aria-expanded={open}
         >
@@ -206,7 +208,7 @@ export function ProfileDropdown({
               className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-800 ${currentStatus.dot}`}
             />
           </div>
-          <div className="hidden sm:block text-right leading-tight">
+          <div className={`${compact ? 'hidden' : 'hidden sm:block'} text-right leading-tight`}>
             <p className="text-sm font-semibold text-gray-800 dark:text-white leading-none">
               {displayName}
             </p>
@@ -217,7 +219,7 @@ export function ProfileDropdown({
             )}
           </div>
           <ChevronDown
-            className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+            className={`${compact ? 'hidden' : ''} w-4 h-4 text-gray-400 transition-transform duration-200 ${
               open ? 'rotate-180' : ''
             }`}
           />

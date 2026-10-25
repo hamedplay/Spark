@@ -53,7 +53,7 @@ export function NotificationPanelContent({
 }: NotificationPanelContentProps) {
   return (
     <>
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
+      <div className="flex items-center justify-between px-3 py-3 sm:px-4 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
             <Bell className="w-4 h-4 text-blue-500" />
@@ -73,23 +73,25 @@ export function NotificationPanelContent({
             <button
               onClick={onMarkAllAsRead}
               title="همه خوانده شد"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors font-medium"
+              aria-label="همه خوانده شد"
+              className="flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 px-2 text-xs sm:w-auto text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors font-medium"
             >
-              <CheckCheck className="w-3.5 h-3.5" />{' '}
-              خواندن همه
+              <CheckCheck className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">خواندن همه</span>
             </button>
           )}
 
           <button
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            aria-label="بستن اعلان‌ها"
+            className="flex h-9 w-9 shrink-0 items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      <div className="overflow-y-auto flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
@@ -128,7 +130,7 @@ export function NotificationPanelContent({
                       n
                     )
                   }
-                  className={`flex gap-3.5 px-5 py-4 border-b border-gray-50 dark:border-gray-700/40 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors ${
+                  className={`flex gap-3 px-3 py-3 sm:px-4 border-b border-gray-50 dark:border-gray-700/40 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors ${
                     !n.read
                       ? 'bg-blue-50/60 dark:bg-blue-900/10'
                       : ''
@@ -140,7 +142,7 @@ export function NotificationPanelContent({
                       <NotificationAvatar
                         url={n.sender_avatar_url}
                         name={n.sender_name}
-                        size={44}
+                        size={36}
                       />
                       <div
                         className={`absolute -bottom-0.5 -left-0.5 w-5 h-5 rounded-full flex items-center justify-center border-2 border-white dark:border-gray-800 ${getNotificationTypeBackground(
@@ -168,7 +170,7 @@ export function NotificationPanelContent({
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3 mb-1">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug flex-1">
+                      <p className="min-w-0 break-words text-xs sm:text-sm font-semibold text-gray-900 dark:text-white leading-snug flex-1">
                         {n.title}
                       </p>
                       <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">

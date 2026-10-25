@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useRef } from 'react';
+import { useMobileNavigation } from '../hooks/useMobileNavigation';
+import { useModalFocus } from '../hooks/useModalFocus';
 import {
   LayoutDashboard,
   Grid2X2,
@@ -68,16 +70,6 @@ export interface LayoutSidebarProps {
   accentColor: string;
 }
 
-function detectMobileNavigation(): boolean {
-  if (typeof window === 'undefined') return false;
-  const narrowViewport = window.innerWidth < 1024;
-  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-  const shortDeviceSide = Math.min(window.screen?.width || window.innerWidth, window.screen?.height || window.innerHeight);
-  // Some mobile browsers/PWAs can expose a desktop-like layout viewport. The
-  // physical screen + coarse pointer check keeps the navigation mobile there.
-  return narrowViewport || (coarsePointer && shortDeviceSide <= 900);
-}
-
 export function LayoutSidebar({
   activePage,
   onNavigate,
@@ -91,17 +83,9 @@ export function LayoutSidebar({
   onMobileMenuOpenChange,
   accentColor,
 }: LayoutSidebarProps) {
-  const [useMobileNavigation, setUseMobileNavigation] = useState(detectMobileNavigation);
-
-  useEffect(() => {
-    const syncLayoutMode = () => setUseMobileNavigation(detectMobileNavigation());
-    window.addEventListener('resize', syncLayoutMode);
-    window.addEventListener('orientationchange', syncLayoutMode);
-    return () => {
-      window.removeEventListener('resize', syncLayoutMode);
-      window.removeEventListener('orientationchange', syncLayoutMode);
-    };
-  }, []);
+  const mobileNavigation = useMobileNavigation();
+  const drawerRef = useRef<HTMLDivElement>(null);
+  useModalFocus(mobileNavigation && isMobileMenuOpen, drawerRef, () => onMobileMenuOpenChange(false));
 
   const menuItems = getVisiblePrimaryNavigationItems({
     isAdmin,
@@ -115,31 +99,15 @@ export function LayoutSidebar({
 
   // A mobile drawer is always expanded; the persisted desktop collapsed state
   // must never remove labels from a touch-device drawer.
-  const showExpandedLabels = useMobileNavigation || !isCollapsed;
+  const showExpandedLabels = mobileNavigation || !isCollapsed;
 
   return (
     <>
-      {/* Mobile Menu Button. Hide it while the drawer is open: the drawer owns
-          its close control and must be the highest interactive navigation layer. */}
-      {useMobileNavigation && !isMobileMenuOpen && (
-        <button
-          onClick={() => onMobileMenuOpenChange(true)}
-          className="fixed z-[200] flex h-10 w-10 items-center justify-center bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 touch-manipulation"
-          style={{
-            top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-            right: 'max(0.75rem, env(safe-area-inset-right))',
-          }}
-          aria-label="باز کردن منوی اصلی"
-        >
-          <Menu className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-        </button>
-      )}
-
       {/* Mobile Overlay. Global navigation intentionally sits above every
           page-local toolbar, dropdown and floating action button. */}
-      {useMobileNavigation && isMobileMenuOpen && (
+      {mobileNavigation && isMobileMenuOpen && (
         <div
-          className="fixed inset-0 z-[9000] bg-black/50"
+          className="fixed inset-0 z-[9000] bg-slate-950/35 touch-none"
           onClick={() => onMobileMenuOpenChange(false)}
           aria-hidden="true"
         />
@@ -147,19 +115,23 @@ export function LayoutSidebar({
 
       {/* Sidebar */}
       <div
+        ref={drawerRef}
+        tabIndex={-1}
+        inert={mobileNavigation && !isMobileMenuOpen ? true : undefined}
+        aria-hidden={mobileNavigation && !isMobileMenuOpen ? true : undefined}
         className={`${
-          useMobileNavigation
-            ? `w-64 max-w-[86vw] fixed right-0 ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} z-[9010]`
+          mobileNavigation
+            ? `w-72 max-w-[86vw] fixed right-0 top-0 rounded-l-2xl ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} z-[9010]`
             : `${isCollapsed ? 'w-16' : 'w-52'} relative translate-x-0 z-50`
         } bg-white dark:bg-gray-800 shadow-lg transition-all duration-300 h-full flex flex-col flex-shrink-0`}
-        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        role={useMobileNavigation ? 'dialog' : undefined}
-        aria-modal={useMobileNavigation && isMobileMenuOpen ? true : undefined}
-        aria-label={useMobileNavigation ? 'منوی اصلی' : undefined}
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', height: mobileNavigation ? '100dvh' : undefined }}
+        role={mobileNavigation ? 'dialog' : undefined}
+        aria-modal={mobileNavigation && isMobileMenuOpen ? true : undefined}
+        aria-label={mobileNavigation ? 'منوی اصلی' : undefined}
       >
         {/* Sidebar header */}
-        <div className={`flex items-center px-3 h-14 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 relative ${useMobileNavigation ? 'justify-between' : 'justify-center'}`}>
-          {useMobileNavigation ? (
+        <div className={`flex items-center px-3 h-14 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 relative ${mobileNavigation ? 'justify-between' : 'justify-center'}`}>
+          {mobileNavigation ? (
             <>
               <div className="min-w-0">
                 <p className="text-xs font-bold text-slate-800 dark:text-slate-100">منوی اصلی</p>
@@ -213,7 +185,7 @@ export function LayoutSidebar({
                 onTouchStart={warm}
                 onClick={() => {
                   onNavigate(item.id);
-                  if (useMobileNavigation) onMobileMenuOpenChange(false);
+                  if (mobileNavigation) onMobileMenuOpenChange(false);
                 }}
                 className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl transition-all text-sm font-medium ${
                   showExpandedLabels ? 'px-2.5' : 'justify-center px-2'

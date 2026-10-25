@@ -150,7 +150,7 @@ export function CalendarToolbar(props: {
   }, [showViewDropdown, setShowViewDropdown]);
 
   const iconButton = compactToolbar
-    ? 'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition-colors'
+    ? 'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border transition-colors'
     : 'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border transition-colors';
   const neutralIcon = `${iconButton} border-slate-200 bg-white text-slate-500 hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-violet-500/30 dark:hover:bg-violet-500/10 dark:hover:text-violet-300`;
 
@@ -255,10 +255,10 @@ export function CalendarToolbar(props: {
 
   const navigationControl = (
     <div className="flex flex-shrink-0 items-center rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
-      <button onClick={navigatePrev} className={`${compactToolbar ? 'h-6 w-6' : 'h-7 w-7'} flex items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`} title="قبلی" aria-label="بازه قبلی">
+      <button onClick={navigatePrev} className={`${compactToolbar ? 'h-8 w-8' : 'h-7 w-7'} flex items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`} title="قبلی" aria-label="بازه قبلی">
         <ChevronRight className={compactToolbar ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
       </button>
-      <button onClick={navigateNext} className={`${compactToolbar ? 'h-6 w-6' : 'h-7 w-7'} flex items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`} title="بعدی" aria-label="بازه بعدی">
+      <button onClick={navigateNext} className={`${compactToolbar ? 'h-8 w-8' : 'h-7 w-7'} flex items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`} title="بعدی" aria-label="بازه بعدی">
         <ChevronLeft className={compactToolbar ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
       </button>
     </div>
@@ -275,7 +275,7 @@ export function CalendarToolbar(props: {
       <button
         type="button"
         onClick={() => setShowViewDropdown(o => !o)}
-        className={`${compactToolbar ? 'h-7 min-w-[68px] px-2 text-[11px]' : 'h-8 min-w-[94px] px-2.5 text-xs'} flex items-center justify-between gap-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/15`}
+        className={`${compactToolbar ? 'h-9 min-w-[68px] px-2 text-[11px]' : 'h-8 min-w-[94px] px-2.5 text-xs'} flex items-center justify-between gap-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/15`}
         aria-haspopup="menu"
         aria-expanded={showViewDropdown}
       >
@@ -304,10 +304,10 @@ export function CalendarToolbar(props: {
   const appearanceControl = (
     <div className="relative flex-shrink-0">
       <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
-        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('spark-calendar-zoom', { detail: { delta: -4 } }))} className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" title="کوچک‌نمایی" aria-label="کوچک‌نمایی تقویم">
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('spark-calendar-zoom', { detail: { delta: -4 } }))} className={`${compactToolbar ? 'h-8 w-8' : 'h-7 w-7'} flex shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`} title="کوچک‌نمایی" aria-label="کوچک‌نمایی تقویم">
           <ZoomOut className="h-3.5 w-3.5" />
         </button>
-        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('spark-calendar-zoom', { detail: { delta: 4 } }))} className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" title="بزرگ‌نمایی" aria-label="بزرگ‌نمایی تقویم">
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('spark-calendar-zoom', { detail: { delta: 4 } }))} className={`${compactToolbar ? 'h-8 w-8' : 'h-7 w-7'} flex shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800`} title="بزرگ‌نمایی" aria-label="بزرگ‌نمایی تقویم">
           <ZoomIn className="h-3.5 w-3.5" />
         </button>
         {!compactToolbar && (
@@ -362,6 +362,7 @@ export function CalendarToolbar(props: {
     return (
       <div
         ref={toolbarRef}
+        data-calendar-toolbar
         className="relative z-[140] flex flex-shrink-0 flex-col overflow-visible border-b border-slate-200/80 bg-white/95 px-2 py-0.5 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
       >
         <div className="flex min-w-0 items-center gap-1">
@@ -371,12 +372,12 @@ export function CalendarToolbar(props: {
             {toFarsiDigits(getNavTitle())}
           </h2>
         </div>
-        <div className="mt-0.5 flex min-w-0 items-center justify-between gap-1">
+        <div className="mt-0.5 flex min-w-0 items-center justify-start gap-1.5">
           {searchControl}
           {refreshButton}
           {appearanceControl}
           {offHoursControl}
-          {viewControl}
+          <div className="ms-auto shrink-0">{viewControl}</div>
         </div>
       </div>
     );
@@ -385,6 +386,7 @@ export function CalendarToolbar(props: {
   return (
     <div
       ref={toolbarRef}
+      data-calendar-toolbar
       className="relative z-[140] flex min-h-[38px] flex-shrink-0 items-center gap-1.5 overflow-visible border-b border-slate-200/80 bg-white/95 px-2 py-1 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
     >
       {calendarSidebarButton}

@@ -214,6 +214,7 @@ export function MultiDayView(input: CalendarViewProps) {
                     <div className="text-[10px] sm:text-[11px]">{JALAALI_WEEKDAYS[d.weekday]}</div>
                     <button
                       type="button"
+                      data-calendar-date-button
                       className={`mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition-colors ${p.isToday(d.jy, d.jm, d.jd)
                         ? 'bg-violet-700 text-white shadow-sm dark:bg-violet-600'
                         : 'text-slate-700 hover:bg-slate-100 dark:text-white dark:hover:bg-slate-800'}`}
@@ -275,10 +276,12 @@ export function MultiDayView(input: CalendarViewProps) {
                 <span className="px-1 text-center text-[9px] font-semibold leading-tight text-slate-500 dark:text-slate-400">مجموع<br />زمان</span>
               </div>
               {days.map(d => {
-                const meetingDuration = formatMeetingDuration(getMeetingTotalMinutes(p.getMeetings(d.jy, d.jm, d.jd)));
+                const totalMinutes = getMeetingTotalMinutes(p.getMeetings(d.jy, d.jm, d.jd));
+                const meetingDuration = formatMeetingDuration(totalMinutes);
+                const compactDuration = `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, '0')}`;
                 return (
                   <div key={`duration-${d.jy}-${d.jm}-${d.jd}`} className={`flex min-h-[28px] min-w-0 items-center justify-center border-r-2 border-slate-300/90 px-1 py-1 text-center dark:border-slate-600/90 ${p.isToday(d.jy, d.jm, d.jd) ? 'bg-violet-50/25 dark:bg-violet-500/[0.035]' : d.weekday % 2 === 0 ? 'bg-sky-100/65 dark:bg-sky-500/[0.08]' : 'bg-white dark:bg-slate-950'}`}>
-                    <span className="text-[10px] font-bold leading-tight text-slate-600 dark:text-slate-300">{meetingDuration}</span>
+                    <span title={meetingDuration} className="whitespace-nowrap text-[10px] font-bold leading-tight text-slate-600 dark:text-slate-300" dir={zoom.enabled ? 'ltr' : undefined}>{zoom.enabled ? toFarsiDigits(compactDuration) : meetingDuration}</span>
                   </div>
                 );
               })}
