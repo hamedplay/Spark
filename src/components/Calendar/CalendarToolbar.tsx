@@ -94,6 +94,7 @@ export function CalendarToolbar(props: {
   const viewControlRef = useRef<HTMLDivElement | null>(null);
   const [compactMobile, setCompactMobile] = useState(detectCompactCalendarLayout);
   const [compactToolbar, setCompactToolbar] = useState(detectCompactCalendarLayout);
+  const [toolbarWidth, setToolbarWidth] = useState(0);
   const [showAppearance, setShowAppearance] = useState(false);
   const [density, setDensity] = useState<Density>(() => {
     const saved = localStorage.getItem('spark_calendar_density');
@@ -123,6 +124,7 @@ export function CalendarToolbar(props: {
     if (!el) return;
 
     const sync = (width: number) => {
+      setToolbarWidth(width);
       setCompactToolbar(detectCompactCalendarLayout() || width < 760);
     };
 
@@ -367,11 +369,11 @@ export function CalendarToolbar(props: {
     </button>
   ) : null;
 
-  if (compactToolbar) {
+  if (compactToolbar && toolbarWidth < 660) {
     return (
       <div
         ref={toolbarRef}
-        className="relative z-[140] flex flex-shrink-0 flex-col overflow-visible border-b border-slate-200/80 bg-white/95 px-1.5 py-1 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
+        className="relative z-[140] flex flex-shrink-0 flex-col overflow-visible border-b border-slate-200/80 bg-white/95 px-2 py-0.5 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
       >
         <div className="flex min-w-0 items-center gap-1">
           {calendarSidebarButton}
@@ -380,13 +382,13 @@ export function CalendarToolbar(props: {
           <h2 className="min-w-0 flex-1 truncate px-1 text-center text-[11px] font-bold text-slate-800 dark:text-white" title={getNavTitle()}>
             {toFarsiDigits(getNavTitle())}
           </h2>
-          {viewControl}
         </div>
-        <div className="mt-1 flex min-w-0 items-center justify-end gap-1 border-t border-slate-100/80 pt-1 dark:border-slate-800/80">
+        <div className="mt-0.5 flex min-w-0 items-center justify-between gap-1">
           {searchControl}
           {refreshButton}
           {appearanceControl}
           {offHoursControl}
+          {viewControl}
         </div>
       </div>
     );
@@ -395,7 +397,7 @@ export function CalendarToolbar(props: {
   return (
     <div
       ref={toolbarRef}
-      className="relative z-[140] flex min-h-[42px] flex-shrink-0 items-center gap-1.5 overflow-visible border-b border-slate-200/80 bg-white/95 px-3 py-1.5 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
+      className="relative z-[140] flex min-h-[38px] flex-shrink-0 items-center gap-1.5 overflow-visible border-b border-slate-200/80 bg-white/95 px-2 py-1 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
     >
       {calendarSidebarButton}
       {todayButton}
