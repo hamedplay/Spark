@@ -116,17 +116,20 @@ export function CalendarPage({
   const [prefillData, setPrefillData] = useState<any>(null);
   const [activePendingSchedule, setActivePendingSchedule] = useState<PendingSchedule | null>(null);
 
+  const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
+
   useEffect(() => {
     if (
       showCalendarList ||
       showSubscriptionsModal ||
       showMeetingForm ||
       detailMeeting !== null ||
-      previewMeeting !== null
+      previewMeeting !== null ||
+      expandedMeetingId !== null
     ) {
       setOrgUsersEnabled(true);
     }
-  }, [showCalendarList, showSubscriptionsModal, showMeetingForm, detailMeeting, previewMeeting]);
+  }, [showCalendarList, showSubscriptionsModal, showMeetingForm, detailMeeting, previewMeeting, expandedMeetingId]);
 
   // Move meeting drag
   const [dragMoveMeeting, setDragMoveMeeting] = useState<MeetingData | null>(null);
@@ -161,7 +164,6 @@ export function CalendarPage({
   } | null>(null);
   const [isResizeCommitting, setIsResizeCommitting] = useState(false);
 
-  const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [showDesktopSidebar, setShowDesktopSidebar] = useState(true);
 
