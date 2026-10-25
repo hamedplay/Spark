@@ -17,7 +17,10 @@ export function CalendarViews(p: CalendarViewProps) {
   useEffect(() => {
     const onZoom = (event: Event) => {
       const delta = Number((event as CustomEvent<{ delta?: number }>).detail?.delta || 0);
-      if (delta) p.adjustSlotHeight(delta);
+      if (!delta) return;
+      if (p.viewMode === 'week' && window.matchMedia('(max-width: 767px)').matches) {
+        window.dispatchEvent(new CustomEvent('spark-calendar-mobile-week-zoom', { detail: { delta } }));
+      } else p.adjustSlotHeight(delta);
     };
     const onDensity = (event: Event) => {
       const target = Number((event as CustomEvent<{ slotHeight?: number }>).detail?.slotHeight || 0);

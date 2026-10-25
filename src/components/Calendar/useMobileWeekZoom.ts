@@ -137,12 +137,30 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
         delete el.dataset.weekPinching;
       }
     };
+    const step = (event: Event) => {
+      if (draining) return;
+      const delta = Number((event as CustomEvent<{ delta?: number }>).detail?.delta || 0);
+      if (!delta) return;
+      const props = live.current;
+      const header = el.querySelector<HTMLElement>('[data-week-header]')?.offsetHeight || 0;
+      const right = 56 + (el.clientWidth - 56) / 2;
+      const top = header + (el.clientHeight - header) / 2;
+      const base = committed.current;
+      const value = clampWeekZoom(base * (delta > 0 ? 1.25 : 1 / 1.25));
+      if (value === base) return;
+      gesture = { distance: 1, base, value, right, top, header, slotHeight: props.slotHeight,
+        x: Math.max(0, right - 56 - el.scrollLeft), y: el.scrollTop + top - header };
+      draining = true;
+      paint();
+      end({ touches: [], cancelable: false, stopImmediatePropagation() {} } as unknown as TouchEvent);
+    };
     const click = (event: MouseEvent) => {
       if (draining || Date.now() < suppressUntil) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
     };
+    window.addEventListener('spark-calendar-mobile-week-zoom', step);
     const options = { capture: true, passive: false };
     el.addEventListener('touchstart', start, options);
     el.addEventListener('touchmove', move, options);
@@ -151,6 +169,7 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
     el.addEventListener('click', click, true);
     return () => {
       if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener('spark-calendar-mobile-week-zoom', step);
       el.removeEventListener('touchstart', start, true);
       el.removeEventListener('touchmove', move, true);
       el.removeEventListener('touchend', end, true);

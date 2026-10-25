@@ -1,3 +1,4 @@
+import { weekDayIndex } from './Calendar/weekInteraction';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { usePermissions } from '../context/PermissionsContext';
 import { supabase } from '../lib/supabase';
@@ -816,22 +817,19 @@ export function CalendarPage({
   };
 
   const getDayIndexFromX = (x: number): number => {
-    if (!weekGridRef.current) return 0;
-    const rect = weekGridRef.current.getBoundingClientRect();
-    const timeColWidth = 56;
-    const gridWidth = rect.width - timeColWidth;
-    const relX = rect.right - x;
-    const dayW = gridWidth / 7;
-    return Math.max(0, Math.min(6, Math.floor(relX / dayW)));
+    const grid = weekGridRef.current?.querySelector<HTMLElement>('[data-calendar-day-grid]');
+    return grid ? weekDayIndex(x, grid.getBoundingClientRect()) : 0;
   };
 
   // Global move/resize handlers
   useEffect(() => {
+    const originalDay = weekDays.findIndex(day => jalaaliToYYYYMMDD(day.jy, day.jm, day.jd) === dragMoveOriginalDate);
+    const originDay = originalDay >= 0 ? originalDay : getDayIndexFromX(dragMoveStartX);
     const onMove = (clientX: number, clientY: number, isTouch = false) => {
       if (dragMoveMeeting) {
         const deliberate = !isTouch || Math.hypot(clientX - dragMoveStartX, clientY - dragMoveStartY) >= 10;
         const deltaSlot = deliberate ? Math.round((clientY - dragMoveStartY) / (slotHeight / 2)) * 0.5 : 0;
-        const deltaDay = deliberate && viewMode === 'week' ? getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX) : 0;
+        const deltaDay = deliberate && viewMode === 'week' ? getDayIndexFromX(clientX) - originDay : 0;
         if (deltaSlot !== 0 || deltaDay !== 0) dragMovedRef.current = true;
         setDragMoveCurrentDeltaSlot(deltaSlot);
         if (viewMode === 'week') setDragMoveCurrentDeltaDay(deltaDay);
@@ -839,10 +837,12 @@ export function CalendarPage({
       if (resizeMeeting) setResizeCurrentDelta(isTouch && Math.abs(clientY - resizeStartY) < 10 ? 0 : Math.round((clientY - resizeStartY) / (slotHeight / 2)) * 0.5);
     };
     const onEnd = async (clientX: number, clientY: number, isTouch = false) => {
+      pointer = null;
+      if (autoScrollFrame) cancelAnimationFrame(autoScrollFrame);
       if (dragMoveMeeting) {
         const deliberate = !isTouch || Math.hypot(clientX - dragMoveStartX, clientY - dragMoveStartY) >= 10;
         const deltaSlot = deliberate ? Math.round((clientY - dragMoveStartY) / (slotHeight / 2)) * 0.5 : 0;
-        const deltaDay = deliberate && viewMode === 'week' ? getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX) : 0;
+        const deltaDay = deliberate && viewMode === 'week' ? getDayIndexFromX(clientX) - originDay : 0;
         if (deltaSlot !== 0 || deltaDay !== 0) {
           const ns = dragMoveOriginalSlot + deltaSlot;
           const ne = dragMoveOriginalEndSlot + deltaSlot;
@@ -872,19 +872,46 @@ export function CalendarPage({
         setResizeMeeting(null); setResizeCurrentDelta(0);
       }
     };
-    const mm = (e: MouseEvent) => onMove(e.clientX, e.clientY);
+    let pointer: { x: number; y: number; touch: boolean } | null = null;
+    let autoScrollFrame = 0;
+    const mm = (e: MouseEvent) => { pointer = { x: e.clientX, y: e.clientY, touch: false }; onMove(e.clientX, e.clientY); };
     const mu = (e: MouseEvent) => onEnd(e.clientX, e.clientY);
-    const tm = (e: TouchEvent) => { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY, true); };
+    const tm = (e: TouchEvent) => { if (e.touches.length !== 1) return; e.preventDefault(); pointer = { x: e.touches[0].clientX, y: e.touches[0].clientY, touch: true }; onMove(pointer.x, pointer.y, true); };
     const tu = (e: TouchEvent) => onEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY, true);
+    const autoScroll = () => {
+      const scroller = timeScrollRef.current;
+      if (pointer && scroller && dragMovedRef.current) {
+        const rect = scroller.getBoundingClientRect();
+        const left = rect.left + 28;
+        const right = rect.right - 56 - 28;
+        const speed = pointer.x < left ? -Math.min(12, (left - pointer.x) / 3)
+          : pointer.x > right ? Math.min(12, (pointer.x - right) / 3) : 0;
+        if (speed) {
+          scroller.scrollLeft += speed;
+          onMove(pointer.x, pointer.y, pointer.touch);
+        }
+      }
+      autoScrollFrame = requestAnimationFrame(autoScroll);
+    };
+    const cancel = () => {
+      pointer = null;
+      if (autoScrollFrame) cancelAnimationFrame(autoScrollFrame);
+      setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0);
+      setResizeMeeting(null); setResizeCurrentDelta(0);
+    };
+    if (dragMoveMeeting && viewMode === 'week') autoScrollFrame = requestAnimationFrame(autoScroll);
     if (dragMoveMeeting || resizeMeeting) {
       document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
       document.addEventListener('touchmove', tm, { passive: false }); document.addEventListener('touchend', tu);
+      document.addEventListener('touchcancel', cancel);
     }
     return () => {
+      if (autoScrollFrame) cancelAnimationFrame(autoScrollFrame);
+      document.removeEventListener('touchcancel', cancel);
       document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu);
       document.removeEventListener('touchmove', tm); document.removeEventListener('touchend', tu);
     };
-  }, [dragMoveMeeting, dragMoveStartY, dragMoveStartX, dragMoveOriginalSlot, dragMoveOriginalEndSlot, dragMoveOriginalDate, resizeMeeting, resizeStartY, resizeOriginalEndSlot, viewMode, slotHeight]);
+  }, [dragMoveMeeting, dragMoveStartY, dragMoveStartX, dragMoveOriginalSlot, dragMoveOriginalEndSlot, dragMoveOriginalDate, resizeMeeting, resizeStartY, resizeOriginalEndSlot, viewMode, slotHeight, weekDays]);
 
   // Cancel all-day drag on global mouseup
   useEffect(() => {

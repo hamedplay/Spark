@@ -8,6 +8,8 @@ import { clampWeekZoom, weekZoomHeight, weekZoomPixels, fitWeekSlotHeight } from
 // No live authentication or meeting writes are needed for the gesture lifecycle.
 function fixture(enabled = true) {
   const listeners = new Map<string, Function>();
+  const commands = new Map<string, Function>();
+  const committed = { current: 1 };
   const variables = new Map<string, string>();
   const frames = new Map<number, Function>();
   let nextFrame = 0;
@@ -17,7 +19,7 @@ function fixture(enabled = true) {
   let slotHeight = 40;
   let cleanup: (() => void) | undefined;
   const el = {
-    scrollLeft: 0, scrollTop: 800, dataset: {} as Record<string, string>,
+    clientWidth: 390, clientHeight: 844, scrollLeft: 0, scrollTop: 800, dataset: {} as Record<string, string>,
     style: { setProperty: (k: string, v: string) => variables.set(k, v), removeProperty: (k: string) => variables.delete(k) },
     getBoundingClientRect: () => ({ right: 390, top: 0 }),
     querySelector: () => ({ offsetHeight: 100 }),
@@ -34,18 +36,19 @@ function fixture(enabled = true) {
   const start = src.indexOf('  useEffect(() => {\n    const el = p.timeScrollRef.current;\n    if (!el || !enabled)');
   const end = src.indexOf('\n\n  return { enabled', start);
   const code = stripTypeScriptTypes(src.slice(start, end), { mode: 'transform' });
-  new Function('p', 'enabled', 'live', 'committed', 'setZoom', 'useEffect', 'requestAnimationFrame', 'cancelAnimationFrame', 'clampWeekZoom', 'weekZoomHeight', code)(
-    props, enabled, { current: props }, { current: 1 }, (value: number) => { zoom = value; stateCommits++; },
+  new Function('p', 'enabled', 'live', 'committed', 'setZoom', 'useEffect', 'requestAnimationFrame', 'cancelAnimationFrame', 'clampWeekZoom', 'weekZoomHeight', 'window', code)(
+    props, enabled, { current: props }, committed, (value: number) => { zoom = value; stateCommits++; },
     (effect: () => (() => void) | undefined) => { cleanup = effect(); },
     (callback: Function) => { frames.set(++nextFrame, callback); return nextFrame; },
-    (id: number) => frames.delete(id), clampWeekZoom, weekZoomHeight,
+    (id: number) => frames.delete(id), clampWeekZoom, weekZoomHeight, { addEventListener: (name: string, fn: Function) => commands.set(name, fn), removeEventListener: (name: string) => commands.delete(name) },
   );
   const event = (distance: number, count = 2) => ({
     touches: count === 2 ? [{ clientX: 200 - distance / 2, clientY: 300 }, { clientX: 200 + distance / 2, clientY: 300 }] : count === 1 ? [{ clientX: 200, clientY: 300 }] : [],
     cancelable: true, preventDefault() {}, stopImmediatePropagation() {},
     target: { dispatchEvent() { cancelledDrags++; } },
   });
-  return { el, listeners, variables, frames, event,
+  return { el, listeners, variables, frames, event, commands,
+    commit: () => { committed.current = zoom; props.slotHeight = slotHeight; variables.set('--calendar-week-x', '1'); variables.set('--calendar-week-y', '1'); },
     flush: () => { const pending = [...frames.values()]; frames.clear(); pending.forEach(fn => fn()); },
     result: () => ({ zoom, slotHeight, stateCommits, cancelledDrags }), cleanup: () => cleanup?.() };
 }
@@ -115,4 +118,24 @@ test('fits the configured working day into the available time area on short and 
   }
   assert.equal(fitWeekSlotHeight(400, 600, 600), null);
   assert.equal(fitWeekSlotHeight(0, 420, 1170), null);
+});
+
+
+test('magnifier commands zoom both day widths and time height and reverse cleanly', () => {
+  const f = fixture();
+  const command = f.commands.get('spark-calendar-mobile-week-zoom')!;
+  command({ detail: { delta: 4 } });
+  assert.equal(f.result().zoom, 1.25);
+  assert.ok(f.result().slotHeight > 40);
+  assert.equal(f.result().stateCommits, 1);
+  f.commit();
+  command({ detail: { delta: -4 } });
+  assert.equal(f.result().zoom, 1);
+  assert.ok(Math.abs(f.result().slotHeight - 40) < 0.00001);
+  f.commit();
+  const commits = f.result().stateCommits;
+  command({ detail: { delta: -4 } });
+  assert.equal(f.result().stateCommits, commits);
+  f.cleanup();
+  assert.equal(f.commands.size, 0);
 });

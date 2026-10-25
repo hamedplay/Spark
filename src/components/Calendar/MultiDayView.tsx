@@ -332,6 +332,7 @@ export function MultiDayView(input: CalendarViewProps) {
                 </div>
 
                 <div
+                  data-calendar-day-grid
                   className="relative grid flex-1 overflow-hidden bg-white dark:bg-slate-950"
                   style={{ gridTemplateColumns: dayGridTemplateColumns, minWidth: dayGridMinWidth }}
                 >

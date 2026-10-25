@@ -1,3 +1,4 @@
+import { weekDragInsets } from './weekInteraction';
 import { weekZoomPixels } from './weekZoom';
 import React from 'react';
 import { Clock, MapPin, X } from 'lucide-react';
@@ -485,8 +486,7 @@ export function renderMeetingBlock(
 
   let ghostStyle: React.CSSProperties = {};
   if (isBeingDragged && viewMode === 'week' && dragMoveCurrentDeltaDay !== 0) {
-    const dayColWidth = 100 / 7;
-    ghostStyle = { transform: `translateX(${-dragMoveCurrentDeltaDay * dayColWidth * colWidthMultiple}%)` };
+    ghostStyle = weekDragInsets(dragMoveCurrentDeltaDay, leftPct, widthPct, GUTTER);
   }
 
   return (

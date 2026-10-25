@@ -12,7 +12,7 @@ function handlers(resize: boolean) {
   const dependencies: Record<string, unknown> = {
     dragMoveMeeting: resize ? null : { id: 'meeting' }, resizeMeeting: resize ? { id: 'meeting', start_time: '07:00' } : null,
     dragMoveStartX: 100, dragMoveStartY: 100, resizeStartY: 100,
-    slotHeight: 8, viewMode: 'week', getDayIndexFromX: () => 0,
+    slotHeight: 8, viewMode: 'week', originDay: 0, getDayIndexFromX: () => 0,
     dragMovedRef: { current: false }, dragMoveOriginalSlot: 14, dragMoveOriginalEndSlot: 16,
     dragMoveOriginalDate: '2026-10-26', resizeOriginalEndSlot: 16,
     HOURS_END: 24, HOURS_START: 0, minutesToTime: (minutes: number) => String(minutes), timeToMinutes: () => 420,
