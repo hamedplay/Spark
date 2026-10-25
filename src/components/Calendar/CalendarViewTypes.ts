@@ -26,6 +26,8 @@ export interface CalendarViewProps {
 
   // Time grid
   slotHeight: number;
+  mobileWeekZoom?: boolean;
+  cancelTouchDrag?: () => void;
   totalSlots: number;
   hideOffHours: boolean;
   visibleStartHour: number;

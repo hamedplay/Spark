@@ -701,3 +701,16 @@ span.absolute.-top-2.z-10.pointer-events-none:has(> svg.lucide-at-sign) {
     font-size: 1.125rem !important;
   }
 }
+
+/* Week pinch zoom changes geometry, not the browser's page scale. */
+[data-mobile-week] .calendar-week-card-time,
+[data-mobile-week] .calendar-week-card-details,
+[data-mobile-week] .calendar-week-delegate { display: none; }
+@container (min-width: 70px) {
+  [data-mobile-week] .calendar-week-card-time { display: block; }
+}
+@container (min-width: 150px) {
+  [data-mobile-week] .calendar-week-card-details,
+  [data-mobile-week] .calendar-week-delegate { display: block; }
+}
+[data-week-pinching] { user-select: none; }

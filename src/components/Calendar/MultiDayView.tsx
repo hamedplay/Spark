@@ -1,3 +1,5 @@
+import { useMobileWeekZoom } from './useMobileWeekZoom';
+import { weekZoomPixels } from './weekZoom';
 import React, { useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -55,7 +57,9 @@ function getDays(p: CalendarViewProps) {
   });
 }
 
-export function MultiDayView(p: CalendarViewProps) {
+export function MultiDayView(input: CalendarViewProps) {
+  const zoom = useMobileWeekZoom(input);
+  const p: CalendarViewProps = { ...input, mobileWeekZoom: zoom.enabled };
   const days = useMemo(
     () => getDays(p),
     [p.viewMode, p.selectedJy, p.selectedJm, p.selectedJd, p.weekDays],
@@ -68,11 +72,12 @@ export function MultiDayView(p: CalendarViewProps) {
     ? { ...offHoursWrapStyle, overflow: 'clip' as const, display: 'flow-root' as const }
     : undefined;
   const hourColumnWidth = 56;
-  const minDayWidth = p.viewMode === 'week' ? 112 : dayCount >= 4 ? 120 : 136;
-  const gridTemplateColumns = `${hourColumnWidth}px repeat(${dayCount}, minmax(${minDayWidth}px, 1fr))`;
-  const dayGridTemplateColumns = `repeat(${dayCount}, minmax(${minDayWidth}px, 1fr))`;
-  const dayGridMinWidth = dayCount * minDayWidth;
-  const minWidth = hourColumnWidth + dayGridMinWidth;
+  const minDayWidth = zoom.enabled ? zoom.dayWidth : p.viewMode === 'week' ? 112 : dayCount >= 4 ? 120 : 136;
+  const daySize = zoom.enabled ? `calc(${minDayWidth}px * var(--calendar-week-x, 1))` : `${minDayWidth}px`;
+  const gridTemplateColumns = `${hourColumnWidth}px repeat(${dayCount}, minmax(${daySize}, 1fr))`;
+  const dayGridTemplateColumns = `repeat(${dayCount}, minmax(${daySize}, 1fr))`;
+  const dayGridMinWidth = zoom.enabled ? `calc(${dayCount * minDayWidth}px * var(--calendar-week-x, 1))` : dayCount * minDayWidth;
+  const minWidth = zoom.enabled ? `calc(${hourColumnWidth}px + ${dayCount * minDayWidth}px * var(--calendar-week-x, 1))` : hourColumnWidth + dayCount * minDayWidth;
   const dragTargetSlot = p.dragMoveMeeting
     ? Math.max(0, Math.min(p.totalSlots, p.dragMoveOriginalSlot + p.dragMoveCurrentDeltaSlot))
     : null;
@@ -100,7 +105,7 @@ export function MultiDayView(p: CalendarViewProps) {
   // On narrow/mobile week views this horizontally centers the selected day without
   // disturbing the vertical current-time position.
   useEffect(() => {
-    if (!days.length || !p.selectedJy || !p.selectedJm || !p.selectedJd) return;
+    if (zoom.enabled || !days.length || !p.selectedJy || !p.selectedJm || !p.selectedJd) return;
 
     const timer = window.setTimeout(() => {
       const scroller = p.timeScrollRef.current;
@@ -117,7 +122,7 @@ export function MultiDayView(p: CalendarViewProps) {
     }, 80);
 
     return () => window.clearTimeout(timer);
-  }, [days, p.viewMode, p.selectedJy, p.selectedJm, p.selectedJd]);
+  }, [days, p.viewMode, p.selectedJy, p.selectedJm, p.selectedJd, zoom.enabled]);
 
   const dropMeetingOnDay = async (
     e: React.MouseEvent,
@@ -166,6 +171,7 @@ export function MultiDayView(p: CalendarViewProps) {
   return (
     <div className="mx-2 mb-2 mt-1 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3">
       <div
+        data-mobile-week={zoom.enabled || undefined}
         className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y', scrollbarWidth: 'none' }}
         ref={el => {
@@ -175,6 +181,7 @@ export function MultiDayView(p: CalendarViewProps) {
       >
         <div className="flex min-h-full flex-col" style={{ minWidth, width: '100%' }}>
           <div
+            data-week-header
             className="sticky top-0 z-40 flex-shrink-0 border-b border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-950"
             style={{ position: 'sticky', top: 0 }}
           >
@@ -281,7 +288,7 @@ export function MultiDayView(p: CalendarViewProps) {
                   style={{
                     position: 'sticky',
                     right: 0,
-                    height: `${(HOURS_END - HOURS_START) * p.slotHeight * 2}px`,
+                    height: weekZoomPixels((HOURS_END - HOURS_START) * p.slotHeight * 2, p.mobileWeekZoom),
                   }}
                   onWheel={e => {
                     if (e.ctrlKey || e.altKey) {
@@ -298,7 +305,7 @@ export function MultiDayView(p: CalendarViewProps) {
                       key={h}
                       className="pointer-events-none absolute left-0 right-0 whitespace-nowrap text-center text-[10px] font-medium text-slate-500 dark:text-slate-400"
                       style={{
-                        top: `${(h - HOURS_START) * p.slotHeight * 2}px`,
+                        top: weekZoomPixels((h - HOURS_START) * p.slotHeight * 2, p.mobileWeekZoom),
                         transform: p.hideOffHours && h === displayStartHour ? 'translateY(2px)' : 'translateY(-50%)',
                       }}
                     >
@@ -309,7 +316,7 @@ export function MultiDayView(p: CalendarViewProps) {
                   {dragTargetSlot !== null && dragTargetTime && (
                     <div
                       className="pointer-events-none absolute left-1 right-1 z-40 -translate-y-1/2 rounded-full bg-rose-500 px-1 py-0.5 text-center text-[9px] font-bold leading-none text-white shadow-sm"
-                      style={{ top: `${dragTargetSlot * p.slotHeight}px` }}
+                      style={{ top: weekZoomPixels(dragTargetSlot * p.slotHeight, p.mobileWeekZoom) }}
                     >
                       {dragTargetTime}
                     </div>
@@ -324,7 +331,7 @@ export function MultiDayView(p: CalendarViewProps) {
                   {dragTargetSlot !== null && (
                     <div
                       className="pointer-events-none absolute left-0 right-0 z-30"
-                      style={{ top: `${dragTargetSlot * p.slotHeight}px` }}
+                      style={{ top: weekZoomPixels(dragTargetSlot * p.slotHeight, p.mobileWeekZoom) }}
                     >
                       <div className="h-0.5 w-full bg-rose-500 shadow-[0_0_0_1px_rgba(244,63,94,0.08)]" />
                     </div>
@@ -355,7 +362,7 @@ export function MultiDayView(p: CalendarViewProps) {
                         onTouchEnd={touchGestures.handleTouchEnd}
                         onTouchCancel={touchGestures.handleTouchCancel}
                       >
-                        {renderSlotLines(p.totalSlots, p.slotHeight, p.hideOffHours, p.workStartMin, p.workEndMin)}
+                        {renderSlotLines(p.totalSlots, p.slotHeight, p.hideOffHours, p.workStartMin, p.workEndMin, p.mobileWeekZoom)}
                         {renderMeetingsWithOverlap(eventRenderProps, meetings.filter(m => {
                           if (p.dragMoveMeeting?.id !== m.id) return true;
                           const originalDate = parseRequestDateToDateStr(m.request_date) || '';
@@ -370,7 +377,7 @@ export function MultiDayView(p: CalendarViewProps) {
                           return (
                             <div
                               className="pointer-events-none absolute left-0.5 right-0.5 z-20 rounded-md border border-violet-500 bg-violet-500/15"
-                              style={{ top: `${start * p.slotHeight}px`, height: `${(end - start) * p.slotHeight}px` }}
+                              style={{ top: weekZoomPixels(start * p.slotHeight, p.mobileWeekZoom), height: weekZoomPixels((end - start) * p.slotHeight, p.mobileWeekZoom) }}
                             />
                           );
                         })()}
@@ -406,7 +413,7 @@ function renderCurrentTime(
   return (
     <div
       className="pointer-events-none absolute left-0 right-0"
-      style={{ top: `${top}px`, zIndex: 35 }}
+      style={{ top: weekZoomPixels(top, p.mobileWeekZoom), zIndex: 35 }}
       aria-hidden="true"
     >
       <div className="absolute left-0 right-0 h-[2px] -translate-y-1/2 bg-rose-400/55 shadow-[0_0_6px_rgba(244,63,94,0.24)] dark:bg-rose-500/45" />
@@ -426,7 +433,7 @@ function renderCurrentTimeDayOverlay(
   return (
     <div
       className="pointer-events-none absolute left-0 right-0"
-      style={{ top: `${top}px`, zIndex: 35 }}
+      style={{ top: weekZoomPixels(top, p.mobileWeekZoom), zIndex: 35 }}
       aria-hidden="true"
     >
       <div className="absolute left-0 right-0 h-[3px] -translate-y-1/2 bg-rose-500 shadow-[0_0_0_1px_rgba(255,255,255,0.8),0_0_10px_rgba(244,63,94,0.55)] dark:bg-rose-400 dark:shadow-[0_0_0_1px_rgba(15,23,42,0.85),0_0_10px_rgba(251,113,133,0.6)]" />
@@ -447,7 +454,7 @@ function renderCurrentTimeRailLabel(
   return (
     <div
       className="pointer-events-none absolute left-0 right-0 z-20 -translate-y-1/2 whitespace-nowrap text-center text-[9px] font-bold leading-none text-rose-500"
-      style={{ top: `${top}px` }}
+      style={{ top: weekZoomPixels(top, p.mobileWeekZoom) }}
     >
       {label}
     </div>

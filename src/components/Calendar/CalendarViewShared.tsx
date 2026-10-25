@@ -1,3 +1,4 @@
+import { weekZoomPixels } from './weekZoom';
 import React from 'react';
 import { Clock, MapPin, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -132,6 +133,7 @@ export function renderSlotLines(
   hideOffHours: boolean,
   workStartMin: number,
   workEndMin: number,
+  mobileWeekZoom = false,
 ) {
   const workStartSlot = workStartMin / 30;
   const workEndSlot = workEndMin / 30;
@@ -139,11 +141,11 @@ export function renderSlotLines(
     <div className="absolute inset-0 pointer-events-none">
       {!hideOffHours && workStartSlot > 0 && (
         <div className="absolute left-0 right-0 bg-gray-100/60 dark:bg-gray-800/60"
-          style={{ top: 0, height: `${workStartSlot * slotHeight}px` }} />
+          style={{ top: 0, height: weekZoomPixels(workStartSlot * slotHeight, mobileWeekZoom) }} />
       )}
       {!hideOffHours && workEndSlot < n && (
         <div className="absolute left-0 right-0 bg-gray-100/60 dark:bg-gray-800/60"
-          style={{ top: `${workEndSlot * slotHeight}px`, height: `${(n - workEndSlot) * slotHeight}px` }} />
+          style={{ top: weekZoomPixels(workEndSlot * slotHeight, mobileWeekZoom), height: weekZoomPixels((n - workEndSlot) * slotHeight, mobileWeekZoom) }} />
       )}
       {Array.from({ length: n }, (_, i) => (
         <div
@@ -151,7 +153,7 @@ export function renderSlotLines(
           className={`absolute left-0 right-0 ${i % 2 === 1
             ? 'border-b-2 border-slate-300/90 dark:border-slate-600/90'
             : 'border-b border-slate-200/90 dark:border-slate-700/90'}`}
-          style={{ top: `${(i + 1) * slotHeight}px` }}
+          style={{ top: weekZoomPixels((i + 1) * slotHeight, mobileWeekZoom) }}
         />
       ))}
     </div>
@@ -437,7 +439,7 @@ export function renderMeetingBlock(
   return (
     <div key={meeting.id}
       className={`absolute rounded-lg overflow-hidden select-none group ${delegateRing} ${isNested ? 'ring-[3px] ring-white dark:ring-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.35)] border-2 border-white/80 dark:border-gray-900/80' : 'border-2 border-white/60 dark:border-gray-900/60 shadow-sm'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
-      style={{ top: `${visualTop}px`, height: `${visualHeight}px`, backgroundColor: color, zIndex: (isBeingDragged || isBeingResized) ? 30 : blockZIndex, touchAction: isBeingDragged ? 'none' : 'pan-x pan-y', ...insetStyle, transition: (isBeingDragged || isBeingResized) ? 'none' : 'box-shadow 0.15s', ...ghostStyle }}
+      style={{ top: weekZoomPixels(visualTop, p.mobileWeekZoom), height: weekZoomPixels(visualHeight, p.mobileWeekZoom), backgroundColor: color, zIndex: (isBeingDragged || isBeingResized) ? 30 : blockZIndex, touchAction: isBeingDragged ? 'none' : 'pan-x pan-y', ...insetStyle, transition: (isBeingDragged || isBeingResized) ? 'none' : 'box-shadow 0.15s', ...ghostStyle }}
       onMouseDown={onBlockDown}
       onTouchStart={onBlockTouch}
       onTouchMove={onBlockTouchMove}
@@ -472,7 +474,7 @@ export function renderMeetingBlock(
         setDetailMeeting(meeting);
       }}
     >
-      <div className="px-2 py-1 h-full flex flex-col items-start overflow-hidden">
+      <div style={p.mobileWeekZoom ? { containerType: 'inline-size' } : undefined} className={p.mobileWeekZoom ? "calendar-week-card px-1 py-1 h-full flex flex-col items-start overflow-hidden" : "px-2 py-1 h-full flex flex-col items-start overflow-hidden"}>
         <div
           className={`text-white font-semibold ${isTiny ? 'truncate' : 'line-clamp-2'} flex-shrink-0`}
           style={titleStyle}
@@ -480,8 +482,20 @@ export function renderMeetingBlock(
         >
           {meeting.subject}
         </div>
+        {p.mobileWeekZoom && (
+          <div className="calendar-week-card-time text-[10px] leading-tight text-white/95">
+            {meeting.start_time?.slice(0, 5)}–{meeting.end_time?.slice(0, 5)}
+            <div className="calendar-week-card-details mt-1 space-y-1">
+              {meeting.location && <p>{meeting.location}</p>}
+              {meeting.representative && <p>{meeting.representative}</p>}
+              {meeting.phone && <p dir="ltr">{meeting.phone}</p>}
+              {meeting.notes && <p>{meeting.notes}</p>}
+              {(meeting.participant_user_ids || []).length > 0 && <p>{(meeting.participant_user_ids || []).map(p.resolveName).join('، ')}</p>}
+            </div>
+          </div>
+        )}
         {delegateLabel && !isTiny && visualHeight >= 40 && (
-          <div className="mt-0.5 max-w-full truncate rounded bg-black/20 px-1 py-0.5 text-[8px] font-medium leading-none text-white/95">
+          <div className="calendar-week-delegate mt-0.5 max-w-full truncate rounded bg-black/20 px-1 py-0.5 text-[8px] font-medium leading-none text-white/95">
             {delegateStatus === 'accepted' ? '✓ ' : delegateStatus === 'pending' ? '… ' : '! '}
             {delegateLabel}
           </div>
@@ -678,8 +692,8 @@ export function getOffHoursStyles(p: CalendarViewProps) {
   const { hideOffHours, visibleStartHour, visibleEndHour, slotHeight } = p;
   const offHoursWrapStyle = hideOffHours ? {
     overflow: 'hidden',
-    height: `${(visibleEndHour - visibleStartHour) * slotHeight * 2}px`,
+    height: weekZoomPixels((visibleEndHour - visibleStartHour) * slotHeight * 2, p.mobileWeekZoom),
   } : undefined;
-  const offHoursInnerStyle = hideOffHours ? { marginTop: `-${visibleStartHour * slotHeight * 2}px` } : undefined;
+  const offHoursInnerStyle = hideOffHours ? { marginTop: weekZoomPixels(-visibleStartHour * slotHeight * 2, p.mobileWeekZoom) } : undefined;
   return { offHoursWrapStyle, offHoursInnerStyle };
 }
