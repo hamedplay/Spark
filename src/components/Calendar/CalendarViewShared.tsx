@@ -11,6 +11,8 @@ import {
 import { CalendarViewProps, OverlapInfo } from './CalendarViewTypes';
 
 const MEETING_TOUCH_LONG_PRESS_MS = 1000;
+const MEETING_RESIZE_LONG_PRESS_MS = 1200;
+const meetingResizeMouseHolds = new Map<string, () => void>();
 const MEETING_TOUCH_MOVE_CANCEL_PX = 12;
 const MEETING_DOUBLE_TAP_MS = 320;
 type MeetingTouchHoldState = {
@@ -376,17 +378,54 @@ export function renderMeetingBlock(
     clearMeetingTouchHold(meeting.id);
   };
   const onResizeDown = (e: React.MouseEvent) => {
-    if (!canMove) return; e.stopPropagation(); e.preventDefault();
+    e.stopPropagation(); e.preventDefault();
+    if (!canMove || e.button !== 0) return;
     if ((meetingTouchSuppressClickUntil.get(meeting.id) || 0) > Date.now()
       || (e.nativeEvent as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
-    setResizeMeeting(meeting); setResizeStartY(e.clientY); setResizeOriginalEndSlot(endSlot); setResizeCurrentDelta(0);
+    meetingResizeMouseHolds.get(meeting.id)?.();
+    const pendingTap = meetingTouchSingleTapTimers.get(meeting.id);
+    if (pendingTap) window.clearTimeout(pendingTap);
+    meetingTouchSingleTapTimers.delete(meeting.id);
+    meetingTouchLastTapAt.delete(meeting.id);
+    const target = e.currentTarget;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let activated = false;
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('mousemove', cancelOnMove);
+      document.removeEventListener('mouseup', cleanup);
+      window.removeEventListener('blur', cancelOnBlur);
+      meetingResizeMouseHolds.delete(meeting.id);
+    };
+    const cancelOnMove = (event: MouseEvent) => {
+      if (!activated && Math.hypot(event.clientX - startX, event.clientY - startY) > MEETING_TOUCH_MOVE_CANCEL_PX) cleanup();
+    };
+    const cancelOnBlur = () => {
+      cleanup();
+      if (activated) { setResizeMeeting(null); setResizeCurrentDelta(0); }
+    };
+    const timer = window.setTimeout(() => {
+      if (!target.isConnected) { cleanup(); return; }
+      activated = true;
+      setResizeMeeting(meeting); setResizeStartY(startY);
+      setResizeOriginalEndSlot(endSlot); setResizeCurrentDelta(0);
+    }, MEETING_RESIZE_LONG_PRESS_MS);
+    meetingResizeMouseHolds.set(meeting.id, cleanup);
+    document.addEventListener('mousemove', cancelOnMove);
+    document.addEventListener('mouseup', cleanup);
+    window.addEventListener('blur', cancelOnBlur);
   };
   const onResizeTouch = (e: React.TouchEvent) => {
     e.stopPropagation();
     if (!canMove || e.touches.length !== 1) return;
 
     clearMeetingResizeTouchHold(meeting.id);
-    meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + MEETING_TOUCH_LONG_PRESS_MS + 700);
+    const pendingTap = meetingTouchSingleTapTimers.get(meeting.id);
+    if (pendingTap) window.clearTimeout(pendingTap);
+    meetingTouchSingleTapTimers.delete(meeting.id);
+    meetingTouchLastTapAt.delete(meeting.id);
+    meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + MEETING_RESIZE_LONG_PRESS_MS + 700);
     const t = e.touches[0];
     const startX = t.clientX;
     const startY = t.clientY;
@@ -405,7 +444,7 @@ export function renderMeetingBlock(
       setResizeStartY(startY);
       setResizeOriginalEndSlot(endSlot);
       setResizeCurrentDelta(0);
-    }, MEETING_TOUCH_LONG_PRESS_MS);
+    }, MEETING_RESIZE_LONG_PRESS_MS);
 
     meetingResizeTouchHoldStates.set(meeting.id, state);
   };
@@ -436,6 +475,11 @@ export function renderMeetingBlock(
   };
   const onResizeTouchCancel = (e: React.TouchEvent) => {
     e.stopPropagation();
+    if (meetingResizeTouchHoldStates.get(meeting.id)?.activated) {
+      setResizeMeeting(null);
+      setResizeCurrentDelta(0);
+    }
+    meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + 700);
     clearMeetingResizeTouchHold(meeting.id);
   };
 
@@ -524,6 +568,7 @@ export function renderMeetingBlock(
           onMouseDown={onResizeDown}
           onMouseUp={e => {
             e.stopPropagation();
+            meetingResizeMouseHolds.get(meeting.id)?.();
             if (resizeMeeting?.id === meeting.id) {
               document.dispatchEvent(new MouseEvent('mouseup', {
                 bubbles: false,
