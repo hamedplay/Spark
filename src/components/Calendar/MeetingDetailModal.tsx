@@ -44,7 +44,8 @@ export function MeetingDetailModal({
   const isManager = m.meeting_manager === currentUserId;
   const canEdit = isOwner || isManager;
   const isInformee = Boolean(currentUserId && ((m.notify_users || []) as string[]).includes(currentUserId));
-  const canAddParticipants = isOwner || isInformee;
+  const isListedParticipant = Boolean(currentUserId && (m.participant_user_ids || []).includes(currentUserId));
+  const canAddParticipants = isOwner || isInformee || isListedParticipant;
   const cal = [...calendars, ...subscribedCalendars].find(c => c.id === m.calendar_id);
 
   const [roomCode, setRoomCode] = useState<string | null>(null);
