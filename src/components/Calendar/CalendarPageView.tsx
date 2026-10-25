@@ -29,7 +29,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
     dragEndSlot, dragMoveCurrentDeltaDay, dragMoveCurrentDeltaSlot, dragMoveMeeting, dragMoveOriginalEndSlot, dragMoveOriginalSlot,
     dragMovedRef, dragStartSlot, editingCalendar, enabledCalendarIds, expandedMeetingId, fetchAllDayEvents,
     fetchMeetings, getAllDayEventsForDay, getMeetingColor, getMeetings, getNavTitle, getOccasionsForDay,
-    refreshCalendarToNow, goToToday, handleAddSubscription, handleBlockClick, handleCreateMeetingForDay, handleDeleteCalendar, handleDeleteMeeting,
+    refreshCalendarToNow, handleAddSubscription, handleBlockClick, handleCreateMeetingForDay, handleDeleteCalendar, handleDeleteMeeting,
     cancelTouchDrag, handleDeleteMeetingConfirm, handleEditMeeting, handleGridMouseDown, handleGridMouseMove, handleGridTouchMove, handleGridTouchStart,
     handleHourColTouchEnd, handleHourColTouchMove, handleHourColTouchStart, handleOpenSubscriptions, handleRemoveSubscription, handleSaveCalendar,
     handleSendToGoogleCalendar, handleShareFromDetail, handleToggleOccasions, handleUpdateSubPermission, hideOffHours, isDragging,
@@ -421,7 +421,6 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
             setShowMobileSidebar={setShowMobileSidebar}
             showDesktopSidebar={showDesktopSidebar}
             setShowDesktopSidebar={setShowDesktopSidebar}
-            goToToday={goToToday}
             searchRef={searchRef}
             showSearch={showSearch}
             setShowSearch={setShowSearch}

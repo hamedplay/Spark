@@ -38,7 +38,6 @@ export function CalendarToolbar(props: {
   setShowMobileSidebar: React.Dispatch<React.SetStateAction<boolean>>;
   showDesktopSidebar: boolean;
   setShowDesktopSidebar: React.Dispatch<React.SetStateAction<boolean>>;
-  goToToday: () => void;
   searchRef: React.RefObject<HTMLDivElement | null>;
   showSearch: boolean;
   setShowSearch: React.Dispatch<React.SetStateAction<boolean>>;
@@ -69,7 +68,6 @@ export function CalendarToolbar(props: {
   const {
     showMobileSidebar, setShowMobileSidebar,
     showDesktopSidebar, setShowDesktopSidebar,
-    goToToday,
     searchRef,
     showSearch, setShowSearch,
     searchInputRef,
@@ -174,15 +172,6 @@ export function CalendarToolbar(props: {
       aria-pressed={sidebarVisible}
     >
       <SidebarToggleIcon className={compactToolbar ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-    </button>
-  );
-
-  const todayButton = (
-    <button
-      onClick={goToToday}
-      className={`${compactToolbar ? 'h-7 px-2 text-[11px]' : 'h-8 px-3 text-xs'} flex-shrink-0 rounded-lg bg-violet-700 font-bold text-white shadow-sm transition-colors hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500`}
-    >
-      امروز
     </button>
   );
 
@@ -377,7 +366,6 @@ export function CalendarToolbar(props: {
       >
         <div className="flex min-w-0 items-center gap-1">
           {calendarSidebarButton}
-          {todayButton}
           {navigationControl}
           <h2 className="min-w-0 flex-1 truncate px-1 text-center text-[11px] font-bold text-slate-800 dark:text-white" title={getNavTitle()}>
             {toFarsiDigits(getNavTitle())}
@@ -400,7 +388,6 @@ export function CalendarToolbar(props: {
       className="relative z-[140] flex min-h-[38px] flex-shrink-0 items-center gap-1.5 overflow-visible border-b border-slate-200/80 bg-white/95 px-2 py-1 shadow-[0_1px_0_rgba(15,23,42,0.02)] dark:border-slate-800 dark:bg-slate-950/95"
     >
       {calendarSidebarButton}
-      {todayButton}
       {searchControl}
       {refreshButton}
       {navigationControl}
