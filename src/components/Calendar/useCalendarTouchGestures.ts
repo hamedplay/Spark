@@ -4,7 +4,7 @@ import type { CalendarViewProps } from './CalendarViewTypes';
 
 type CalendarDate = { jy: number; jm: number; jd: number };
 
-const LONG_PRESS_MS = 180;
+const LONG_PRESS_MS = 1000;
 const MOVE_CANCEL_PX = 12;
 const SWIPE_THRESHOLD_PX = 64;
 

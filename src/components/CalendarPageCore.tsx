@@ -827,20 +827,22 @@ export function CalendarPage({
 
   // Global move/resize handlers
   useEffect(() => {
-    const onMove = (clientX: number, clientY: number) => {
+    const onMove = (clientX: number, clientY: number, isTouch = false) => {
       if (dragMoveMeeting) {
-        const deltaSlot = Math.round((clientY - dragMoveStartY) / (slotHeight / 2)) * 0.5;
-        const deltaDay = viewMode === 'week' ? getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX) : 0;
+        const deliberate = !isTouch || Math.hypot(clientX - dragMoveStartX, clientY - dragMoveStartY) >= 10;
+        const deltaSlot = deliberate ? Math.round((clientY - dragMoveStartY) / (slotHeight / 2)) * 0.5 : 0;
+        const deltaDay = deliberate && viewMode === 'week' ? getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX) : 0;
         if (deltaSlot !== 0 || deltaDay !== 0) dragMovedRef.current = true;
         setDragMoveCurrentDeltaSlot(deltaSlot);
-        if (viewMode === 'week') setDragMoveCurrentDeltaDay(getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX));
+        if (viewMode === 'week') setDragMoveCurrentDeltaDay(deltaDay);
       }
-      if (resizeMeeting) setResizeCurrentDelta(Math.round((clientY - resizeStartY) / (slotHeight / 2)) * 0.5);
+      if (resizeMeeting) setResizeCurrentDelta(isTouch && Math.abs(clientY - resizeStartY) < 10 ? 0 : Math.round((clientY - resizeStartY) / (slotHeight / 2)) * 0.5);
     };
-    const onEnd = async (clientX: number, clientY: number) => {
+    const onEnd = async (clientX: number, clientY: number, isTouch = false) => {
       if (dragMoveMeeting) {
-        const deltaSlot = Math.round((clientY - dragMoveStartY) / (slotHeight / 2)) * 0.5;
-        const deltaDay = viewMode === 'week' ? getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX) : 0;
+        const deliberate = !isTouch || Math.hypot(clientX - dragMoveStartX, clientY - dragMoveStartY) >= 10;
+        const deltaSlot = deliberate ? Math.round((clientY - dragMoveStartY) / (slotHeight / 2)) * 0.5 : 0;
+        const deltaDay = deliberate && viewMode === 'week' ? getDayIndexFromX(clientX) - getDayIndexFromX(dragMoveStartX) : 0;
         if (deltaSlot !== 0 || deltaDay !== 0) {
           const ns = dragMoveOriginalSlot + deltaSlot;
           const ne = dragMoveOriginalEndSlot + deltaSlot;
@@ -859,7 +861,7 @@ export function CalendarPage({
         setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0);
       }
       if (resizeMeeting) {
-        const delta = Math.round((clientY - resizeStartY) / (slotHeight / 2)) * 0.5;
+        const delta = isTouch && Math.abs(clientY - resizeStartY) < 10 ? 0 : Math.round((clientY - resizeStartY) / (slotHeight / 2)) * 0.5;
         if (delta !== 0) {
           const ne = resizeOriginalEndSlot + delta;
           const ss = timeToMinutes(resizeMeeting.start_time) / 30;
@@ -872,8 +874,8 @@ export function CalendarPage({
     };
     const mm = (e: MouseEvent) => onMove(e.clientX, e.clientY);
     const mu = (e: MouseEvent) => onEnd(e.clientX, e.clientY);
-    const tm = (e: TouchEvent) => { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY); };
-    const tu = (e: TouchEvent) => onEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+    const tm = (e: TouchEvent) => { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY, true); };
+    const tu = (e: TouchEvent) => onEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY, true);
     if (dragMoveMeeting || resizeMeeting) {
       document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
       document.addEventListener('touchmove', tm, { passive: false }); document.addEventListener('touchend', tu);
@@ -900,7 +902,8 @@ export function CalendarPage({
   // New-meeting drag handlers
   const handleGridMouseDown = (e: React.MouseEvent, jy: number, jm: number, jd: number) => {
     const el = getActiveGridEl();
-    if (e.button !== 0 || !el) return;
+    if (e.button !== 0 || !el
+      || (e.nativeEvent as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
     const slot = getSlotFromY(e.clientY, el);
     if (slot === null) return;
     setIsDragging(true); setDragStartSlot(slot); setDragEndSlot(slot); setDragDate({ jy, jm, jd });

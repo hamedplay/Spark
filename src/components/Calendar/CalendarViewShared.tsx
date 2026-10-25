@@ -10,7 +10,7 @@ import {
 } from './utils';
 import { CalendarViewProps, OverlapInfo } from './CalendarViewTypes';
 
-const MEETING_TOUCH_LONG_PRESS_MS = 500;
+const MEETING_TOUCH_LONG_PRESS_MS = 1000;
 const MEETING_TOUCH_MOVE_CANCEL_PX = 12;
 const MEETING_DOUBLE_TAP_MS = 320;
 type MeetingTouchHoldState = {
@@ -274,6 +274,8 @@ export function renderMeetingBlock(
 
   const onBlockDown = (e: React.MouseEvent) => {
     e.stopPropagation(); e.preventDefault();
+    if ((meetingTouchSuppressClickUntil.get(meeting.id) || 0) > Date.now()
+      || (e.nativeEvent as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
     if (!canMove || !origDateStr) return;
     dragMovedRef.current = false;
     setPreviewMeeting(null);
@@ -287,6 +289,10 @@ export function renderMeetingBlock(
     if (e.touches.length !== 1) return;
 
     clearMeetingTouchHold(meeting.id);
+    meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + MEETING_TOUCH_LONG_PRESS_MS + 700);
+    const pendingTap = meetingTouchSingleTapTimers.get(meeting.id);
+    if (pendingTap) window.clearTimeout(pendingTap);
+    meetingTouchSingleTapTimers.delete(meeting.id);
     const t = e.touches[0];
     const startX = t.clientX;
     const startY = t.clientY;
@@ -371,6 +377,8 @@ export function renderMeetingBlock(
   };
   const onResizeDown = (e: React.MouseEvent) => {
     if (!canMove) return; e.stopPropagation(); e.preventDefault();
+    if ((meetingTouchSuppressClickUntil.get(meeting.id) || 0) > Date.now()
+      || (e.nativeEvent as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
     setResizeMeeting(meeting); setResizeStartY(e.clientY); setResizeOriginalEndSlot(endSlot); setResizeCurrentDelta(0);
   };
   const onResizeTouch = (e: React.TouchEvent) => {
@@ -378,6 +386,7 @@ export function renderMeetingBlock(
     if (!canMove || e.touches.length !== 1) return;
 
     clearMeetingResizeTouchHold(meeting.id);
+    meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + MEETING_TOUCH_LONG_PRESS_MS + 700);
     const t = e.touches[0];
     const startX = t.clientX;
     const startY = t.clientY;
