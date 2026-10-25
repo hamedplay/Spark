@@ -1,3 +1,5 @@
+import { mobileZoomDayCount } from './Calendar/weekZoom';
+import { focusCalendarNow } from './Calendar/focusCalendarNow';
 import { weekDayIndex } from './Calendar/weekInteraction';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { usePermissions } from '../context/PermissionsContext';
@@ -305,7 +307,7 @@ export function CalendarPage({
   // Adjustable slot height (px per 30-min slot) — wheel/pinch on hour column
   const [slotHeight, setSlotHeight] = useState(SLOT_HEIGHT);
   const adjustSlotHeight = (delta: number) => {
-    const minimum = viewMode === 'week' && window.matchMedia('(max-width: 767px)').matches ? 4 : 20;
+    const minimum = mobileZoomDayCount(viewMode) > 0 && window.matchMedia('(max-width: 767px)').matches ? 4 : 20;
     setSlotHeight(prev => Math.min(120, Math.max(minimum, prev + delta)));
   };
 
@@ -786,7 +788,7 @@ export function CalendarPage({
     );
   }, [occasions, toHijri, occasionsEnabled]);
 
-  const todayJ = useMemo(() => toJalaali(new Date()), []);
+  const todayJ = useMemo(() => toJalaali(currentTime), [currentTime]);
   const isToday = (jy: number, jm: number, jd: number) => jy === todayJ.jy && jm === todayJ.jm && jd === todayJ.jd;
   const isSelected = (jy: number, jm: number, jd: number) => jy === selectedJy && jm === selectedJm && jd === selectedJd;
 
@@ -798,6 +800,27 @@ export function CalendarPage({
     setCurrentJm, setCurrentJy, setSelectedJd, setSelectedJm, setSelectedJy, setSidebarJm,
     setSidebarJy, sidebarJm, sidebarJy, viewMode
   });
+
+  const [focusNowRequest, setFocusNowRequest] = useState(0);
+  const focusGeometry = useRef({ mode: viewMode, height: slotHeight, startHour: hideOffHours ? visibleStartHour : 0 });
+  focusGeometry.current = { mode: viewMode, height: slotHeight, startHour: hideOffHours ? visibleStartHour : 0 };
+  const refreshCalendarToNow = async () => {
+    goToToday();
+    await fetchMeetings();
+    goToToday();
+    setCurrentTime(new Date());
+    setFocusNowRequest(value => value + 1);
+  };
+  useEffect(() => {
+    if (!focusNowRequest) return;
+    // Allow the view's initial date positioning to finish before explicit focus.
+    const timer = window.setTimeout(() => {
+      const geometry = focusGeometry.current;
+      focusCalendarNow(geometry.mode, document.querySelector<HTMLElement>('[data-calendar-page]'),
+        timeScrollRef.current, listScrollRef.current, new Date(), geometry.height, geometry.startHour);
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [focusNowRequest]);
 
   // ---- Drag/grid helpers ----
   // Returns the correct inner grid element for slot-from-Y calculations.
@@ -818,21 +841,22 @@ export function CalendarPage({
 
   const getDayIndexFromX = (x: number): number => {
     const grid = weekGridRef.current?.querySelector<HTMLElement>('[data-calendar-day-grid]');
-    return grid ? weekDayIndex(x, grid.getBoundingClientRect()) : 0;
+    return grid ? weekDayIndex(x, grid.getBoundingClientRect(), grid.querySelectorAll('[data-calendar-column-date]').length || 7) : 0;
   };
 
   // Global move/resize handlers
   useEffect(() => {
-    const originalDay = weekDays.findIndex(day => jalaaliToYYYYMMDD(day.jy, day.jm, day.jd) === dragMoveOriginalDate);
+    const originalDay = Array.from(weekGridRef.current?.querySelectorAll<HTMLElement>('[data-calendar-column-date]') || [])
+      .findIndex(column => column.dataset.calendarColumnDate === dragMoveOriginalDate);
     const originDay = originalDay >= 0 ? originalDay : getDayIndexFromX(dragMoveStartX);
     const onMove = (clientX: number, clientY: number, isTouch = false) => {
       if (dragMoveMeeting) {
         const deliberate = !isTouch || Math.hypot(clientX - dragMoveStartX, clientY - dragMoveStartY) >= 10;
         const deltaSlot = deliberate ? Math.round((clientY - dragMoveStartY) / (slotHeight / 2)) * 0.5 : 0;
-        const deltaDay = deliberate && viewMode === 'week' ? getDayIndexFromX(clientX) - originDay : 0;
+        const deltaDay = deliberate && mobileZoomDayCount(viewMode) > 0 ? getDayIndexFromX(clientX) - originDay : 0;
         if (deltaSlot !== 0 || deltaDay !== 0) dragMovedRef.current = true;
         setDragMoveCurrentDeltaSlot(deltaSlot);
-        if (viewMode === 'week') setDragMoveCurrentDeltaDay(deltaDay);
+        if (mobileZoomDayCount(viewMode) > 0) setDragMoveCurrentDeltaDay(deltaDay);
       }
       if (resizeMeeting) setResizeCurrentDelta(isTouch && Math.abs(clientY - resizeStartY) < 10 ? 0 : Math.round((clientY - resizeStartY) / (slotHeight / 2)) * 0.5);
     };
@@ -842,13 +866,13 @@ export function CalendarPage({
       if (dragMoveMeeting) {
         const deliberate = !isTouch || Math.hypot(clientX - dragMoveStartX, clientY - dragMoveStartY) >= 10;
         const deltaSlot = deliberate ? Math.round((clientY - dragMoveStartY) / (slotHeight / 2)) * 0.5 : 0;
-        const deltaDay = deliberate && viewMode === 'week' ? getDayIndexFromX(clientX) - originDay : 0;
+        const deltaDay = deliberate && mobileZoomDayCount(viewMode) > 0 ? getDayIndexFromX(clientX) - originDay : 0;
         if (deltaSlot !== 0 || deltaDay !== 0) {
           const ns = dragMoveOriginalSlot + deltaSlot;
           const ne = dragMoveOriginalEndSlot + deltaSlot;
           if (ns >= 0 && ne <= (HOURS_END - HOURS_START) * 2) {
             let newDate = dragMoveOriginalDate;
-            if (deltaDay !== 0 && viewMode === 'week' && dragMoveOriginalDate) {
+            if (deltaDay !== 0 && mobileZoomDayCount(viewMode) > 0 && dragMoveOriginalDate) {
               const origDate = new Date(dragMoveOriginalDate + 'T00:00:00');
               origDate.setDate(origDate.getDate() + deltaDay);
               newDate = `${origDate.getFullYear()}-${String(origDate.getMonth() + 1).padStart(2, '0')}-${String(origDate.getDate()).padStart(2, '0')}`;
@@ -899,7 +923,7 @@ export function CalendarPage({
       setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0);
       setResizeMeeting(null); setResizeCurrentDelta(0);
     };
-    if (dragMoveMeeting && viewMode === 'week') autoScrollFrame = requestAnimationFrame(autoScroll);
+    if (dragMoveMeeting && mobileZoomDayCount(viewMode) > 0) autoScrollFrame = requestAnimationFrame(autoScroll);
     if (dragMoveMeeting || resizeMeeting) {
       document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu);
       document.addEventListener('touchmove', tm, { passive: false }); document.addEventListener('touchend', tu);
@@ -1185,7 +1209,7 @@ export function CalendarPage({
       dragEndSlot, dragMoveCurrentDeltaDay, dragMoveCurrentDeltaSlot, dragMoveMeeting, dragMoveOriginalEndSlot, dragMoveOriginalSlot,
       dragMovedRef, dragStartSlot, editingCalendar, enabledCalendarIds, expandedMeetingId, fetchAllDayEvents,
       fetchMeetings, getAllDayEventsForDay, getMeetingColor, getMeetings, getNavTitle, getOccasionsForDay,
-      goToToday, handleAddSubscription, handleBlockClick, handleCreateMeetingForDay, handleDeleteCalendar, handleDeleteMeeting,
+      refreshCalendarToNow, goToToday, handleAddSubscription, handleBlockClick, handleCreateMeetingForDay, handleDeleteCalendar, handleDeleteMeeting,
       cancelTouchDrag: () => { setIsDragging(false); setDragStartSlot(null); setDragEndSlot(null); },
       handleDeleteMeetingConfirm, handleEditMeeting, handleGridMouseDown, handleGridMouseMove, handleGridTouchMove, handleGridTouchStart,
       handleHourColTouchEnd, handleHourColTouchMove, handleHourColTouchStart, handleOpenSubscriptions, handleRemoveSubscription, handleSaveCalendar,

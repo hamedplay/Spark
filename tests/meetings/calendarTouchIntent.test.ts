@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import test from 'node:test';
+import { mobileZoomDayCount } from '../../src/components/Calendar/weekZoom';
 
 const source = readFileSync(new URL('../../src/components/CalendarPageCore.tsx', import.meta.url), 'utf8');
 function handlers(resize: boolean) {
@@ -10,6 +11,7 @@ function handlers(resize: boolean) {
   let pending = 0;
   let visualDelta = 0;
   const dependencies: Record<string, unknown> = {
+    mobileZoomDayCount,
     dragMoveMeeting: resize ? null : { id: 'meeting' }, resizeMeeting: resize ? { id: 'meeting', start_time: '07:00' } : null,
     dragMoveStartX: 100, dragMoveStartY: 100, resizeStartY: 100,
     slotHeight: 8, viewMode: 'week', originDay: 0, getDayIndexFromX: () => 0,

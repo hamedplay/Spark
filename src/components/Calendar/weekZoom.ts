@@ -9,3 +9,5 @@ export function fitWeekSlotHeight(height: number, startMinute: number, endMinute
   if (height <= 0 || endMinute <= startMinute) return null;
   return Math.max(4, Math.min(120, height / ((endMinute - startMinute) / 30)));
 }
+
+export const mobileZoomDayCount = (mode: string) => mode === 'week' ? 7 : mode === '3-day' ? 3 : mode === '4-day' ? 4 : 0;

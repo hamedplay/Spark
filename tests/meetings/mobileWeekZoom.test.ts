@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import test from 'node:test';
-import { clampWeekZoom, weekZoomHeight, weekZoomPixels, fitWeekSlotHeight } from '../../src/components/Calendar/weekZoom';
+import { clampWeekZoom, weekZoomHeight, weekZoomPixels, fitWeekSlotHeight, mobileZoomDayCount } from '../../src/components/Calendar/weekZoom';
 
 // Exercise the actual native event handlers with a deterministic frame scheduler.
 // No live authentication or meeting writes are needed for the gesture lifecycle.
@@ -138,4 +138,16 @@ test('magnifier commands zoom both day widths and time height and reverse cleanl
   assert.equal(f.result().stateCommits, commits);
   f.cleanup();
   assert.equal(f.commands.size, 0);
+});
+
+
+test('three-day and four-day views share fit-width mobile zoom with the weekly view', () => {
+  for (const [mode, count] of [['3-day', 3], ['4-day', 4], ['week', 7]] as const) {
+    assert.equal(mobileZoomDayCount(mode), count);
+    for (const width of [320, 390, 430]) {
+      const dayWidth = (width - 56) / mobileZoomDayCount(mode);
+      assert.ok(Math.abs(56 + dayWidth * count - width) < 0.000001);
+    }
+  }
+  for (const mode of ['day', 'month', 'year', 'schedule']) assert.equal(mobileZoomDayCount(mode), 0);
 });

@@ -10,7 +10,7 @@ import { CalendarViewProps } from './CalendarViewTypes';
 
 export function YearView(p: CalendarViewProps) {
   return (
-    <div className="mx-2 mb-2 mt-1 flex-1 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3 sm:p-4">
+    <div className="mx-2 mb-2 mt-1 flex-1 overflow-y-auto rounded-3xl border border-slate-200/80 bg-white p-3 shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3 sm:p-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {JALAALI_MONTHS.map((name, index) => {
           const jm = index + 1;
@@ -48,7 +48,7 @@ export function YearView(p: CalendarViewProps) {
                   const hasMeeting = p.getMeetings(p.currentJy, jm, day).length > 0;
                   return (
                     <button
-                      key={`${jm}-${day}`}
+                      key={`${jm}-${day}`} data-calendar-today={today || undefined}
                       type="button"
                       onClick={() => {
                         p.setSelectedJy(p.currentJy);

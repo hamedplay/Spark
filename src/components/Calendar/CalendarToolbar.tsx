@@ -255,8 +255,8 @@ export function CalendarToolbar(props: {
       onClick={() => fetchMeetings()}
       disabled={isRefreshing}
       className={`${iconButton} border-slate-200 bg-white text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10`}
-      title="بروزرسانی"
-      aria-label="بروزرسانی تقویم"
+      title="بروزرسانی و رفتن به امروز"
+      aria-label="بروزرسانی تقویم و رفتن به زمان فعلی"
     >
       <RefreshCw className={`${compactToolbar ? 'h-3.5 w-3.5' : 'h-4 w-4'} ${isRefreshing ? 'animate-spin' : ''}`} />
     </button>

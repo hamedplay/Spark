@@ -1,3 +1,4 @@
+import { mobileZoomDayCount } from './weekZoom';
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarViewProps } from './CalendarViewTypes';
@@ -18,7 +19,7 @@ export function CalendarViews(p: CalendarViewProps) {
     const onZoom = (event: Event) => {
       const delta = Number((event as CustomEvent<{ delta?: number }>).detail?.delta || 0);
       if (!delta) return;
-      if (p.viewMode === 'week' && window.matchMedia('(max-width: 767px)').matches) {
+      if (mobileZoomDayCount(p.viewMode) > 0 && window.matchMedia('(max-width: 767px)').matches) {
         window.dispatchEvent(new CustomEvent('spark-calendar-mobile-week-zoom', { detail: { delta } }));
       } else p.adjustSlotHeight(delta);
     };

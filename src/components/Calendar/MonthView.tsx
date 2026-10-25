@@ -10,7 +10,7 @@ export function MonthView(p: CalendarViewProps) {
   } = p;
 
   return (
-    <div className="mx-2 mb-2 mt-1 flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3">
+    <div className="mx-2 mb-2 mt-1 flex flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3">
       <div className="grid flex-shrink-0 grid-cols-7 border-b border-slate-200/80 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/70">
         {JALAALI_WEEKDAYS.map((d, i) => (
           <div key={d} className={`py-2 text-center text-[10px] sm:text-[11px] ${i === 6 ? 'font-bold text-rose-700 dark:text-rose-300' : 'text-slate-700 dark:text-slate-300'}`}>{d}</div>
@@ -34,6 +34,7 @@ export function MonthView(p: CalendarViewProps) {
             return (
               <div
                 key={day}
+                data-calendar-today={isTd || undefined}
                 onClick={e => {
                   setSelectedJy(currentJy); setSelectedJm(currentJm); setSelectedJd(day);
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -107,7 +108,7 @@ export function MonthView(p: CalendarViewProps) {
                     return (
                       <div
                         key={m.id}
-                        className={`truncate rounded-md px-1 py-0.5 text-[8px] font-medium leading-tight text-white shadow-sm sm:px-1.5 sm:text-[10px] ${delegateRing}`}
+                        className={`truncate rounded-lg px-1 py-0.5 text-[8px] font-medium leading-tight text-white shadow-sm sm:px-1.5 sm:text-[10px] ${delegateRing}`}
                         style={{ backgroundColor: c }}
                         title={delegateTitle ? `${m.subject} — ${delegateTitle}` : m.subject}
                       >

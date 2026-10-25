@@ -1,5 +1,5 @@
 import { useMobileWeekZoom } from './useMobileWeekZoom';
-import { weekZoomPixels } from './weekZoom';
+import { weekZoomPixels, mobileZoomDayCount } from './weekZoom';
 import React, { useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -136,7 +136,7 @@ export function MultiDayView(input: CalendarViewProps) {
     e: React.MouseEvent,
     day: { jy: number; jm: number; jd: number },
   ) => {
-    if (!p.dragMoveMeeting || p.viewMode === 'week') return false;
+    if (!p.dragMoveMeeting || mobileZoomDayCount(p.viewMode) > 0) return false;
 
     e.stopPropagation();
     e.nativeEvent.stopImmediatePropagation?.();
@@ -177,7 +177,7 @@ export function MultiDayView(input: CalendarViewProps) {
     : p;
 
   return (
-    <div className="mx-2 mb-2 mt-1 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3">
+    <div className="mx-2 mb-2 mt-1 flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-950 dark:shadow-none sm:mx-3 sm:mb-3">
       <div
         data-mobile-week={zoom.enabled || undefined}
         className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -204,6 +204,7 @@ export function MultiDayView(input: CalendarViewProps) {
                   <div
                     key={`header-${d.jy}-${d.jm}-${d.jd}`}
                     data-calendar-day={`${d.jy}-${d.jm}-${d.jd}`}
+                    data-calendar-today={p.isToday(d.jy, d.jm, d.jd) || undefined}
                     className={`border-r-2 border-slate-300/90 py-1.5 text-center dark:border-slate-600/90 sm:py-2 ${p.isToday(d.jy, d.jm, d.jd)
                       ? 'bg-violet-50/45 dark:bg-violet-500/[0.06]'
                       : d.weekday % 2 === 0
@@ -351,6 +352,7 @@ export function MultiDayView(input: CalendarViewProps) {
                     return (
                       <div
                         key={`grid-${d.jy}-${d.jm}-${d.jd}`}
+                        data-calendar-column-date={jalaaliToYYYYMMDD(d.jy, d.jm, d.jd)}
                         className={`relative select-none border-r-2 border-slate-300/90 dark:border-slate-600/90 ${p.isToday(d.jy, d.jm, d.jd)
                           ? 'bg-violet-50/25 dark:bg-violet-500/[0.035]'
                           : d.weekday % 2 === 0

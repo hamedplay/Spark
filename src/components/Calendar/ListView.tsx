@@ -43,7 +43,7 @@ export function ListView(p: CalendarViewProps) {
               const getNameById = (id: string) => resolveName(id);
 
               return (
-                <div key={m.id} className={`overflow-hidden rounded-xl border bg-white transition-all dark:bg-slate-900 ${isExp
+                <div key={m.id} data-calendar-meeting data-start-time={m.start_time || ''} data-end-time={m.end_time || ''} className={`overflow-hidden rounded-xl border bg-white transition-all dark:bg-slate-900 ${isExp
                   ? 'border-violet-200 shadow-[0_10px_25px_rgba(124,58,237,0.08)] dark:border-violet-500/25'
                   : 'border-slate-200/80 shadow-[0_4px_14px_rgba(15,23,42,0.03)] hover:border-slate-300 hover:shadow-[0_8px_20px_rgba(15,23,42,0.06)] dark:border-slate-800 dark:hover:border-slate-700'}`}
                 >

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CalendarViewProps } from './CalendarViewTypes';
-import { clampWeekZoom, weekZoomHeight, fitWeekSlotHeight } from './weekZoom';
+import { clampWeekZoom, weekZoomHeight, fitWeekSlotHeight, mobileZoomDayCount } from './weekZoom';
 
 // Only resize events and completed pinches enter React. Touch moves update two
 // inherited CSS variables at most once per animation frame, without rerendering meetings.
@@ -11,8 +11,10 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
   const live = useRef(p);
   live.current = p;
   const committed = useRef(1);
-  const enabled = p.viewMode === 'week' && width > 0 && width < 768
+  const dayCount = mobileZoomDayCount(p.viewMode);
+  const enabled = dayCount > 0 && width > 0 && width < 768
     && window.matchMedia('(max-width: 767px)').matches;
+  useLayoutEffect(() => { setZoom(1); }, [p.viewMode]);
   useLayoutEffect(() => {
     committed.current = zoom;
     const el = p.timeScrollRef.current;
@@ -181,5 +183,5 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
     };
   }, [enabled, p.timeScrollRef]);
 
-  return { enabled, zoom, dayWidth: Math.max(1, (width - 56) / 7) * zoom };
+  return { enabled, zoom, dayWidth: Math.max(1, (width - 56) / Math.max(1, dayCount)) * zoom };
 }

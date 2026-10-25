@@ -1,5 +1,5 @@
 import { weekDragInsets } from './weekInteraction';
-import { weekZoomPixels } from './weekZoom';
+import { weekZoomPixels, mobileZoomDayCount } from './weekZoom';
 import React from 'react';
 import { Clock, MapPin, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -485,13 +485,13 @@ export function renderMeetingBlock(
   };
 
   let ghostStyle: React.CSSProperties = {};
-  if (isBeingDragged && viewMode === 'week' && dragMoveCurrentDeltaDay !== 0) {
+  if (isBeingDragged && mobileZoomDayCount(viewMode) > 0 && dragMoveCurrentDeltaDay !== 0) {
     ghostStyle = weekDragInsets(dragMoveCurrentDeltaDay, leftPct, widthPct, GUTTER);
   }
 
   return (
     <div key={meeting.id}
-      className={`absolute rounded-lg overflow-hidden select-none group ${delegateRing} ${isNested ? 'ring-[3px] ring-white dark:ring-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.35)] border-2 border-white/80 dark:border-gray-900/80' : 'border-2 border-white/60 dark:border-gray-900/60 shadow-sm'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
+      className={`absolute rounded-xl overflow-hidden select-none group ${delegateRing} ${isNested ? 'ring-[3px] ring-white dark:ring-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.35)] border-2 border-white/80 dark:border-gray-900/80' : 'border-2 border-white/60 dark:border-gray-900/60 shadow-sm'} ${(isBeingDragged || isBeingResized) ? 'shadow-2xl opacity-90 cursor-grabbing' : canMove ? 'cursor-grab hover:shadow-xl' : 'cursor-pointer hover:shadow-xl'} transition-shadow`}
       style={{ top: weekZoomPixels(visualTop, p.mobileWeekZoom), height: weekZoomPixels(visualHeight, p.mobileWeekZoom), backgroundColor: color, zIndex: (isBeingDragged || isBeingResized) ? 30 : blockZIndex, touchAction: isBeingDragged ? 'none' : 'pan-x pan-y', ...insetStyle, transition: (isBeingDragged || isBeingResized) ? 'none' : 'box-shadow 0.15s', ...ghostStyle }}
       onMouseDown={onBlockDown}
       onTouchStart={onBlockTouch}

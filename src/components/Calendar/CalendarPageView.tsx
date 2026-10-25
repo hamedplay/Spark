@@ -29,7 +29,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
     dragEndSlot, dragMoveCurrentDeltaDay, dragMoveCurrentDeltaSlot, dragMoveMeeting, dragMoveOriginalEndSlot, dragMoveOriginalSlot,
     dragMovedRef, dragStartSlot, editingCalendar, enabledCalendarIds, expandedMeetingId, fetchAllDayEvents,
     fetchMeetings, getAllDayEventsForDay, getMeetingColor, getMeetings, getNavTitle, getOccasionsForDay,
-    goToToday, handleAddSubscription, handleBlockClick, handleCreateMeetingForDay, handleDeleteCalendar, handleDeleteMeeting,
+    refreshCalendarToNow, goToToday, handleAddSubscription, handleBlockClick, handleCreateMeetingForDay, handleDeleteCalendar, handleDeleteMeeting,
     cancelTouchDrag, handleDeleteMeetingConfirm, handleEditMeeting, handleGridMouseDown, handleGridMouseMove, handleGridTouchMove, handleGridTouchStart,
     handleHourColTouchEnd, handleHourColTouchMove, handleHourColTouchStart, handleOpenSubscriptions, handleRemoveSubscription, handleSaveCalendar,
     handleSendToGoogleCalendar, handleShareFromDetail, handleToggleOccasions, handleUpdateSubPermission, hideOffHours, isDragging,
@@ -58,7 +58,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
     workStartMin
   } = model;
   return (
-    <div className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
+    <div data-calendar-page className="flex h-full bg-gray-50 dark:bg-gray-900 overflow-hidden" dir="rtl">
 
       {/* Reminder alert */}
       {reminderAlert && (
@@ -432,7 +432,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
             navigateToMeeting={navigateToMeeting}
             parseRequestDateToDateStr={parseRequestDateToDateStr}
             isRefreshing={isRefreshing}
-            fetchMeetings={fetchMeetings}
+            fetchMeetings={refreshCalendarToNow}
             navigatePrev={navigatePrev}
             navigateNext={navigateNext}
             getNavTitle={getNavTitle}

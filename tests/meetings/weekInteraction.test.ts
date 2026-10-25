@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mobileZoomDayCount } from '../../src/components/Calendar/weekZoom';
 import { weekDayIndex, weekDragInsets } from '../../src/components/Calendar/weekInteraction';
 
 for (const dayWidth of [38, 112, 224, 304]) {
@@ -37,6 +38,7 @@ test('edge drag scrolls the zoomed week and retains the original day when confir
     getBoundingClientRect: () => ({ left: 0, right: 390 }),
   };
   const dependencies = {
+    mobileZoomDayCount, weekGridRef: { current: { querySelectorAll: () => [{ dataset: { calendarColumnDate: '2026-10-26' } }] } },
     weekDays: [{ jy: 1405, jm: 8, jd: 4 }], jalaaliToYYYYMMDD: () => '2026-10-26',
     getDayIndexFromX: (x: number) => weekDayIndex(x, { right: 334 - scroll, width: 700 }),
     dragMoveMeeting: { id: 'meeting' }, resizeMeeting: null,
