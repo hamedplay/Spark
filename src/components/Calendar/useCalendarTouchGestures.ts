@@ -1,3 +1,4 @@
+import { beginCalendarPinch, endCalendarPinch } from './calendarCardGestures';
 import { useCallback, useEffect, useRef } from 'react';
 import type React from 'react';
 import type { CalendarViewProps } from './CalendarViewTypes';
@@ -61,6 +62,7 @@ export function useCalendarTouchGestures(p: CalendarViewProps, enableHorizontalN
     clearHoldTimer();
 
     if (e.touches.length === 2) {
+      beginCalendarPinch();
       startRef.current = null;
       longPressActiveRef.current = false;
       pinchActiveRef.current = true;
@@ -88,6 +90,7 @@ export function useCalendarTouchGestures(p: CalendarViewProps, enableHorizontalN
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
+      if (!pinchActiveRef.current) beginCalendarPinch();
       clearHoldTimer();
       startRef.current = null;
       longPressActiveRef.current = false;
@@ -131,6 +134,7 @@ export function useCalendarTouchGestures(p: CalendarViewProps, enableHorizontalN
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     clearHoldTimer();
+    if (e.touches.length === 0) endCalendarPinch();
 
     if (pinchActiveRef.current) {
       p.handleHourColTouchEnd();
@@ -150,6 +154,7 @@ export function useCalendarTouchGestures(p: CalendarViewProps, enableHorizontalN
   }, [clearHoldTimer, p, resetGesture]);
 
   const handleTouchCancel = useCallback(() => {
+    endCalendarPinch();
     if (pinchActiveRef.current) p.handleHourColTouchEnd();
     resetGesture();
   }, [p, resetGesture]);

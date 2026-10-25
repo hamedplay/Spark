@@ -1,3 +1,4 @@
+import { beginCalendarPinch, endCalendarPinch } from './calendarCardGestures';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CalendarViewProps } from './CalendarViewTypes';
 import { clampWeekZoom, weekZoomHeight, fitWeekSlotHeight, mobileZoomDayCount } from './weekZoom';
@@ -81,9 +82,11 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
       if (event.touches.length !== 2) {
         return;
       }
+      beginCalendarPinch();
       // Cancel a first-finger long press before claiming the two-finger gesture.
       event.target?.dispatchEvent(new Event('touchcancel', { bubbles: true }));
       const props = live.current;
+      props.setPreviewMeeting(null);
       props.setDragMoveMeeting(null);
       props.setResizeMeeting(null);
       props.setAllDayDragging(false);
@@ -135,6 +138,7 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
       }
       suppressUntil = Date.now() + 400;
       if (event.type === 'touchcancel' || event.touches.length === 0) {
+        endCalendarPinch();
         draining = false;
         delete el.dataset.weekPinching;
       }
@@ -171,6 +175,7 @@ export function useMobileWeekZoom(p: CalendarViewProps) {
     el.addEventListener('click', click, true);
     return () => {
       if (frame) cancelAnimationFrame(frame);
+      endCalendarPinch();
       window.removeEventListener('spark-calendar-mobile-week-zoom', step);
       el.removeEventListener('touchstart', start, true);
       el.removeEventListener('touchmove', move, true);

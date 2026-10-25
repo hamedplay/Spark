@@ -9,6 +9,7 @@ import { clampWeekZoom, weekZoomHeight, weekZoomPixels, fitWeekSlotHeight, mobil
 function fixture(enabled = true) {
   const listeners = new Map<string, Function>();
   const commands = new Map<string, Function>();
+  const pinchLifecycle: string[] = [];
   const committed = { current: 1 };
   const variables = new Map<string, string>();
   const frames = new Map<number, Function>();
@@ -28,7 +29,7 @@ function fixture(enabled = true) {
   };
   const props = {
     slotHeight, timeScrollRef: { current: el },
-    setDragMoveMeeting: () => {}, setResizeMeeting: () => {}, setAllDayDragging: () => {},
+    setPreviewMeeting: () => {}, setDragMoveMeeting: () => {}, setResizeMeeting: () => {}, setAllDayDragging: () => {},
     cancelTouchDrag: () => { cancelledDrags++; }, handleHourColTouchEnd: () => {},
     adjustSlotHeight: (delta: number) => { slotHeight += delta; },
   };
@@ -36,18 +37,18 @@ function fixture(enabled = true) {
   const start = src.indexOf('  useEffect(() => {\n    const el = p.timeScrollRef.current;\n    if (!el || !enabled)');
   const end = src.indexOf('\n\n  return { enabled', start);
   const code = stripTypeScriptTypes(src.slice(start, end), { mode: 'transform' });
-  new Function('p', 'enabled', 'live', 'committed', 'setZoom', 'useEffect', 'requestAnimationFrame', 'cancelAnimationFrame', 'clampWeekZoom', 'weekZoomHeight', 'window', code)(
+  new Function('p', 'enabled', 'live', 'committed', 'setZoom', 'useEffect', 'requestAnimationFrame', 'cancelAnimationFrame', 'clampWeekZoom', 'weekZoomHeight', 'window', 'beginCalendarPinch', 'endCalendarPinch', code)(
     props, enabled, { current: props }, committed, (value: number) => { zoom = value; stateCommits++; },
     (effect: () => (() => void) | undefined) => { cleanup = effect(); },
     (callback: Function) => { frames.set(++nextFrame, callback); return nextFrame; },
-    (id: number) => frames.delete(id), clampWeekZoom, weekZoomHeight, { addEventListener: (name: string, fn: Function) => commands.set(name, fn), removeEventListener: (name: string) => commands.delete(name) },
+    (id: number) => frames.delete(id), clampWeekZoom, weekZoomHeight, { addEventListener: (name: string, fn: Function) => commands.set(name, fn), removeEventListener: (name: string) => commands.delete(name) }, () => pinchLifecycle.push('begin'), () => pinchLifecycle.push('end'),
   );
   const event = (distance: number, count = 2) => ({
     touches: count === 2 ? [{ clientX: 200 - distance / 2, clientY: 300 }, { clientX: 200 + distance / 2, clientY: 300 }] : count === 1 ? [{ clientX: 200, clientY: 300 }] : [],
     cancelable: true, preventDefault() {}, stopImmediatePropagation() {},
     target: { dispatchEvent() { cancelledDrags++; } },
   });
-  return { el, listeners, variables, frames, event, commands,
+  return { el, listeners, variables, frames, event, commands, pinchLifecycle,
     commit: () => { committed.current = zoom; props.slotHeight = slotHeight; variables.set('--calendar-week-x', '1'); variables.set('--calendar-week-y', '1'); },
     flush: () => { const pending = [...frames.values()]; frames.clear(); pending.forEach(fn => fn()); },
     result: () => ({ zoom, slotHeight, stateCommits, cancelledDrags }), cleanup: () => cleanup?.() };
@@ -150,4 +151,16 @@ test('three-day and four-day views share fit-width mobile zoom with the weekly v
     }
   }
   for (const mode of ['day', 'month', 'year', 'schedule']) assert.equal(mobileZoomDayCount(mode), 0);
+});
+
+
+test('native pinch locks card activation until the last finger is released', () => {
+  const f = fixture();
+  f.listeners.get('touchstart')!(f.event(100));
+  assert.deepEqual(f.pinchLifecycle, ['begin']);
+  f.listeners.get('touchend')!(f.event(0, 1));
+  assert.deepEqual(f.pinchLifecycle, ['begin']);
+  f.listeners.get('touchend')!(f.event(0, 0));
+  assert.deepEqual(f.pinchLifecycle, ['begin', 'end']);
+  f.cleanup();
 });

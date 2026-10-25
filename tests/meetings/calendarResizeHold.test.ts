@@ -15,6 +15,7 @@ function fixture() {
   const touchHolds = new Map();
   const changes: unknown[] = [];
   const deps = {
+    calendarCardActivationBlocked: () => false,
     canMove: true, meeting: { id: 'meeting' }, endSlot: 16,
     MEETING_RESIZE_LONG_PRESS_MS: 1200, MEETING_TOUCH_MOVE_CANCEL_PX: 12,
     meetingTouchSuppressClickUntil: new Map(), meetingResizeMouseHolds: holds,

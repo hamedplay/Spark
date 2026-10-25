@@ -1,3 +1,10 @@
+import {
+  meetingResizeMouseHolds, meetingTouchHoldStates, meetingResizeTouchHoldStates,
+  meetingTouchSuppressClickUntil, meetingTouchLastTapAt, meetingTouchSingleTapTimers,
+  clearMeetingTouchHold, clearMeetingResizeTouchHold, clearCalendarCardTap,
+  beginCalendarPinch, endCalendarPinch, calendarCardActivationBlocked,
+  type MeetingTouchHoldState,
+} from './calendarCardGestures';
 import { weekDragInsets } from './weekInteraction';
 import { weekZoomPixels, mobileZoomDayCount } from './weekZoom';
 import React from 'react';
@@ -13,32 +20,8 @@ import { CalendarViewProps, OverlapInfo } from './CalendarViewTypes';
 
 const MEETING_TOUCH_LONG_PRESS_MS = 1000;
 const MEETING_RESIZE_LONG_PRESS_MS = 1200;
-const meetingResizeMouseHolds = new Map<string, () => void>();
 const MEETING_TOUCH_MOVE_CANCEL_PX = 12;
 const MEETING_DOUBLE_TAP_MS = 320;
-type MeetingTouchHoldState = {
-  timer: number;
-  startX: number;
-  startY: number;
-  activated: boolean;
-};
-const meetingTouchHoldStates = new Map<string, MeetingTouchHoldState>();
-const meetingResizeTouchHoldStates = new Map<string, MeetingTouchHoldState>();
-const meetingTouchSuppressClickUntil = new Map<string, number>();
-const meetingTouchLastTapAt = new Map<string, number>();
-const meetingTouchSingleTapTimers = new Map<string, number>();
-
-function clearMeetingTouchHold(meetingId: string) {
-  const state = meetingTouchHoldStates.get(meetingId);
-  if (state) window.clearTimeout(state.timer);
-  meetingTouchHoldStates.delete(meetingId);
-}
-
-function clearMeetingResizeTouchHold(meetingId: string) {
-  const state = meetingResizeTouchHoldStates.get(meetingId);
-  if (state) window.clearTimeout(state.timer);
-  meetingResizeTouchHoldStates.delete(meetingId);
-}
 
 export function computeOverlapLayers(mts: MeetingData[]): OverlapInfo[] {
   const withTime = mts
@@ -282,8 +265,9 @@ export function renderMeetingBlock(
     e.stopPropagation(); e.preventDefault();
     if ((meetingTouchSuppressClickUntil.get(meeting.id) || 0) > Date.now()
       || (e.nativeEvent as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
-    if (!canMove || !origDateStr) return;
+    if (calendarCardActivationBlocked()) return;
     dragMovedRef.current = false;
+    if (!canMove || !origDateStr) return;
     setPreviewMeeting(null);
     setDragMoveMeeting(meeting); setDragMoveStartY(e.clientY); setDragMoveStartX(e.clientX);
     setDragMoveOriginalSlot(startSlot); setDragMoveOriginalEndSlot(endSlot);
@@ -292,8 +276,9 @@ export function renderMeetingBlock(
   };
   const onBlockTouch = (e: React.TouchEvent) => {
     e.stopPropagation();
-    if (e.touches.length !== 1) return;
-
+    if (e.touches.length > 1) { beginCalendarPinch(); return; }
+    if (e.touches.length !== 1 || calendarCardActivationBlocked()) return;
+    dragMovedRef.current = false;
     clearMeetingTouchHold(meeting.id);
     meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + MEETING_TOUCH_LONG_PRESS_MS + 700);
     const pendingTap = meetingTouchSingleTapTimers.get(meeting.id);
@@ -330,6 +315,7 @@ export function renderMeetingBlock(
     meetingTouchHoldStates.set(meeting.id, state);
   };
   const onBlockTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length > 1) { beginCalendarPinch(); return; }
     const state = meetingTouchHoldStates.get(meeting.id);
     if (!state || e.touches.length !== 1) return;
 
@@ -345,7 +331,14 @@ export function renderMeetingBlock(
 
     e.preventDefault();
   };
-  const onBlockTouchEnd = () => {
+  const onBlockTouchEnd = (e: React.TouchEvent) => {
+    if (calendarCardActivationBlocked()) {
+      clearMeetingTouchHold(meeting.id);
+      clearCalendarCardTap(meeting.id);
+      if (e.touches.length === 0) endCalendarPinch();
+      return;
+    }
+    const target = e.currentTarget as HTMLElement;
     const state = meetingTouchHoldStates.get(meeting.id);
     if (!state) return;
     if (state.activated) {
@@ -365,7 +358,8 @@ export function renderMeetingBlock(
       meetingTouchSingleTapTimers.delete(meeting.id);
       meetingTouchLastTapAt.delete(meeting.id);
       setPreviewMeeting(null);
-      setDetailMeeting(meeting);
+      if (canMove) handleEditMeeting(meeting);
+      else setDetailMeeting(meeting);
       return;
     }
 
@@ -374,16 +368,22 @@ export function renderMeetingBlock(
     const timer = window.setTimeout(() => {
       meetingTouchSingleTapTimers.delete(meeting.id);
       meetingTouchLastTapAt.delete(meeting.id);
-      setPreviewMeeting(meeting);
+      if (!calendarCardActivationBlocked() && target.isConnected) {
+        handleBlockClick(meeting, { currentTarget: target } as React.MouseEvent);
+      }
     }, MEETING_DOUBLE_TAP_MS);
     meetingTouchSingleTapTimers.set(meeting.id, timer);
   };
   const onBlockTouchCancel = () => {
+    if (meetingTouchHoldStates.get(meeting.id)?.activated) {
+      setDragMoveMeeting(null); setDragMoveCurrentDeltaSlot(0); setDragMoveCurrentDeltaDay(0);
+    }
+    clearCalendarCardTap(meeting.id);
     clearMeetingTouchHold(meeting.id);
   };
   const onResizeDown = (e: React.MouseEvent) => {
     e.stopPropagation(); e.preventDefault();
-    if (!canMove || e.button !== 0) return;
+    if (!canMove || e.button !== 0 || calendarCardActivationBlocked()) return;
     if ((meetingTouchSuppressClickUntil.get(meeting.id) || 0) > Date.now()
       || (e.nativeEvent as MouseEvent & { sourceCapabilities?: { firesTouchEvents?: boolean } }).sourceCapabilities?.firesTouchEvents) return;
     meetingResizeMouseHolds.get(meeting.id)?.();
@@ -401,6 +401,7 @@ export function renderMeetingBlock(
       document.removeEventListener('mouseup', cleanup);
       window.removeEventListener('blur', cancelOnBlur);
       meetingResizeMouseHolds.delete(meeting.id);
+      if (activated) meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + 700);
     };
     const cancelOnMove = (event: MouseEvent) => {
       if (!activated && Math.hypot(event.clientX - startX, event.clientY - startY) > MEETING_TOUCH_MOVE_CANCEL_PX) cleanup();
@@ -410,7 +411,7 @@ export function renderMeetingBlock(
       if (activated) { setResizeMeeting(null); setResizeCurrentDelta(0); }
     };
     const timer = window.setTimeout(() => {
-      if (!target.isConnected) { cleanup(); return; }
+      if (!target.isConnected || calendarCardActivationBlocked()) { cleanup(); return; }
       activated = true;
       setResizeMeeting(meeting); setResizeStartY(startY);
       setResizeOriginalEndSlot(endSlot); setResizeCurrentDelta(0);
@@ -422,13 +423,13 @@ export function renderMeetingBlock(
   };
   const onResizeTouch = (e: React.TouchEvent) => {
     e.stopPropagation();
-    if (!canMove || e.touches.length !== 1) return;
+    if (e.touches.length > 1) { beginCalendarPinch(); return; }
+    if (!canMove || e.touches.length !== 1 || calendarCardActivationBlocked()) return;
 
     clearMeetingResizeTouchHold(meeting.id);
     const pendingTap = meetingTouchSingleTapTimers.get(meeting.id);
     if (pendingTap) window.clearTimeout(pendingTap);
     meetingTouchSingleTapTimers.delete(meeting.id);
-    meetingTouchLastTapAt.delete(meeting.id);
     meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + MEETING_RESIZE_LONG_PRESS_MS + 700);
     const t = e.touches[0];
     const startX = t.clientX;
@@ -453,6 +454,7 @@ export function renderMeetingBlock(
     meetingResizeTouchHoldStates.set(meeting.id, state);
   };
   const onResizeTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length > 1) { beginCalendarPinch(); return; }
     const state = meetingResizeTouchHoldStates.get(meeting.id);
     if (!state || e.touches.length !== 1) return;
 
@@ -471,7 +473,13 @@ export function renderMeetingBlock(
   };
   const onResizeTouchEnd = (e: React.TouchEvent) => {
     const state = meetingResizeTouchHoldStates.get(meeting.id);
-    if (!state?.activated) e.stopPropagation();
+    if (!state?.activated) {
+      e.stopPropagation();
+      if (state) {
+        meetingTouchHoldStates.set(meeting.id, state);
+        onBlockTouchEnd(e);
+      }
+    }
     if (state?.activated) {
       meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + 700);
     }
@@ -485,6 +493,29 @@ export function renderMeetingBlock(
     }
     meetingTouchSuppressClickUntil.set(meeting.id, Date.now() + 700);
     clearMeetingResizeTouchHold(meeting.id);
+  };
+
+  const onCardClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (calendarCardActivationBlocked() || (meetingTouchSuppressClickUntil.get(meeting.id) || 0) > Date.now()) return;
+    meetingTouchSuppressClickUntil.delete(meeting.id);
+    if (dragMovedRef.current) { dragMovedRef.current = false; return; }
+    clearCalendarCardTap(meeting.id);
+    const target = e.currentTarget as HTMLElement;
+    const timer = window.setTimeout(() => {
+      meetingTouchSingleTapTimers.delete(meeting.id);
+      if (!calendarCardActivationBlocked() && target.isConnected) handleBlockClick(meeting, { currentTarget: target } as React.MouseEvent);
+    }, MEETING_DOUBLE_TAP_MS);
+    meetingTouchSingleTapTimers.set(meeting.id, timer);
+  };
+  const onCardDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); e.preventDefault();
+    clearCalendarCardTap(meeting.id);
+    if (calendarCardActivationBlocked() || (meetingTouchSuppressClickUntil.get(meeting.id) || 0) > Date.now()
+      || dragMovedRef.current || resizeMeeting?.id === meeting.id) return;
+    setPreviewMeeting(null);
+    if (canMove) handleEditMeeting(meeting);
+    else setDetailMeeting(meeting);
   };
 
   let ghostStyle: React.CSSProperties = {};
@@ -515,20 +546,8 @@ export function renderMeetingBlock(
         setDragMoveCurrentDeltaSlot(0);
         setDragMoveCurrentDeltaDay(0);
       }}
-      onClick={e => {
-        e.stopPropagation();
-        const suppressUntil = meetingTouchSuppressClickUntil.get(meeting.id) || 0;
-        if (suppressUntil > Date.now()) return;
-        meetingTouchSuppressClickUntil.delete(meeting.id);
-        handleBlockClick(meeting, e);
-      }}
-      onDoubleClick={e => {
-        e.stopPropagation();
-        e.preventDefault();
-        if (dragMovedRef.current || resizeMeeting?.id === meeting.id) return;
-        setPreviewMeeting(null);
-        setDetailMeeting(meeting);
-      }}
+      onClick={onCardClick}
+      onDoubleClick={onCardDoubleClick}
     >
       <div style={p.mobileWeekZoom ? { containerType: 'inline-size' } : undefined} className={p.mobileWeekZoom ? "calendar-week-card px-1 py-1 h-full flex flex-col items-start overflow-hidden" : "px-2 py-1 h-full flex flex-col items-start overflow-hidden"}>
         <div
@@ -580,8 +599,8 @@ export function renderMeetingBlock(
               }));
             }
           }}
-          onClick={e => e.stopPropagation()}
-          onDoubleClick={e => { e.stopPropagation(); e.preventDefault(); }}
+          onClick={onCardClick}
+          onDoubleClick={onCardDoubleClick}
           onTouchStart={onResizeTouch}
           onTouchMove={onResizeTouchMove}
           onTouchEnd={onResizeTouchEnd}
