@@ -44,19 +44,19 @@ function fixture(t: any, editable = true) {
   return {handlers,event,tick,actions,timers};
 }
 
-test('single touch opens the preview with choices; double touch edits without a delayed preview', t => {
+test('single touch opens the preview with choices; double touch opens details without a delayed preview', t => {
   const f=fixture(t);
   f.handlers.onBlockTouch(f.event()); f.handlers.onBlockTouchEnd(f.event(0)); f.tick(320);
   assert.deepEqual(f.actions,['preview']);
   f.actions.length=0; f.tick(500);
   f.handlers.onBlockTouch(f.event()); f.handlers.onBlockTouchEnd(f.event(0)); f.tick(80);
   f.handlers.onBlockTouch(f.event()); f.handlers.onBlockTouchEnd(f.event(0)); f.tick(1200);
-  assert.deepEqual(f.actions,['edit']);
+  assert.deepEqual(f.actions,['details']);
 });
-test('mouse double-click edits directly and cancels both queued single clicks', t => {
+test('mouse double-click opens details directly and cancels both queued single clicks', t => {
   const f=fixture(t);
   f.handlers.onCardClick(f.event()); f.tick(80); f.handlers.onCardClick(f.event()); f.handlers.onCardDoubleClick(f.event()); f.tick(1500);
-  assert.deepEqual(f.actions,['edit']);
+  assert.deepEqual(f.actions,['details']);
 });
 test('read-only double tap opens details without granting edit access', t => {
   const f=fixture(t,false);
@@ -69,11 +69,11 @@ test('a short bottom-edge touch behaves like a card tap even on a tiny card', t 
   f.handlers.onResizeTouch(f.event()); f.tick(50); f.handlers.onResizeTouchEnd(f.event(0)); f.tick(320);
   assert.deepEqual(f.actions,['preview']);
 });
-test('bottom-edge double tap edits, while scrolling across the edge does not open anything', t => {
+test('bottom-edge double tap opens details, while scrolling across the edge does not open anything', t => {
   const f=fixture(t);
   f.handlers.onResizeTouch(f.event()); f.handlers.onResizeTouchEnd(f.event(0)); f.tick(80);
   f.handlers.onResizeTouch(f.event()); f.handlers.onResizeTouchEnd(f.event(0)); f.tick(1500);
-  assert.deepEqual(f.actions,['edit']);
+  assert.deepEqual(f.actions,['details']);
   f.actions.length=0; f.tick(1000);
   f.handlers.onResizeTouch(f.event()); f.handlers.onResizeTouchMove(f.event(1,140)); f.handlers.onResizeTouchEnd(f.event(0,140)); f.tick(1500);
   assert.deepEqual(f.actions,[]);

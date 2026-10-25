@@ -358,8 +358,7 @@ export function renderMeetingBlock(
       meetingTouchSingleTapTimers.delete(meeting.id);
       meetingTouchLastTapAt.delete(meeting.id);
       setPreviewMeeting(null);
-      if (canMove) handleEditMeeting(meeting);
-      else setDetailMeeting(meeting);
+      setDetailMeeting(meeting);
       return;
     }
 
@@ -514,8 +513,7 @@ export function renderMeetingBlock(
     if (calendarCardActivationBlocked() || (meetingTouchSuppressClickUntil.get(meeting.id) || 0) > Date.now()
       || dragMovedRef.current || resizeMeeting?.id === meeting.id) return;
     setPreviewMeeting(null);
-    if (canMove) handleEditMeeting(meeting);
-    else setDetailMeeting(meeting);
+    setDetailMeeting(meeting);
   };
 
   let ghostStyle: React.CSSProperties = {};

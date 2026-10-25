@@ -91,7 +91,7 @@ export function NotificationPanelContent({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="relative isolate min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
@@ -116,7 +116,7 @@ export function NotificationPanelContent({
         ) : (
           groups.map((group) => (
             <div key={group.label}>
-              <div className="px-5 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 sticky top-0">
+              <div className="px-5 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10">
                 <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
                   {group.label}
                 </span>
@@ -138,7 +138,7 @@ export function NotificationPanelContent({
                 >
                   {n.sender_name ||
                   n.sender_avatar_url ? (
-                    <div className="relative flex-shrink-0 mt-0.5">
+                    <div className="relative self-start flex-shrink-0 mt-0.5">
                       <NotificationAvatar
                         url={n.sender_avatar_url}
                         name={n.sender_name}
