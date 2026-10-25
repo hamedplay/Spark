@@ -126,7 +126,7 @@ export function DayView(p: CalendarViewProps) {
               )}
             </div>
             <div
-              className="relative flex-1 select-none border-r border-slate-200/90 dark:border-slate-700/80"
+              className="relative flex-1 select-none"
               style={{ touchAction: 'pan-y' }}
               ref={timeGridRef}
               onMouseDown={e => { e.preventDefault(); handleGridMouseDown(e, selectedJy, selectedJm, selectedJd); }}

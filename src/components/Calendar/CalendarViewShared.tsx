@@ -153,10 +153,13 @@ export function renderSlotLines(
       {Array.from({ length: n }, (_, i) => (
         <div
           key={i}
-          className={`absolute left-0 right-0 ${i % 2 === 1
-            ? 'border-b-2 border-slate-300/90 dark:border-slate-600/90'
-            : 'border-b border-slate-200/90 dark:border-slate-700/90'}`}
-          style={{ top: weekZoomPixels((i + 1) * slotHeight, mobileWeekZoom) }}
+          className={`absolute inset-x-0.5 rounded-md border ${i % 2 === 1
+            ? 'border-slate-300/90 dark:border-slate-600/90'
+            : 'border-slate-200/90 dark:border-slate-700/90'}`}
+          style={{
+            top: `calc(${weekZoomPixels(i * slotHeight, mobileWeekZoom)} + 1px)`,
+            height: `calc(${weekZoomPixels(slotHeight, mobileWeekZoom)} - 2px)`,
+          }}
         />
       ))}
     </div>

@@ -353,7 +353,7 @@ export function MultiDayView(input: CalendarViewProps) {
                       <div
                         key={`grid-${d.jy}-${d.jm}-${d.jd}`}
                         data-calendar-column-date={jalaaliToYYYYMMDD(d.jy, d.jm, d.jd)}
-                        className={`relative select-none border-r-2 border-slate-300/90 dark:border-slate-600/90 ${p.isToday(d.jy, d.jm, d.jd)
+                        className={`relative select-none ${p.isToday(d.jy, d.jm, d.jd)
                           ? 'bg-violet-50/25 dark:bg-violet-500/[0.035]'
                           : d.weekday % 2 === 0
                             ? 'bg-sky-100/65 dark:bg-sky-500/[0.08]'
