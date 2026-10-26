@@ -1,3 +1,4 @@
+import { notifyBrowser } from '../lib/pwaNotificationBridge';
 import { useLiveData } from '../shared/realtime/useLiveData';
 import { mobileZoomDayCount } from './Calendar/weekZoom';
 import { focusCalendarNow } from './Calendar/focusCalendarNow';
@@ -428,19 +429,9 @@ export function CalendarPage({
   const firedRemindersRef = useRef<Set<string>>(new Set());
   const [reminderAlert, setReminderAlert] = useState<{ meeting: MeetingData; minutesBefore: number } | null>(null);
 
-  const sendNotification = useCallback((title: string, body: string, icon?: string) => {
-    if (!('Notification' in window)) return;
-    const doSend = () => new Notification(title, { body, icon: icon || '/icons/icon-192x192.png', dir: 'rtl', lang: 'fa' });
-    if (Notification.permission === 'granted') doSend();
-    else if (Notification.permission !== 'denied') Notification.requestPermission().then(p => { if (p === 'granted') doSend(); });
-  }, []);
-
-  // Request notification permission on mount
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
+  const sendNotification = useCallback((title: string, body: string, _icon?: string) => {
+    if (currentUserId) void notifyBrowser({ id: crypto.randomUUID(), title, message: body, action_url: '/?page=calendar' }, currentUserId);
+  }, [currentUserId]);
 
   // Reminder checker — runs every 30 seconds
   useEffect(() => {

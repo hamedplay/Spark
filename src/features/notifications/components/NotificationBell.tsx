@@ -1,3 +1,4 @@
+import { BrowserNotificationControl } from './BrowserNotificationControl';
 import { useState, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
@@ -68,6 +69,7 @@ export function NotificationBell({ onNavigate, currentUserId = null }: Notificat
             dir="rtl"
           >
             <NotificationPanelContent
+              browserControl={<BrowserNotificationControl userId={currentUserId} />}
               loading={loading} groups={grouped} unreadCount={unreadCount} notifications={notifications}
               onMarkAllAsRead={markAllAsRead} onMarkAsRead={markAsRead} onDelete={deleteNotification} onClose={() => setShowPanel(false)}
               onNotificationClick={notification => { setShowPanel(false); void handleNotificationClick(notification); }}

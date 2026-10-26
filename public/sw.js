@@ -120,7 +120,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  const validCaches = [STATIC_CACHE, RUNTIME_CACHE];
+  const validCaches = [STATIC_CACHE, RUNTIME_CACHE, 'spark-notification-events-v1'];
 
   event.waitUntil(
     caches

@@ -46,7 +46,7 @@ export function ChatConversationView({
   onConversationUpdate, onStartCall, onStartE2EECall,
   onOpenDirectChat, msgRefreshKey,
 }: Props) {
-  useLiveData([...LIVE_DATA.chat, ...LIVE_DATA.people], async () => { await Promise.all([fetchReminders(), fetchGlobalStarred()]); });
+  useLiveData([...LIVE_DATA.chat, ...LIVE_DATA.people], async () => { await Promise.all([fetchReminders(), fetchGlobalStarred()]); if (conversation.otherUser.user_id === currentUserId) await fetchMessages(); });
   const { triggerUrgentAlarm: globalTriggerUrgentAlarm } = useGlobalCall();
 
   const playBeep = () => {
@@ -226,6 +226,7 @@ export function ChatConversationView({
       .select('id, body, sender_id')
       .eq('conversation_id', conversation.id)
       .eq('deleted_for_all', false)
+      .or(`and(sender_id.eq.${currentUserId},deleted_for_sender.eq.false),and(sender_id.neq.${currentUserId},deleted_for_receiver.eq.false)`)
       .neq('sender_id', currentUserId)
       .contains('mentioned_user_ids', [currentUserId])
       .order('created_at', { ascending: false })
@@ -260,7 +261,8 @@ export function ChatConversationView({
       .from('chat_messages')
       .select('*')
       .in('id', msgIds)
-      .eq('deleted_for_all', false);
+      .eq('deleted_for_all', false)
+      .or(`and(sender_id.eq.${currentUserId},deleted_for_sender.eq.false),and(sender_id.neq.${currentUserId},deleted_for_receiver.eq.false)`);
     if (!msgs) { setGlobalStarred([]); return; }
 
     // Get conversation info for each message
@@ -295,6 +297,7 @@ export function ChatConversationView({
       .select('*')
       .eq('conversation_id', conversation.id)
       .eq('deleted_for_all', false)
+      .or(`and(sender_id.eq.${currentUserId},deleted_for_sender.eq.false),and(sender_id.neq.${currentUserId},deleted_for_receiver.eq.false)`)
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -665,6 +668,11 @@ export function ChatConversationView({
 
       <ConversationHeader
         onBack={onBack}
+        onClearSavedHistory={() => {
+          setMessages([]); setReplyingTo(null); setEditingMessage(null); setSearchQuery('');
+          void fetchMessages(); void fetchGlobalStarred(); void fetchReminders();
+          onConversationUpdate();
+        }}
         isSavedMessages={isSavedMessages}
         otherName={otherName}
         conversation={conversation}

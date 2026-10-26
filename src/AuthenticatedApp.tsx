@@ -1,3 +1,4 @@
+import { startPwaNotificationBridge } from './lib/pwaNotificationBridge';
 import { useLiveData, LIVE_DATA } from './shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect } from 'react';
 import { RestrictedAccessPage } from './components/RestrictedAccessPage';
@@ -38,6 +39,10 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
   useLiveData([...LIVE_DATA.people, ...LIVE_DATA.config], async () => { await authSession.refreshAccessState(); });
   const { prefs, loading: prefsLoading } = useUserPreferences();
   const { currentUserId, isAdmin, userPermissions } = authSession;
+  useEffect(() => {
+    if (!currentUserId || prefsLoading) return;
+    return startPwaNotificationBridge(currentUserId, prefs.notifications_enabled);
+  }, [currentUserId, prefsLoading, prefs.notifications_enabled]);
   const { activePage, navigate } = useNavigation(true, prefsLoading, prefs.default_landing_page);
 
   useEffect(() => {

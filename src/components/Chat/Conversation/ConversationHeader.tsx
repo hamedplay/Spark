@@ -1,9 +1,11 @@
+import { ClearSavedHistoryButton } from './ClearSavedHistoryButton';
 import { ChevronRight, Search, Phone, Video, ShieldCheck, Star, Bell, Info, Bookmark, CalendarDays } from 'lucide-react';
 import { UserAvatar } from '../ChatConversationItem';
 import type { ConversationWithProfile } from '../types';
 
 export function ConversationHeader(props: {
   onBack: () => void;
+  onClearSavedHistory: () => void;
   isSavedMessages: boolean;
   otherName: string;
   conversation: ConversationWithProfile;
@@ -23,7 +25,7 @@ export function ConversationHeader(props: {
   onToggleInfoPanel: () => void;
 }) {
   const {
-    onBack, isSavedMessages, otherName, conversation, otherUserPresence,
+    onBack, onClearSavedHistory, isSavedMessages, otherName, conversation, otherUserPresence,
     isUserOnline, getLastSeenText, localStarredCount, remindersCount,
     showSearch, onToggleSearch, onOpenStarred, onOpenReminders,
     onStartCall, onStartE2EECall, onJumpToDate, showInfoPanel, onToggleInfoPanel,
@@ -66,6 +68,7 @@ export function ConversationHeader(props: {
       </div>
 
       <div className="flex flex-shrink-0 items-center gap-1">
+        {isSavedMessages && <ClearSavedHistoryButton key={conversation.id} conversationId={conversation.id} onCleared={onClearSavedHistory} />}
         <button
           onClick={onOpenStarred}
           className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-amber-100 bg-amber-50 text-amber-600 transition hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"

@@ -1,3 +1,4 @@
+import { notifyBrowser } from '../../../lib/pwaNotificationBridge';
 import {
   useState,
   useEffect,
@@ -204,6 +205,8 @@ export function useNotificationBell(
               )
           );
           scheduleUnreadCountSync();
+
+          void notifyBrowser(notification, currentUserId);
 
           showIncomingNotification(
             notification,

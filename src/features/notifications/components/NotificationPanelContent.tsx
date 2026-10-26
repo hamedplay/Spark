@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { NotificationSwipeRow } from './NotificationSwipeRow';
 import {
   Bell,
@@ -22,6 +23,7 @@ import {
 
 export interface NotificationPanelContentProps {
   loading: boolean;
+  browserControl?: ReactNode;
 
   groups: NotificationGroup[];
 
@@ -48,6 +50,7 @@ export interface NotificationPanelContentProps {
 
 export function NotificationPanelContent({
   loading,
+  browserControl,
   groups,
   unreadCount,
   notifications,
@@ -97,6 +100,7 @@ export function NotificationPanelContent({
         </div>
       </div>
 
+      {browserControl}
       <div className="relative isolate min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">

@@ -1,282 +1,184 @@
 import { supabase } from './supabase';
+import { playNotificationSound, unlockNotificationSound } from './notificationSound';
 
-type NotificationRow = {
-  id?: string;
-  user_id?: string;
-  title?: string | null;
-  message?: string | null;
-  action_url?: string | null;
-  type?: string | null;
+export type BrowserPushStatus = 'unsupported' | 'not-installed' | 'permission-required' | 'permission-denied' | 'disabled-by-preference' | 'registering' | 'ready' | 'error';
+export interface BrowserPushState { status: BrowserPushStatus; message?: string }
+type NotificationRow = { id?: string; user_id?: string; title?: string | null; message?: string | null; action_url?: string | null; read?: boolean };
+let activeUserId: string | null = null;
+let preferenceEnabled = true;
+let generation = 0;
+let pushReady = false;
+let pending: Promise<boolean> | null = null;
+let state: BrowserPushState = { status: 'permission-required' };
+const delivered = new Set<string>();
+// These existing RPCs are absent from the repository's generated database types.
+// Keep their verified signatures local rather than broadening unrelated query types.
+const pushClient = supabase as unknown as {
+  rpc(name: 'upsert_my_pwa_push_subscription', args: { p_endpoint: string; p_p256dh: string; p_auth_key: string; p_user_agent: string }): PromiseLike<{ data: string | null; error: unknown }>;
+  rpc(name: 'disable_my_pwa_push_subscription', args: { p_endpoint: string }): PromiseLike<{ data: unknown; error: unknown }>;
 };
 
-type PushStatus =
-  | 'unsupported'
-  | 'not-installed'
-  | 'permission-required'
-  | 'permission-denied'
-  | 'disabled-by-preference'
-  | 'registering'
-  | 'ready'
-  | 'error';
-
-let activeUserId: string | null = null;
-let removeChannel: (() => void) | null = null;
-let pushSubscriptionReady = false;
-let pushSubscriptionPromise: Promise<boolean> | null = null;
-
-function emitPushStatus(status: PushStatus, message?: string): void {
-  window.dispatchEvent(new CustomEvent('pwa-push-status-changed', {
-    detail: { status, message: message || null },
-  }));
+function installed(): boolean {
+  return Boolean(window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone);
 }
-
-function isInstalledPwa(): boolean {
-  if (typeof window === 'undefined') return false;
-  return window.matchMedia?.('(display-mode: standalone)').matches
-    || Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+function deviceEnabled(userId: string): boolean {
+  try { return localStorage.getItem(`spark-browser-notifications:${userId}`) !== 'off'; } catch { return true; }
 }
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const output = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; i += 1) output[i] = rawData.charCodeAt(i);
-  return output;
+function devicePreference(userId: string, enabled: boolean) {
+  try { localStorage.setItem(`spark-browser-notifications:${userId}`, enabled ? 'on' : 'off'); } catch { /* private browsing */ }
 }
-
-function sameApplicationServerKey(subscription: PushSubscription, expected: Uint8Array): boolean {
-  const current = subscription.options?.applicationServerKey;
-  if (!current) return true;
-  const currentBytes = new Uint8Array(current);
-  if (currentBytes.length !== expected.length) return false;
-  for (let i = 0; i < expected.length; i += 1) {
-    if (currentBytes[i] !== expected[i]) return false;
-  }
-  return true;
+function emit(status: BrowserPushStatus, message?: string) {
+  state = { status, message };
+  window.dispatchEvent(new Event('spark-browser-notifications-changed'));
 }
-
-async function notificationsEnabled(userId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('user_preferences')
-    .select('notifications_enabled')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (error) return true;
-  return data?.notifications_enabled !== false;
+export function getBrowserPushState(): BrowserPushState {
+  if (typeof window === 'undefined') return { status: 'unsupported' };
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (ios && !installed()) return { status: 'not-installed' };
+  if (!window.isSecureContext || typeof Notification === 'undefined') return { status: 'unsupported' };
+  if (Notification.permission === 'denied') return { status: 'permission-denied' };
+  if (!preferenceEnabled || (activeUserId && !deviceEnabled(activeUserId))) return { status: 'disabled-by-preference' };
+  if (Notification.permission !== 'granted') return { status: 'permission-required' };
+  return state;
 }
-
-async function disableLocalPushSubscription(): Promise<void> {
-  pushSubscriptionReady = false;
-  pushSubscriptionPromise = null;
-  if (!('serviceWorker' in navigator)) return;
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager?.getSubscription();
-    if (subscription) await subscription.unsubscribe();
-  } catch {
-    // Best effort on logout. A stale server endpoint is disabled on the next 404/410 response.
-  }
+function eligible(userId: string) {
+  return activeUserId === userId && preferenceEnabled && deviceEnabled(userId) && typeof Notification !== 'undefined' && Notification.permission === 'granted';
 }
-
+function withTimeout<T>(promise: PromiseLike<T>, ms = 10_000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('مرورگر در زمان مقرر پاسخ نداد؛ دوباره تلاش کنید.')), ms);
+    Promise.resolve(promise).then(value => { clearTimeout(timer); resolve(value); }, error => { clearTimeout(timer); reject(error); });
+  });
+}
+async function registration(): Promise<ServiceWorkerRegistration> {
+  if (!('serviceWorker' in navigator)) throw new Error('این مرورگر از اعلان پس‌زمینه پشتیبانی نمی‌کند.');
+  let worker = await navigator.serviceWorker.getRegistration('/');
+  if (!worker) worker = await navigator.serviceWorker.register('/pwa-sw.js', { scope: '/', updateViaCache: 'none' });
+  return worker.active ? worker : withTimeout(navigator.serviceWorker.ready);
+}
+function serverKey(base64: string): Uint8Array {
+  const raw = window.atob((base64 + '='.repeat((4 - base64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, char => char.charCodeAt(0));
+}
 async function ensurePushSubscription(userId: string): Promise<boolean> {
-  if (!isInstalledPwa()) {
-    emitPushStatus('not-installed');
-    return false;
-  }
-  if (typeof Notification === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-    emitPushStatus('unsupported');
-    return false;
-  }
-  if (Notification.permission === 'default') {
-    emitPushStatus('permission-required');
-    return false;
-  }
-  if (Notification.permission !== 'granted') {
-    emitPushStatus('permission-denied');
-    return false;
-  }
-  if (!(await notificationsEnabled(userId))) {
-    emitPushStatus('disabled-by-preference');
-    return false;
-  }
-  if (pushSubscriptionReady) {
-    emitPushStatus('ready');
-    return true;
-  }
-  if (pushSubscriptionPromise) return pushSubscriptionPromise;
-
-  pushSubscriptionPromise = (async () => {
-    emitPushStatus('registering');
+  const support = getBrowserPushState().status;
+  if (['unsupported', 'not-installed'].includes(support) || !eligible(userId)) { emit(support); return false; }
+  if (pushReady) { emit('ready'); return true; }
+  if (pending) return pending;
+  const version = generation;
+  const current = () => version === generation && eligible(userId);
+  const task = (async () => {
+    emit('registering');
     try {
-      const { data: config, error: configError } = await supabase.functions.invoke('pwa-push-config', {
-        body: {},
-      });
-      if (configError || typeof config?.publicKey !== 'string' || !config.publicKey) {
-        throw new Error(configError?.message || 'PWA push configuration is unavailable');
+      const worker = await registration();
+      if (!current()) return false;
+      if (!worker.pushManager) throw new Error('Push در این مرورگر در دسترس نیست؛ اعلان هنگام بازبودن برنامه فعال است.');
+      const { data, error } = await withTimeout(supabase.functions.invoke('pwa-push-config', { body: {} }));
+      if (!current()) return false;
+      if (error || !data?.publicKey) throw new Error('ثبت اعلان پس‌زمینه ناموفق بود؛ اعلان هنگام بازبودن برنامه فعال است.');
+      const key = serverKey(data.publicKey);
+      let subscription = await worker.pushManager.getSubscription();
+      if (!current()) return false;
+      if (subscription?.options.applicationServerKey) {
+        const old = new Uint8Array(subscription.options.applicationServerKey);
+        if (old.length !== key.length || old.some((value, index) => value !== key[index])) { await subscription.unsubscribe(); subscription = null; }
       }
-
-      const applicationServerKey = urlBase64ToUint8Array(config.publicKey);
-      const registration = await navigator.serviceWorker.ready;
-      let subscription = await registration.pushManager.getSubscription();
-
-      // Push subscriptions are bound to the VAPID applicationServerKey. If the
-      // backend key changed, re-create the browser subscription instead of
-      // silently persisting an unusable endpoint.
-      if (subscription && !sameApplicationServerKey(subscription, applicationServerKey)) {
-        await subscription.unsubscribe();
-        subscription = null;
-      }
-
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: applicationServerKey as BufferSource,
-        });
-      }
-
+      subscription ??= await worker.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key as BufferSource });
+      if (!current()) return false;
       const serialized = subscription.toJSON();
-      const endpoint = serialized.endpoint || subscription.endpoint;
-      const p256dh = serialized.keys?.p256dh || '';
-      const authKey = serialized.keys?.auth || '';
-      if (!endpoint || !p256dh || !authKey) {
-        throw new Error('Browser returned an incomplete push subscription');
-      }
-
-      const { error: saveError } = await supabase.rpc('upsert_my_pwa_push_subscription', {
-        p_endpoint: endpoint,
-        p_p256dh: p256dh,
-        p_auth_key: authKey,
-        p_user_agent: navigator.userAgent,
-      });
+      if (!serialized.keys?.p256dh || !serialized.keys.auth) throw new Error('اشتراک اعلان مرورگر ناقص است.');
+      const { error: saveError } = await withTimeout(pushClient.rpc('upsert_my_pwa_push_subscription', {
+        p_endpoint: subscription.endpoint, p_p256dh: serialized.keys.p256dh,
+        p_auth_key: serialized.keys.auth, p_user_agent: navigator.userAgent,
+      }));
+      if (!current()) return false;
       if (saveError) throw saveError;
-
-      pushSubscriptionReady = true;
-      emitPushStatus('ready');
-      return true;
+      pushReady = true; emit('ready'); return true;
     } catch (error) {
-      pushSubscriptionReady = false;
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn('PWA Web Push subscription failed:', error);
-      emitPushStatus('error', message);
+      if (current()) emit('error', error instanceof Error ? error.message : 'ثبت اعلان مرورگر ناموفق بود.');
       return false;
-    } finally {
-      pushSubscriptionPromise = null;
     }
   })();
-
-  return pushSubscriptionPromise;
+  pending = task;
+  void task.finally(() => { if (pending === task) pending = null; });
+  return task;
 }
-
-async function showSystemNotification(row: NotificationRow): Promise<void> {
-  if (!isInstalledPwa()) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-  if (!('serviceWorker' in navigator)) return;
-
-  // Once durable Web Push is registered, the server worker owns OS notifications.
-  if (pushSubscriptionReady) return;
-
-  const registration = await navigator.serviceWorker.ready;
-  await registration.showNotification(row.title?.trim() || 'اسپارک', {
-    body: row.message?.trim() || 'اعلان جدید',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/icon-192x192.png',
-    tag: row.id ? `spark-notification-${row.id}` : undefined,
-    data: {
-      actionUrl: row.action_url || '/',
-      notificationId: row.id || null,
-      type: row.type || null,
-    },
-  });
-}
-
-async function subscribe(userId: string): Promise<void> {
-  if (activeUserId === userId && removeChannel) {
-    void ensurePushSubscription(userId);
-    return;
-  }
-  removeChannel?.();
-  removeChannel = null;
-  activeUserId = userId;
-
-  if (!(await notificationsEnabled(userId))) {
-    emitPushStatus('disabled-by-preference');
-    return;
-  }
-
-  void ensurePushSubscription(userId);
-
+async function unsubscribeDevice(isCurrent: () => boolean) {
   try {
-    await supabase.realtime.setAuth();
-  } catch {
-    // The channel subscription below will surface an auth failure by not subscribing.
-  }
-
-  const channel = supabase
-    .channel(`pwa-system-notifications-${userId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${userId}`,
-      },
-      payload => {
-        if (!payload.new) return;
-        void showSystemNotification(payload.new as NotificationRow);
-      },
-    )
-    .subscribe();
-
-  removeChannel = () => {
-    void supabase.removeChannel(channel);
+    const worker = await navigator.serviceWorker?.getRegistration('/');
+    const subscription = await worker?.pushManager?.getSubscription();
+    if (!subscription || !isCurrent()) return;
+    await withTimeout(subscription.unsubscribe());
+    if (isCurrent()) void withTimeout(pushClient.rpc('disable_my_pwa_push_subscription', { p_endpoint: subscription.endpoint })).catch(() => {});
+  } catch { /* An expired endpoint is also retired by the push worker. */ }
+}
+export function startPwaNotificationBridge(userId: string, enabled: boolean): () => void {
+  const version = ++generation;
+  activeUserId = userId; preferenceEnabled = enabled; pushReady = false; pending = null;
+  const retry = () => { if (version === generation) void ensurePushSubscription(userId); };
+  const unlock = () => { if (eligible(userId)) unlockNotificationSound(); };
+  const sound = (event: MessageEvent) => {
+    if (event.data?.type === 'SPARK_NOTIFICATION_SHOWN' && eligible(userId) && document.visibilityState === 'visible') playNotificationSound();
+  };
+  const storage = (event: StorageEvent) => {
+    if (event.key === `spark-browser-notifications:${userId}`) { pushReady = false; retry(); }
+  };
+  window.addEventListener('focus', retry); window.addEventListener('online', retry);
+  window.addEventListener('spark-browser-notifications-retry', retry);
+  window.addEventListener('pointerdown', unlock); window.addEventListener('keydown', unlock);
+  window.addEventListener('storage', storage);
+  navigator.serviceWorker?.addEventListener('message', sound);
+  retry();
+  return () => {
+    window.removeEventListener('focus', retry); window.removeEventListener('online', retry);
+    window.removeEventListener('spark-browser-notifications-retry', retry);
+    window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock);
+    window.removeEventListener('storage', storage);
+    navigator.serviceWorker?.removeEventListener('message', sound);
+    if (generation === version) {
+      activeUserId = null; pushReady = false; pending = null;
+      // StrictMode/effect restarts reuse the endpoint; real logout retires it.
+      queueMicrotask(() => { if (generation === version && !activeUserId) void unsubscribeDevice(() => generation === version && !activeUserId); });
+    }
   };
 }
-
-export function startPwaNotificationBridge(): () => void {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return () => {};
-
-  let disposed = false;
-
-  const handlePermissionChanged = () => {
-    pushSubscriptionReady = false;
-    if (!disposed && activeUserId) void ensurePushSubscription(activeUserId);
-  };
-  const handleRetry = () => {
-    pushSubscriptionReady = false;
-    pushSubscriptionPromise = null;
-    if (!disposed && activeUserId) void ensurePushSubscription(activeUserId);
-  };
-  window.addEventListener('pwa-notification-permission-changed', handlePermissionChanged);
-  window.addEventListener('pwa-push-retry', handleRetry);
-
-  void supabase.auth.getUser().then(({ data }) => {
-    if (!disposed && data.user) void subscribe(data.user.id);
-  });
-
-  const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-    if (disposed) return;
-    if (session?.user?.id) {
-      void subscribe(session.user.id);
-    } else {
-      removeChannel?.();
-      removeChannel = null;
-      activeUserId = null;
-      emitPushStatus('not-installed');
-      void disableLocalPushSubscription();
-    }
-  });
-
-  return () => {
-    disposed = true;
-    window.removeEventListener('pwa-notification-permission-changed', handlePermissionChanged);
-    window.removeEventListener('pwa-push-retry', handleRetry);
-    authListener.subscription.unsubscribe();
-    removeChannel?.();
-    removeChannel = null;
-    activeUserId = null;
-    pushSubscriptionReady = false;
-    pushSubscriptionPromise = null;
-  };
+export async function enableBrowserNotifications(): Promise<void> {
+  const support = getBrowserPushState().status;
+  if (support === 'unsupported' || support === 'not-installed') return;
+  unlockNotificationSound();
+  const permission = await Notification.requestPermission(); // Must run directly in the click handler.
+  if (permission !== 'granted') { emit(permission === 'denied' ? 'permission-denied' : 'permission-required'); return; }
+  if (activeUserId) devicePreference(activeUserId, true);
+  pushReady = false;
+  window.dispatchEvent(new Event('spark-browser-notifications-retry'));
+}
+export async function disableBrowserNotifications(): Promise<void> {
+  if (!activeUserId) return;
+  const userId = activeUserId;
+  devicePreference(userId, false); pushReady = false;
+  emit('disabled-by-preference');
+  await unsubscribeDevice(() => activeUserId === userId && !deviceEnabled(userId));
+}
+export async function notifyBrowser(row: NotificationRow, userId: string): Promise<void> {
+  if (!eligible(userId) || row.read || (row.user_id && row.user_id !== userId) || (row.id && delivered.has(row.id))) return;
+  try {
+    const worker = await registration();
+    if (!eligible(userId)) return;
+    if (!worker.active) throw new Error('Service worker is inactive');
+    worker.active.postMessage({ type: 'SPARK_REALTIME_NOTIFICATION', payload: {
+      notificationId: row.id || crypto.randomUUID(), title: 'اسپارک',
+      body: 'یک اعلان جدید در اسپارک دارید.', actionUrl: row.action_url || '/',
+    } });
+    if (row.id) delivered.add(row.id);
+    if (delivered.size > 256) delivered.delete(delivered.values().next().value!);
+  } catch {
+    // Desktop fallback; mobile browsers require ServiceWorker.showNotification.
+    if (!eligible(userId)) return;
+    try {
+      const notification = new Notification('اسپارک', { body: 'یک اعلان جدید در اسپارک دارید.', tag: row.id, icon: '/icons/icon-192x192.png', silent: document.visibilityState === 'visible' });
+      notification.onclick = () => { window.focus(); notification.close(); const url = new URL(row.action_url || '/', window.location.origin); if (url.origin === window.location.origin) window.location.assign(url.href); };
+      if (document.visibilityState === 'visible') playNotificationSound();
+      if (row.id) delivered.add(row.id);
+    } catch { /* In-app notification remains available. */ }
+  }
 }
