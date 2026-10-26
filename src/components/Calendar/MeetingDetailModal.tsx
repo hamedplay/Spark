@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { isMeetingEligibleForMinutes } from '../../lib/isMeetingEligibleForMinutes';
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
+import { shareMeetingText, shareMeetingImage } from '../../features/meetings/sharing/nativeMeetingShare';
 import { normalizeMeetingDate, normalizeClockTime } from '../../lib/minutesDate';
 import { MeetingOwnerDelegateModal } from './MeetingOwnerDelegateModal';
 import { MeetingShareDialog } from '../../features/meetings/components/MeetingCard/MeetingShareDialog';
@@ -51,6 +52,7 @@ export function MeetingDetailModal({
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareChoice, setShowShareChoice] = useState(false);
+  const [shareTextFallback, setShareTextFallback] = useState<string | null>(null);
   const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [showOwnerDelegate, setShowOwnerDelegate] = useState(false);
@@ -396,12 +398,9 @@ const getJalaliDate = (): string => {
   const handleShareAsText = async () => {
     setShowShareChoice(false);
     const text = buildShareText();
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success('متن جلسه در کلیپ‌بورد کپی شد');
-    } catch {
-      toast.error('خطا در کپی متن جلسه');
-    }
+    const result = await shareMeetingText(m.subject, text);
+    if (result === 'copied') toast.success('متن جلسه در کلیپ‌بورد کپی شد');
+    else if (result === 'unsupported') setShareTextFallback(text);
   };
 
   const handleShareAsImage = async () => {
@@ -459,13 +458,12 @@ const getJalaliDate = (): string => {
       }
 
       const file = new File([blob], `meeting-${m.id.slice(0, 8)}.png`, { type: 'image/png' });
-      if (!navigator.share || !(navigator.canShare?.({ files: [file] }) ?? false)) {
-        toast.error('اشتراک‌گذاری مستقیم تصویر در این مرورگر پشتیبانی نمی‌شود');
-        return;
+      const result = await shareMeetingImage(m.subject, file);
+      if (result === 'shared') toast.success('تصویر جلسه به اشتراک گذاشته شد');
+      else if (result === 'unsupported') {
+        handleDownloadShareImage();
+        toast('اشتراک مستقیم در دسترس نیست؛ تصویر را از فایل‌های دانلودشده ارسال کنید');
       }
-
-      await navigator.share({ title: m.subject, files: [file] });
-      toast.success('تصویر جلسه به اشتراک گذاشته شد');
     } catch (error: any) {
       if (error?.name !== 'AbortError') toast.error('خطا در اشتراک‌گذاری تصویر');
     }
@@ -970,6 +968,19 @@ const getJalaliDate = (): string => {
         />
       )}
 
+      {shareTextFallback !== null && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/50 p-4" onClick={e => { e.stopPropagation(); setShareTextFallback(null); }} dir="rtl" role="dialog" aria-modal="true" aria-label="متن جلسه">
+          <div className="flex max-h-[85dvh] w-full max-w-md flex-col gap-3 rounded-2xl bg-white p-4 dark:bg-gray-800" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="font-bold text-gray-800 dark:text-white">متن جلسه</h4>
+              <button type="button" aria-label="بستن متن جلسه" onClick={() => setShareTextFallback(null)} className="p-2"><X className="h-5 w-5" /></button>
+            </div>
+            <p className="text-sm text-gray-500">اشتراک مستقیم یا کپی خودکار در دسترس نیست؛ متن را انتخاب و کپی کنید.</p>
+            <textarea readOnly value={shareTextFallback} onFocus={e => e.currentTarget.select()} className="min-h-0 h-64 w-full resize-none rounded-xl border p-3 text-sm dark:bg-gray-900 dark:text-white" aria-label="متن قابل کپی جلسه" />
+          </div>
+        </div>
+      )}
+
       {/* Share choice modal */}
       {showShareChoice && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50" onClick={() => setShowShareChoice(false)} dir="rtl">
@@ -988,7 +999,7 @@ const getJalaliDate = (): string => {
               </div>
               <div>
                 <p className="font-semibold text-gray-800 dark:text-white text-sm">اشتراک متن</p>
-                <p className="text-xs text-gray-400 mt-0.5">کپی متن جلسه در کلیپ‌بورد</p>
+                <p className="text-xs text-gray-400 mt-0.5">ارسال از طریق برنامه‌های گوشی یا کپی متن</p>
               </div>
             </button>
             <button onClick={handleShareAsImage}
