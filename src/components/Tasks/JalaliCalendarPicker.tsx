@@ -19,7 +19,7 @@ function JalaliCalendarPicker({ value, onChange, onClose }: {
   const [viewYear, setViewYear] = useState(Number(now.format('jYYYY')));
   const [viewMonth, setViewMonth] = useState(Number(now.format('jMM')) - 1);
   const [hour, setHour] = useState(value ? value.getHours() : 0);
-  const [minute, setMinute] = useState(value ? Math.floor(value.getMinutes() / 15) * 15 : 0);
+  const [minute, setMinute] = useState(value ? value.getMinutes() : 0);
 
   const prevMonth = () => { if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); } else setViewMonth(m => m - 1); };
   const nextMonth = () => { if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); } else setViewMonth(m => m + 1); };
@@ -92,7 +92,7 @@ function JalaliCalendarPicker({ value, onChange, onClose }: {
         <span className="text-gray-400">:</span>
         <select value={minute} onChange={e => setMinute(Number(e.target.value))}
           className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1 dark:bg-gray-700 dark:text-white">
-          {[0, 15, 30, 45].map(m => <option key={m} value={m}>{toPersianDigits(String(m).padStart(2, '0'))}</option>)}
+          {Array.from({ length: 60 }, (_, index) => index).map(m => <option key={m} value={m}>{toPersianDigits(String(m).padStart(2, '0'))}</option>)}
         </select>
       </div>
 

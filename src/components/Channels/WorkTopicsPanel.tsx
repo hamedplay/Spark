@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { JalaliDatePicker } from '../Minutes/Form/JalaliDatePicker';
 import { X, GitFork, CircleCheck as CheckCircle2, Clock, Archive, User, ChevronDown, ChevronUp, Plus, Send, MessageSquare } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -298,12 +299,7 @@ function CreateTaskForm({ channelId, currentUserId, members, onCreated, onCancel
         />
         <div>
           <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">مهلت اقدام (اختیاری)</p>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={e => setDueDate(e.target.value)}
-            className="w-full text-xs px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500/40"
-          />
+          <JalaliDatePicker value={dueDate || null} onChange={value => setDueDate(value || '')} />
         </div>
         <div>
           <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1.5">مسئولان (انتخاب کنید)</p>

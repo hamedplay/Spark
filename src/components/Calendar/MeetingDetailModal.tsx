@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { isMeetingEligibleForMinutes } from '../../lib/isMeetingEligibleForMinutes';
 import toast from 'react-hot-toast';
 import { toPng } from 'html-to-image';
+import { meetingStartInstant } from '../../features/meetings/meetingStartInstant';
 import { shareMeetingText, shareMeetingImage } from '../../features/meetings/sharing/nativeMeetingShare';
 import { normalizeMeetingDate, normalizeClockTime } from '../../lib/minutesDate';
 import { MeetingOwnerDelegateModal } from './MeetingOwnerDelegateModal';
@@ -283,11 +284,9 @@ export function MeetingDetailModal({
 
   // Check if it's within 10 minutes before start time
   const canJoinNow = (): boolean => {
-    if (!m.start_time || !m.request_date) return false;
+    const meetingStart = meetingStartInstant(m);
+    if (!meetingStart) return false;
     try {
-      const dateStr = m.request_date.slice(0, 10);
-      const [h, min] = m.start_time.split(':').map(Number);
-      const meetingStart = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
       const tenMinBefore = new Date(meetingStart.getTime() - 10 * 60 * 1000);
       return new Date() >= tenMinBefore;
     } catch {
@@ -321,11 +320,9 @@ export function MeetingDetailModal({
   };
 
   const getMeetingTimeInfo = (): string => {
-    if (!m.start_time || !m.request_date) return '';
+    const meetingStart = meetingStartInstant(m);
+    if (!meetingStart) return '';
     try {
-      const dateStr = m.request_date.slice(0, 10);
-      const [h, min] = m.start_time.split(':').map(Number);
-      const meetingStart = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}:00`);
       const tenMinBefore = new Date(meetingStart.getTime() - 10 * 60 * 1000);
       const now = new Date();
       if (now < tenMinBefore) {

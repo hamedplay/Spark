@@ -2,7 +2,7 @@ import type {
   MinutesStatus, ConfidentialityLevel, ApprovalMode, ApprovalStatus,
   DecisionPriority, DecisionStatus,
 } from '../types';
-import { gregorianToJalaliDate, toPersianDigits } from '../../lib/minutesDate';
+import { formatJalaliDateForDisplay, formatJalaliTimestampDateOnly, formatJalaliTimestamp } from '../../lib/minutesDate';
 
 export interface DocMinute {
   meeting_title_snapshot: string;
@@ -132,16 +132,12 @@ export function orDash(v: string | null | undefined): string {
 
 export function faDate(iso: string | null): string {
   if (!iso) return DASH;
-  const jalali = gregorianToJalaliDate(iso);
-  if (jalali) return toPersianDigits(jalali);
-  try { return new Date(iso).toLocaleDateString('fa-IR'); }
-  catch { return iso; }
+  const day = formatJalaliDateForDisplay(iso);
+  return day !== DASH ? day : formatJalaliTimestampDateOnly(iso);
 }
 
 export function faDateTime(iso: string | null): string {
-  if (!iso) return DASH;
-  try { return new Date(iso).toLocaleString('fa-IR'); }
-  catch { return iso; }
+  return formatJalaliTimestamp(iso) || DASH;
 }
 
 export const STATUS_LABELS: Record<MinutesStatus, string> = {

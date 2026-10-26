@@ -4,7 +4,7 @@ import { PageHeader, TableSkeleton, MinutesStatusBadge, DecisionStatusBadge, Dec
 import { MinutesBackButton } from './MinutesBackButton';
 import { supabase } from '../../lib/supabase';
 import { setMinuteIdInUrl } from '../../lib/minutesNavigation';
-import { formatJalaliDateForDisplay, formatJalaliTimestamp } from '../../lib/minutesDate';
+import { formatJalaliDateForDisplay, formatJalaliTimestamp, formatJalaliTimestampDateOnly } from '../../lib/minutesDate';
 import { JalaliDatePicker } from './Form/JalaliDatePicker';
 
 type ReportType = 'minutes' | 'decisions';
@@ -102,15 +102,15 @@ export function MinutesReportsPage({ onNavigate }: Props) {
     if (reportType === 'minutes') {
       headers = ['عنوان جلسه','تاریخ','واحد','دبیر','رئیس','وضعیت','مد تأیید','نسخه','تعداد مصوبات','تاریخ انتشار'];
       csvRows = (rows as MinuteReportRow[]).map(r => [
-        r.meeting_title, r.meeting_date || '', r.org_unit || '', r.secretary, r.chair,
+        r.meeting_title, r.meeting_date ? formatJalaliDateForDisplay(r.meeting_date) : '', r.org_unit || '', r.secretary, r.chair,
         r.status, r.approval_mode || '', String(r.revision_number), String(r.decision_count),
-        r.published_at ? new Date(r.published_at).toLocaleDateString('fa-IR') : '',
+        r.published_at ? formatJalaliTimestampDateOnly(r.published_at) : '',
       ]);
     } else {
       headers = ['عنوان مصوبه','صورت‌جلسه','واحد','اولویت','وضعیت','پیشرفت','مهلت','عقب‌افتاده','آخرین به‌روزرسانی'];
       csvRows = (rows as DecisionReportRow[]).map(r => [
         r.title, r.minute_title, r.unit || '', r.priority, r.status, String(r.progress),
-        r.due_date || '', r.overdue ? 'بله' : 'خیر', r.latest_update || '',
+        r.due_date ? formatJalaliDateForDisplay(r.due_date) : '', r.overdue ? 'بله' : 'خیر', r.latest_update ? formatJalaliTimestamp(r.latest_update) : '',
       ]);
     }
     const esc = (s: string) => {
@@ -126,7 +126,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `minutes-report-${reportType}-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `minutes-report-${reportType}-${formatJalaliTimestampDateOnly(new Date().toISOString()).replace(/\//g, '-')}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

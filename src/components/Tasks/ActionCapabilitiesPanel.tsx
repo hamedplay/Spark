@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CheckSquare, FileText, FolderKanban, Link2, Plus, Trash2, Upload, Bell, Clock3, GitBranch } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { JalaliDateInput } from './JalaliDateInput';
 import { type ActionTask } from './TaskCard';
 
 interface ChecklistItem { id: string; task_id: string; title: string; is_completed: boolean; sort_order: number; }
@@ -27,13 +28,13 @@ export function ActionCapabilitiesPanel({ task, onTaskChanged }: { task: Capabil
   const [busy, setBusy] = useState(false);
   const [projectId, setProjectId] = useState(task.project_id || '');
   const [parentTaskId, setParentTaskId] = useState(task.parent_task_id || '');
-  const [reminderAt, setReminderAt] = useState(task.reminder_at ? String(task.reminder_at).slice(0, 16) : '');
+  const [reminderAt, setReminderAt] = useState(task.reminder_at || '');
   const [actualMinutes, setActualMinutes] = useState(task.actual_minutes == null ? '' : String(task.actual_minutes));
 
   const syncTaskState = () => {
     setProjectId(task.project_id || '');
     setParentTaskId(task.parent_task_id || '');
-    setReminderAt(task.reminder_at ? String(task.reminder_at).slice(0, 16) : '');
+    setReminderAt(task.reminder_at || '');
     setActualMinutes(task.actual_minutes == null ? '' : String(task.actual_minutes));
   };
 
@@ -179,7 +180,9 @@ export function ActionCapabilitiesPanel({ task, onTaskChanged }: { task: Capabil
         </div>
         <div>
           <label className="text-xs text-gray-500 flex items-center gap-1 mb-1"><Bell className="w-3.5 h-3.5"/> یادآور</label>
-          <input type="datetime-local" value={reminderAt} onChange={e=>setReminderAt(e.target.value)} onBlur={e=>{const value=e.target.value; void updateTaskField({reminder_at:value?new Date(value).toISOString():null},()=>setReminderAt(value));}} className="w-full px-3 py-2 rounded-xl border dark:border-gray-700 dark:bg-gray-800 text-sm"/>
+          <JalaliDateInput value={reminderAt && Number.isFinite(new Date(reminderAt).getTime()) ? new Date(reminderAt) : null}
+            onChange={date => { const value = date.toISOString(); void updateTaskField({ reminder_at: value }, () => setReminderAt(value)); }} />
+          {reminderAt && <button type="button" onClick={() => void updateTaskField({ reminder_at: null }, () => setReminderAt(''))} className="mt-2 text-xs text-red-500">حذف یادآور</button>}
         </div>
         <div>
           <label className="text-xs text-gray-500 flex items-center gap-1 mb-1"><Clock3 className="w-3.5 h-3.5"/> زمان صرف‌شده (دقیقه)</label>

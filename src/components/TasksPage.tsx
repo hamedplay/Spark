@@ -1,3 +1,4 @@
+import { formatJalaliTimestampDateOnly } from '../lib/minutesDate';
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Loader as Loader2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -560,7 +561,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Tasks');
-    await XLSX.writeFile(wb, `tasks-${new Date().toISOString().split('T')[0]}.xlsx`);
+    await XLSX.writeFile(wb, `tasks-${formatJalaliTimestampDateOnly(new Date().toISOString()).replace(/\//g, '-')}.xlsx`);
     toast.success('فایل اکسل دانلود شد');
   };
 

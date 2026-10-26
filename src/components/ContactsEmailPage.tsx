@@ -1,3 +1,4 @@
+import { formatJalaliTimestampDateOnly } from '../lib/minutesDate';
 import React, { useState, useEffect } from 'react';
 import { Mail, CreditCard as Edit2, Save, X, Plus, Loader2, Search, Trash2, Users, AtSign } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -225,7 +226,7 @@ export function ContactsEmailPage({ currentUserId: propUserId }: { currentUserId
                     </div>
                   </div>
                   <div className="mt-2 border-t border-slate-100 pt-2 text-[10px] text-slate-400 dark:border-slate-800">
-                    ایجاد: {new Date(contact.created_at || '').toLocaleDateString('fa-IR')}
+                    ایجاد: {formatJalaliTimestampDateOnly(contact.created_at)}
                   </div>
                 </>
               )}

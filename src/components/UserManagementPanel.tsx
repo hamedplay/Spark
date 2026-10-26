@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import * as XLSX from '../lib/xlsxCompat';
 import type { AdminProfile, Panel, Props, ImportResult } from './UserManagement/types';
 import { EXCEL_COLUMNS, emptyNew, menuItems } from './UserManagement/utils';
+import { profileDateForExport } from './UserManagement/profileDateTransfer';
 import { handleImportFile } from './UserManagement/importHandler';
 import { AdminUserDeleteAction } from './AdminUserDeleteAction';
 import { AdminOverviewCards } from './UserManagement/AdminOverviewCards';
@@ -182,7 +183,7 @@ export function UserManagementPanel({ currentUserId }: Props) {
       const row: Record<string, string> = {};
       EXCEL_COLUMNS.forEach(col => {
         const val = (p as any)[col.key];
-        row[col.label] = val === null || val === undefined ? '' : String(val);
+        row[col.label] = ['birth_date', 'hire_date'].includes(col.key) ? profileDateForExport(val) : val === null || val === undefined ? '' : String(val);
       });
       return row;
     });

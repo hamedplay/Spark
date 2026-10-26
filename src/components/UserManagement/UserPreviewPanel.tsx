@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatJalaliDateForDisplay } from '../../lib/minutesDate';
 import { X, Eye, Pencil, Shield, User, Briefcase } from 'lucide-react';
 import type { AdminProfile } from './types';
 
@@ -80,7 +81,7 @@ function UserPreviewPanel({ user, onBack, onEdit }: { user: AdminProfile; onBack
           <InfoRow label="سمت" value={user.position} />
           <InfoRow label="کد پرسنلی" value={user.employee_id} />
           <InfoRow label="محل کار" value={user.location} />
-          <InfoRow label="تاریخ استخدام" value={user.hire_date} />
+          <InfoRow label="تاریخ استخدام" value={user.hire_date ? formatJalaliDateForDisplay(user.hire_date) : null} />
         </div>
       )}
 

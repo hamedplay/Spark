@@ -263,7 +263,7 @@ function UserProfileForm({
             <input className={inp} value={form.employee_id || ''} onChange={e => set('employee_id', e.target.value)} placeholder="شماره پرسنلی" dir="ltr" />
           </Field>
           <Field label="تاریخ استخدام" icon={Calendar}>
-            <input className={inp} type="date" value={form.hire_date || ''} onChange={e => set('hire_date', e.target.value)} dir="ltr" />
+            <JDateInput value={form.hire_date || ''} onChange={value => set('hire_date', value)} />
           </Field>
           <Field label="موقعیت مکانی (دفتر)" icon={MapPin}>
             <input className={inp} value={form.location || ''} onChange={e => set('location', e.target.value)} placeholder="آدرس دفتر" />

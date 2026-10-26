@@ -1,6 +1,7 @@
 import * as XLSX from '../../lib/xlsxCompat';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import { profileDateFromImport } from './profileDateTransfer';
 import type { ImportResult } from './types';
 
 async function handleImportFile(
@@ -96,6 +97,17 @@ async function handleImportFile(
         continue;
       }
 
+      let birthDate: string | null;
+      let hireDate: string | null;
+      try {
+        birthDate = profileDateFromImport(cell(row, 'تاریخ تولد', 'birth_date'));
+        hireDate = profileDateFromImport(cell(row, 'تاریخ استخدام', 'hire_date'));
+      } catch (error) {
+        result.failed++;
+        result.errors.push({ row: rowNum, email, reason: error instanceof Error ? error.message : 'تاریخ نامعتبر' });
+        continue;
+      }
+
       const payload = {
         email,
         password,
@@ -106,12 +118,12 @@ async function handleImportFile(
           national_id:  str(cell(row, 'کد ملی', 'national_id')),
           employee_id:  str(cell(row, 'کد پرسنلی', 'employee_id')),
           gender:       str(cell(row, 'جنسیت (male/female)', 'جنسیت', 'gender')),
-          birth_date:   str(cell(row, 'تاریخ تولد', 'birth_date')),
+          birth_date:   birthDate,
           city:         str(cell(row, 'شهر', 'city')),
           organization: str(cell(row, 'سازمان', 'organization')),
           position:     str(cell(row, 'سمت', 'position')),
           department:   str(cell(row, 'واحد', 'department')),
-          hire_date:    str(cell(row, 'تاریخ استخدام', 'hire_date')),
+          hire_date:    hireDate,
           location:     str(cell(row, 'موقعیت مکانی', 'location')),
           bio:          str(cell(row, 'درباره کاربر', 'bio')),
         },

@@ -1,3 +1,4 @@
+import { formatJalaliTimestampDateOnly } from '../lib/minutesDate';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   CreditCard as Edit2,
@@ -663,7 +664,7 @@ export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: st
 
                       <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 text-[9px] text-slate-400 dark:border-slate-800 dark:text-slate-500">
                         <span>ثبت مخاطب</span>
-                        <span>{new Date(contact.created_at || '').toLocaleDateString('fa-IR')}</span>
+                        <span>{formatJalaliTimestampDateOnly(contact.created_at)}</span>
                       </div>
                     </>
                   )}
