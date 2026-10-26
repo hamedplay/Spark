@@ -219,7 +219,7 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
   });
 
   const legacyMessage = typeof body.message === "string" ? body.message.trim() : "";
-  const useLegacyMessage = !rendered.ok
+  const useLegacyMessage = category !== "meeting" && !rendered.ok
     && rendered.errorCode === "SMS_TEMPLATE_CONTEXT_MISSING"
     && legacyMessage.length > 0;
 
@@ -444,7 +444,7 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
   });
 
   const legacyMessage = typeof body.message === "string" ? body.message.trim() : "";
-  const useLegacyMessage = !rendered.ok
+  const useLegacyMessage = category !== "meeting" && !rendered.ok
     && rendered.errorCode === "SMS_TEMPLATE_CONTEXT_MISSING"
     && legacyMessage.length > 0;
 

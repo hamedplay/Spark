@@ -155,14 +155,20 @@ export async function produceNotificationWithDependencies(
     }
   }
 
-  const title = template
+  // An unscheduled invitation response must not say "on date  at time ...".
+  // Keep the factual fallback notification; the SMS server validates its template separately.
+  const missingResponseDate = payload.category === 'meeting'
+    && ['meeting_confirmed', 'meeting_declined'].includes(payload.eventType)
+    && !String(variables.meeting_date ?? '').trim();
+
+  const title = template && !missingResponseDate
     ? fillPlaceholders(
         template.title,
         variables
       )
     : payload.fallbackTitle;
 
-  const message = template
+  const message = template && !missingResponseDate
     ? fillPlaceholders(
         template.body,
         variables

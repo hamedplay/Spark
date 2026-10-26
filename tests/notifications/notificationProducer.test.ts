@@ -443,3 +443,15 @@ test('still loads and resolves Notification templates when all channels are disa
     reason: 'CHANNEL_DISABLED',
   });
 });
+
+for (const eventType of ['meeting_confirmed','meeting_declined']) {
+  test(`${eventType}: missing date uses factual in-app fallback instead of incomplete template`, async()=>{
+    const log=createCallLog();
+    const deps=makeDependencies(log,{notificationTemplates:new Map([
+      [`meeting:${eventType}:all`,{id:'template',title:'جلسه {{meeting_subject}}',body:'در تاریخ {{meeting_date}} ساعت {{start_time}}',updatedAt:''}],
+    ])});
+    await produceNotificationWithDependencies(makePayload({eventType,placeholders:{meeting_subject:'تست',meeting_date:'',start_time:'16:00'}}),deps);
+    assert.equal(log.inApp[0].message,'Fallback Message');
+    assert.equal(log.sms[0].context?.meeting_date,'');
+  });
+}

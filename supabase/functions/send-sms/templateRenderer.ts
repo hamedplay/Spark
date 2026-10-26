@@ -29,7 +29,7 @@ function buildMeetingTime(start: string, end: string): string {
 }
 
 function formatTemplateDate(raw: unknown): string {
-  const value = nonEmpty(raw);
+  const value = nonEmpty(raw).replace(/[۰-۹٠-٩]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".includes(digit) ? "۰۱۲۳۴۵۶۷۸۹".indexOf(digit) : "٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
   if (!value) return "";
 
   const datePrefix = value.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
@@ -85,13 +85,13 @@ async function enrichContext(input: SystemSmsRenderInput): Promise<Record<string
   if (input.meetingId) {
     const { data: meeting } = await input.supabase
       .from("meetings")
-      .select("subject, request_date, start_time, end_time, location, user_id")
+      .select("subject, request_date, request_jalaali_date, start_time, end_time, location, user_id")
       .eq("id", input.meetingId)
       .maybeSingle();
 
     if (meeting) {
       const subject = nonEmpty(meeting.subject);
-      const date = formatTemplateDate(meeting.request_date);
+      const date = formatTemplateDate(meeting.request_date) || formatTemplateDate(meeting.request_jalaali_date);
       const start = nonEmpty(meeting.start_time);
       const end = nonEmpty(meeting.end_time);
       const location = nonEmpty(meeting.location);

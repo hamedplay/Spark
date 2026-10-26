@@ -61,10 +61,8 @@ export async function dispatchSmsNotification(
       );
 
     if (functionError) {
-      throw new Error(
-        functionError.message ??
-          String(functionError)
-      );
+      // Keep FunctionsHttpError.context so the catch block can read the server code.
+      throw functionError;
     }
 
     const row =

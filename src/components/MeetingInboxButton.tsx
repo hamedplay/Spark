@@ -6,7 +6,7 @@ import { getMeetingTemplateKey } from '../config/templateCatalog';
 import toast from 'react-hot-toast';
 import { useOrgUsers } from '../lib/useOrgUsers';
 import { useDraggableFab, panelStyle } from '../lib/useDraggableFab';
-import { gregorianToJalali } from '../lib/sparkDateUtils';
+import { formatMeetingNotificationDate as formatMeetingDate } from '../features/meetings/formatMeetingNotificationDate';
 
 function formatJalaliDate(value?: string | null): string {
   if (!value) return 'تاریخ نامشخص';
@@ -20,10 +20,6 @@ function formatJalaliDate(value?: string | null): string {
   }).format(date);
 }
 
-function formatMeetingDate(meeting: { request_date?: string | null }): string {
-  if (!meeting.request_date) return '';
-  return formatJalaliDate(meeting.request_date);
-}
 
 function formatConflictTime(value?: string | null): string {
   if (!value) return '';
@@ -42,7 +38,8 @@ interface InboxEntry {
 interface InboxMeeting {
   id: string;
   subject: string;
-  request_date: string;
+  request_date: string | null;
+  request_jalaali_date?: string | null;
   start_time: string | null;
   end_time: string | null;
   location: string | null;
@@ -98,7 +95,7 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
         delegate_to,
         delegated_by_user_id,
         meeting:meetings (
-          id, subject, request_date, start_time, end_time,
+          id, subject, request_date, request_jalaali_date, start_time, end_time,
           location, user_id, participant_user_ids, notify_users, calendar_id
         )
       `)
@@ -194,7 +191,7 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
             delegate_to,
             delegated_by_user_id,
             meeting:meetings (
-              id, subject, request_date, start_time, end_time,
+              id, subject, request_date, request_jalaali_date, start_time, end_time,
               location, user_id, participant_user_ids, notify_users, calendar_id
             )
           `)
@@ -428,6 +425,7 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
             organizer_name: getProfileName(meeting.user_id),
             location: meeting.location || '',
           },
+          meetingId: meeting.id,
           senderId: currentUserId,
           senderName: getProfileName(currentUserId),
           actionUrl: 'calendar',
@@ -770,7 +768,7 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
                         <div className="grid grid-cols-2 gap-x-2 gap-y-1 mb-2">
                           <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                             <Calendar className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
-                            {gregorianToJalali(meeting.request_date) || meeting.request_date}
+                            {formatMeetingDate(meeting) || 'تاریخ نامشخص'}
                           </span>
                           {meeting.start_time && (
                             <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
