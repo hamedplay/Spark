@@ -16,5 +16,13 @@ test('axis locking preserves vertical scrolling and ignores tap jitter', () => {
   assert.equal(notificationRowGesture(80, 5), 'horizontal');
   assert.equal(notificationRowGesture(-80, 5), 'horizontal');
   assert.equal(notificationRowGesture(20, 80), 'vertical');
-  assert.equal(notificationRowGesture(40, 40), 'vertical');
+  assert.equal(notificationRowGesture(40, 40), 'pending');
+});
+
+test('a diagonal touch start stays undecided until the swipe direction is clear', () => {
+  assert.equal(notificationRowGesture(12, 10), 'pending');
+  assert.equal(notificationRowGesture(-12, 10), 'pending');
+  assert.equal(notificationRowGesture(80, 18), 'horizontal');
+  assert.equal(notificationRowGesture(-80, 18), 'horizontal');
+  assert.equal(notificationRowGesture(10, 40), 'vertical');
 });
