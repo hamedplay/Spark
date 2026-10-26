@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -22,6 +23,7 @@ interface Props {
 type SidebarPanel = 'settings' | 'actions' | null;
 
 export function ChannelsPage({ currentUserId, isAdmin, onNavigateToTasks, onOpenDirectChat }: Props) {
+  useLiveData([...LIVE_DATA.channels, ...LIVE_DATA.people], async () => { await Promise.all([fetchChannels(), fetchProfiles()]); });
   const { hasPermission } = usePermissions();
   const [channels, setChannels] = useState<ChannelWithMeta[]>([]);
   const [groups, setGroups] = useState<ChannelWithMeta[]>([]);

@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { CalendarDays, ListFilter as Filter, Search, EllipsisVertical as MoreVertical, CreditCard as Edit2, Trash2, GitBranch, X, Loader as Loader2, RefreshCw } from 'lucide-react';
 import { type MeetingRow, type Profile } from './types';
@@ -12,6 +13,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 function MeetingsMonitor({ profiles }: { profiles: Profile[] }) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.meetings, async () => { await loadMeetings(); });
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -30,7 +32,7 @@ function MeetingsMonitor({ profiles }: { profiles: Profile[] }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const loadMeetings = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data, error } = await supabase.from('meetings').select(`
       id, subject, request_date, duration, location, representative, phone,
       notes, priority, status, status_type, created_at, user_id, start_time,

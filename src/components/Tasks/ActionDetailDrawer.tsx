@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import React, { useEffect, useState } from 'react';
 import { X, Calendar, User, Clock3, GitFork, MessageSquare, ClipboardList, ArrowLeft, CircleCheck as CheckCircle2 } from 'lucide-react';
 import moment from 'moment-jalaali';
@@ -39,12 +40,13 @@ const actionLabel: Record<string, string> = {
 };
 
 export function ActionDetailDrawer({ task, users, onClose, onEdit, onAddNote, onRefer }: ActionDetailDrawerProps) {
+  const liveRevision = useLiveRevision(LIVE_DATA.tasks);
   const [steps, setSteps] = useState<TaskWorkflowStep[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    if (!steps.length) setLoading(true);
     supabase.from('task_workflow_steps').select('*').eq('task_id', task.id).order('created_at', { ascending: false })
       .then(({ data }) => {
         if (!cancelled) {
@@ -53,7 +55,7 @@ export function ActionDetailDrawer({ task, users, onClose, onEdit, onAddNote, on
         }
       });
     return () => { cancelled = true; };
-  }, [task.id]);
+  }, [task.id, liveRevision]);
 
   const nameOf = (id?: string | null) => {
     if (!id) return '—';

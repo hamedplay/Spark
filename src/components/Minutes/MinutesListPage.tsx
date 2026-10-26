@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, Search, X, Eye, CreditCard as Edit2, Send, Printer, Trash2, CircleAlert as AlertCircle, Loader as Loader2, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -25,6 +26,7 @@ function getInitialStatusFilter(): MinutesStatusFilter {
 }
 
 export function MinutesListPage({ onNavigate }: Props) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { await fetchMinutes(); });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MinutesStatusFilter>(getInitialStatusFilter);
   const [confidentialityFilter, setConfidentialityFilter] = useState<ConfidentialityLevel | 'all'>('all');
@@ -82,7 +84,7 @@ export function MinutesListPage({ onNavigate }: Props) {
   };
 
   const fetchMinutes = useCallback(async () => {
-    setIsLoading(true);
+    if (!liveRefreshRef.current) setIsLoading(true);
     setError(null);
     const { data, error: fetchError } = await supabase
       .from('minutes')

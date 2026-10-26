@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useCallback } from 'react';
 import { Search, FileDown, Play, X, ChevronDown, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { PageHeader, TableSkeleton, MinutesStatusBadge, DecisionStatusBadge, DecisionPriorityBadge, ProgressIndicator } from './MinutesShared';
@@ -33,6 +34,7 @@ interface DecisionReportRow {
 const PAGE_SIZE = 25;
 
 export function MinutesReportsPage({ onNavigate }: Props) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { if (ran && !running) await runReport(page); });
   const [reportType, setReportType] = useState<ReportType>('minutes');
   const [textQuery, setTextQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -65,7 +67,7 @@ export function MinutesReportsPage({ onNavigate }: Props) {
   }, [reportType, textQuery, dateFrom, dateTo, status, priority, confidentiality, overdueOnly, hasDecisions]);
 
   const runReport = useCallback(async (p: number) => {
-    setRunning(true); setError(null);
+    if (!liveRefreshRef.current) setRunning(true); setError(null);
     try {
       const rpc = reportType === 'minutes' ? 'search_minutes_report' : 'search_decisions_report';
       const { data, error: rpcErr } = await supabase.rpc(rpc, {

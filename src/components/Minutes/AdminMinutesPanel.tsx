@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { usePermissions } from '../../context/PermissionsContext';
@@ -8,6 +9,7 @@ type MinuteRow = { id: string; meeting_title_snapshot: string; meeting_date_snap
 const PAGE_SIZE = 25;
 
 export function AdminMinutesPanel() {
+  useLiveData(LIVE_DATA.minutes, async () => { if (isAdmin && open && !editing) setRefresh(v => v + 1); });
   const { isAdmin } = usePermissions();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -60,7 +62,6 @@ export function AdminMinutesPanel() {
         <button type="button" disabled={loading || page === 0} onClick={() => setPage(v => v - 1)}>قبلی</button>
         <span>صفحه {page + 1}</span>
         <button type="button" disabled={loading || !hasMore} onClick={() => setPage(v => v + 1)}>بعدی</button>
-        <button type="button" disabled={loading} onClick={() => setRefresh(v => v + 1)}>بازآوری</button>
       </div>
     </>)}
   </section>;

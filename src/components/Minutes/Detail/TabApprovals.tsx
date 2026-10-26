@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useEffect, useMemo, useState } from 'react';
 import { X, Plus, UserCheck, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -44,6 +45,7 @@ export interface TabApprovalsProps {
 }
 
 export function TabApprovals({ approvals, comments, agendaItems, minute, internalParticipants }: TabApprovalsProps) {
+  const liveRevision = useLiveRevision(LIVE_DATA.minutes);
   const approvedCount = approvals.filter(a => a.status === 'approved').length;
   const totalCount = approvals.length;
   const [decisionTargets, setDecisionTargets] = useState<ChangeTargetDecision[]>([]);
@@ -79,7 +81,7 @@ export function TabApprovals({ approvals, comments, agendaItems, minute, interna
     });
 
     return () => { cancelled = true; };
-  }, [comments.length, minute.id, minute.revision_number]);
+  }, [comments.length, minute.id, minute.revision_number, liveRevision]);
 
   return (
     <div className="space-y-5">

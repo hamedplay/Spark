@@ -1,5 +1,6 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Upload, Trash2, Eye, FileText, Loader as Loader2 } from 'lucide-react';
+import { Upload, Trash2, Eye, FileText, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
 import toast from 'react-hot-toast';
@@ -52,6 +53,7 @@ interface MinutesConfigPanelProps {
 }
 
 export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => { if (!savingKey && !uploading) await loadConfigs(); });
   const [configs, setConfigs] = useState<ConfigEntry[]>([]);
   const [logoUrl, setLogoUrl] = useState<string>(FALLBACK_LOGO);
   const [rawMap, setRawMap] = useState<Map<string, string>>(new Map());
@@ -62,7 +64,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadConfigs = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('system_config')
@@ -541,12 +543,7 @@ export function MinutesConfigPanel({ currentUserId }: MinutesConfigPanelProps) {
             <Eye className="w-4 h-4 text-green-500" />
             پیش‌نمایش قالب
           </h4>
-          <button
-            onClick={loadConfigs}
-            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+
         </div>
         <MinutesPreviewFrame fontSize={FONT_SIZE_MAP[cfgVal('minutes_font_size', 'medium')] || '14px'}>
           <MinutesDocumentLayout

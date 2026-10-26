@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, CreditCard as Edit2, Building2, Link2, Briefcase, Shield, Settings } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -16,6 +17,7 @@ import { OrgFormModal, type OrgFormState } from './OrgStructure/OrgFormModal';
 import { usePermissions } from '../context/PermissionsContext';
 
 export function OrgStructurePage() {
+  const liveRefreshRef = useLiveData([...LIVE_DATA.people, ...LIVE_DATA.config], async () => { await fetchAll(); });
   const { hasPermission } = usePermissions();
   const canManagePermissions = hasPermission('config_users.org_structure.permissions');
   const [org, setOrg] = useState<OrgOrganization | null>(null);
@@ -39,7 +41,7 @@ export function OrgStructurePage() {
   const [assigningPositionId, setAssigningPositionId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const [{ data: orgData }, { data: u }, { data: p }, { data: m }, { data: pr }, { data: ld }, { data: hc }] = await Promise.all([
         supabase.from('org_organizations').select('*').maybeSingle(),

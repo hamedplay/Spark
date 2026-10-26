@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Clock3, Loader2, Save, ShieldCheck, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
@@ -76,8 +77,15 @@ export function SmsDeliveryPolicyTab() {
     return map;
   }, [catalogEvents]);
 
+  const loadedSnapshot = useRef<string | null>(null);
+  const currentSnapshot = useRef(''); currentSnapshot.current = JSON.stringify(policies);
+  const applyLoaded = (next: typeof policies) => { loadedSnapshot.current = JSON.stringify(next); setPolicies(next); };
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => {
+    if (!(savingKey) && loadedSnapshot.current === currentSnapshot.current) await load();
+  });
+
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const [{ data: policyRows, error: policyError }, { data: templateRows, error: templateError }] = await Promise.all([
         supabase
@@ -106,7 +114,7 @@ export function SmsDeliveryPolicyTab() {
           locked_immediate: row.locked_immediate === true,
         };
       }
-      setPolicies(nextPolicies);
+      applyLoaded(nextPolicies);
       setDbEvents((templateRows || []).map(row => ({ category: row.category, event_type: row.event_type })));
     } catch (error) {
       console.error('[SmsDeliveryPolicyTab] load failed', error);

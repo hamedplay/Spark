@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect } from 'react';
 import { X, Plus, Link2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -11,6 +12,7 @@ const RELATION_TYPES = [
 ];
 
 function UserRelationsPanel({ user, onBack, allProfiles }: { user: AdminProfile; onBack: () => void; allProfiles: AdminProfile[] }) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.people, async () => { await load(); });
   const [relations, setRelations] = useState<Relation[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -18,7 +20,7 @@ function UserRelationsPanel({ user, onBack, allProfiles }: { user: AdminProfile;
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data } = await supabase
       .from('user_access_relations')
       .select('*')

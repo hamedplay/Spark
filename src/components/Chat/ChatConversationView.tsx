@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, CalendarDays } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -45,6 +46,7 @@ export function ChatConversationView({
   onConversationUpdate, onStartCall, onStartE2EECall,
   onOpenDirectChat, msgRefreshKey,
 }: Props) {
+  useLiveData([...LIVE_DATA.chat, ...LIVE_DATA.people], async () => { await Promise.all([fetchReminders(), fetchGlobalStarred()]); });
   const { triggerUrgentAlarm: globalTriggerUrgentAlarm } = useGlobalCall();
 
   const playBeep = () => {

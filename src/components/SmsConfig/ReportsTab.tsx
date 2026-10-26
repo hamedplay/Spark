@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import { ChartBar as BarChart2, CircleCheck as CheckCircle, Circle as XCircle, CircleMinus as MinusCircle, Clock, ChevronDown, RefreshCw, Loader as Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -22,6 +23,7 @@ import {
 } from './types';
 
 export function ReportsTab() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.sms, async () => { await Promise.all([load(), loadStats()]); });
   const [logs, setLogs] = useState<DispatchLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
@@ -77,7 +79,7 @@ export function ReportsTab() {
   };
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     let q = supabase
       .from('sms_dispatch_logs')
       .select('*', { count: 'exact' })

@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { CalendarDays, Plus, Trash2, CreditCard as Edit2, Download, Upload, ChevronDown, Check, Loader as Loader2, Save, RefreshCw, Sun, Moon, Star, CircleAlert as AlertCircle, EllipsisVertical as MoreVertical, Copy, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -180,6 +181,7 @@ function RowMenu({ onEdit, onDelete, onDuplicate }: { onEdit: () => void; onDele
 }
 
 export function CalendarOccasionsPanel() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.meetings, async () => { await load(); });
   const [occasions, setOccasions] = useState<Occasion[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -191,7 +193,7 @@ export function CalendarOccasionsPanel() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data } = await supabase.from('calendar_occasions').select('*').order('calendar_type').order('month').order('day');
     setOccasions((data || []) as Occasion[]);
     setLoading(false);

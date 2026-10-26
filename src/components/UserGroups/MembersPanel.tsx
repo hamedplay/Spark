@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import { Users, Search, Plus, UserPlus, Loader as Loader2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -6,6 +7,7 @@ import { BackHeader, GroupBadge } from './Shared';
 import type { UserGroup, Member, AllProfile } from './types';
 
 export function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () => void }) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.people, async () => { await loadMembers(); const { data } = await supabase.from('profiles_public').select('user_id, full_name, username, avatar_url').order('full_name'); if (data) setAllProfiles(data as AllProfile[]); });
   const [members, setMembers] = useState<Member[]>([]);
   const [allProfiles, setAllProfiles] = useState<AllProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,7 +16,7 @@ export function MembersPanel({ group, onBack }: { group: UserGroup; onBack: () =
   const [showAdd, setShowAdd] = useState(false);
 
   const loadMembers = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data, error } = await supabase
       .from('user_group_members')
       .select('id, user_id, group_id, added_at')

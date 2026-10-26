@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from './shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect } from 'react';
 import { RestrictedAccessPage } from './components/RestrictedAccessPage';
 import { SparkLoader } from './components/ui/SparkLoader';
@@ -34,6 +35,7 @@ function AppToaster() {
 }
 
 function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuthSession> }) {
+  useLiveData([...LIVE_DATA.people, ...LIVE_DATA.config], async () => { await authSession.refreshAccessState(); });
   const { prefs, loading: prefsLoading } = useUserPreferences();
   const { currentUserId, isAdmin, userPermissions } = authSession;
   const { activePage, navigate } = useNavigation(true, prefsLoading, prefs.default_landing_page);

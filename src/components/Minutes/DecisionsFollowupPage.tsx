@@ -1,6 +1,7 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { getInitialFollowupFilter } from './followupHubScope';
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Eye, TrendingUp, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Flag, ChevronRight, ChevronLeft, MessageSquare, SquareArrowUpRight, CircleStop as StopCircle, RotateCcw, Clock } from 'lucide-react';
+import { Eye, TrendingUp, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Flag, ChevronRight, ChevronLeft, MessageSquare, SquareArrowUpRight, CircleStop as StopCircle, RotateCcw, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   PageHeader, StatCard, DecisionStatusBadge, DecisionPriorityBadge,
@@ -50,6 +51,7 @@ const PAGE_SIZE = 25;
 type ActionType = import('./DecisionActionModal').ActionType;
 
 export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps) {
+  const liveRefreshRef = useLiveData([...LIVE_DATA.minutes, ...LIVE_DATA.people], async () => { await Promise.all([fetchData(offset), fetchSummary(), fetchFilterOptions()]); });
   const [data, setData]               = useState<FollowupRow[]>([]);
   const [total, setTotal]             = useState(0);
   const [loading, setLoading]         = useState(true);
@@ -97,7 +99,7 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
   }, []);
 
   const fetchSummary = useCallback(async () => {
-    setSummaryLoading(true);
+    if (!liveRefreshRef.current) setSummaryLoading(true);
     setSummaryError(null);
     try {
       const { data: sumData, error: sumErr } = await supabase.rpc('get_trackable_minutes_decisions_summary');
@@ -132,7 +134,7 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     setError(null);
     try {
       const { data: rows, error: rpcErr } = await supabase.rpc('get_trackable_minutes_decisions', {
@@ -166,6 +168,10 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
       setLoading(false);
     }
   }, [filters.search, filters.statusFilter, filters.priorityFilter, filters.followupOnly, filters.hasObstacle, filters.deadlineFilter, filters.overdueOnly, filters.meetingFilter, filters.ownerFilter, filters.unitFilter, filters.startFrom, filters.startTo, filters.dueFrom, filters.dueTo, dateRangeError]);
+
+  useEffect(() => {
+    setDetailDecision(current => current ? (data.find(row => row.id === current.id) || current) : null);
+  }, [data]);
 
   // Reset pagination on any filter change
   useEffect(() => {
@@ -233,10 +239,6 @@ export function DecisionsFollowupPage({ onNavigate }: DecisionsFollowupPageProps
               label="بازگشت به صورت‌جلسات و مصوبات"
               onClick={() => onNavigate('minutes-hub')}
             />
-            <button onClick={() => { fetchData(offset); fetchSummary(); }}
-              className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
-              <RefreshCw className="h-4 w-4" /> بازآوری
-            </button>
           </div>
         }
       />

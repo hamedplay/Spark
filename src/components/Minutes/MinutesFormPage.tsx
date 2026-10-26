@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../../context/PermissionsContext';
@@ -82,6 +83,8 @@ export function MinutesFormPage({ mode, onNavigate, minuteId, adminCorrection = 
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [docConfig, setDocConfig] = useState<MinutesLayoutConfig | null>(null);
 
+  const directoryRevision = useLiveRevision(LIVE_DATA.people);
+  const configRevision = useLiveRevision(LIVE_DATA.config);
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnitOption[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
@@ -384,7 +387,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId, adminCorrection = 
 
   useEffect(() => {
     void (async () => {
-      setProfilesLoading(true);
+      if (!profiles.length) setProfilesLoading(true);
       setProfilesError(null);
       try {
         const { data, error } = await supabase
@@ -399,11 +402,11 @@ export function MinutesFormPage({ mode, onNavigate, minuteId, adminCorrection = 
         setProfilesLoading(false);
       }
     })();
-  }, []);
+  }, [directoryRevision]);
 
   useEffect(() => {
     void (async () => {
-      setOrgUnitsLoading(true);
+      if (!orgUnits.length) setOrgUnitsLoading(true);
       setOrgUnitsError(null);
       try {
         const { data, error } = await supabase
@@ -418,7 +421,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId, adminCorrection = 
         setOrgUnitsLoading(false);
       }
     })();
-  }, []);
+  }, [directoryRevision]);
 
   const defaultsAppliedRef = useRef(false);
   useEffect(() => {
@@ -445,7 +448,7 @@ export function MinutesFormPage({ mode, onNavigate, minuteId, adminCorrection = 
         }));
       }
     })();
-  }, [mode]);
+  }, [mode, configRevision]);
 
   useEffect(() => {
     void (async () => {

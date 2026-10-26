@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useRef } from 'react';
 import { X, Clock, MapPin, Users, User, Phone, Bell, RefreshCw, UserPlus, Share2, ExternalLink, Trash2, CreditCard as Edit2, Video, Copy, Check, FileText, Image, CalendarDays, CircleCheck as CheckCircle2, Circle as XCircle, Circle as HelpCircle, UserCheck, ClipboardList, Loader as Loader2, CircleAlert as AlertCircle } from 'lucide-react';
 import { MeetingData, CalendarEntry } from './types';
@@ -50,6 +51,7 @@ export function MeetingDetailModal({
   const canAddParticipants = isOwner || isInformee || isListedParticipant;
   const cal = [...calendars, ...subscribedCalendars].find(c => c.id === m.calendar_id);
 
+  const liveRevision = useLiveRevision([...LIVE_DATA.meetings, ...LIVE_DATA.minutes]);
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareChoice, setShowShareChoice] = useState(false);
@@ -97,7 +99,7 @@ export function MeetingDetailModal({
         setExternalInformeeNames(Array.isArray(row?.external_informees) ? row.external_informees : []);
       });
     return () => { cancelled = true; };
-  }, [m.id]);
+  }, [m.id, liveRevision]);
 
   // Minutes access state — checked via RPC, not frontend-only
   const [minutesAccess, setMinutesAccess] = useState<{
@@ -137,7 +139,7 @@ export function MeetingDetailModal({
       }
     })();
     return () => { cancelled = true; };
-  }, [m.id, m.status_type, m.calendar_id, onRegisterMinutes]);
+  }, [m.id, m.status_type, m.calendar_id, onRegisterMinutes, liveRevision]);
 
   const handleRegisterMinutes = () => {
     if (!onRegisterMinutes) return;
@@ -179,7 +181,7 @@ export function MeetingDetailModal({
       .eq('meeting_id', m.id)
       .order('sort_order')
       .then(({ data }) => { if (data) setAgendaItems(data as AgendaItem[]); });
-  }, [m.id]);
+  }, [m.id, liveRevision]);
 
   useEffect(() => {
     const handleDelegationChanged = (event: Event) => {
@@ -198,7 +200,7 @@ export function MeetingDetailModal({
     };
     window.addEventListener('spark:meeting-delegation-changed', handleDelegationChanged);
     return () => window.removeEventListener('spark:meeting-delegation-changed', handleDelegationChanged);
-  }, [m.id]);
+  }, [m.id, liveRevision]);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -222,7 +224,7 @@ export function MeetingDetailModal({
       } : null);
     });
     return () => { cancelled = true; };
-  }, [m.id, currentUserId, m.owner_delegate_user_id, m.owner_delegate_status]);
+  }, [m.id, currentUserId, m.owner_delegate_user_id, m.owner_delegate_status, liveRevision]);
 
   useEffect(() => {
     if (!currentUserId || isOwner) {
@@ -248,7 +250,7 @@ export function MeetingDetailModal({
         );
       });
     return () => { cancelled = true; };
-  }, [m.id, currentUserId, isOwner]);
+  }, [m.id, currentUserId, isOwner, liveRevision]);
 
   useEffect(() => {
     if (!isOwner || !m.participant_user_ids?.length) return;
@@ -262,7 +264,7 @@ export function MeetingDetailModal({
         for (const row of data) map[row.user_id] = row.status;
         setParticipantStatuses(map);
       });
-  }, [m.id, isOwner, m.participant_user_ids?.length]);
+  }, [m.id, isOwner, m.participant_user_ids?.length, liveRevision]);
 
   // Determine if the current user is a participant (can see join buttons)
   const isParticipant = currentUserId && (

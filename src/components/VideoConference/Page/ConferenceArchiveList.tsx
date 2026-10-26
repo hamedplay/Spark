@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useCallback, useEffect, useState } from 'react';
 import { Archive, ChevronDown, ChevronUp, Clock, MessageSquare, BarChart3, PenLine, Users, Loader as Loader2, RefreshCw, WifiOff, UserX, CalendarDays } from 'lucide-react';
 import moment from 'moment-jalaali';
@@ -26,8 +27,9 @@ function durationLabel(seconds?:number|null){
 
 export function ConferenceArchiveList(){
   useConferenceTooltips();
+  const liveRefreshRef = useLiveData(LIVE_DATA.conferences, async () => { await load(); });
   const [items,setItems]=useState<ConferenceArchive[]>([]); const [loading,setLoading]=useState(true); const [expanded,setExpanded]=useState<string|null>(null);
-  const load=useCallback(async()=>{ setLoading(true); try{
+  const load=useCallback(async()=>{ if (!liveRefreshRef.current) setLoading(true); try{
     const {data,error}=await supabase.from('conference_archives')
       .select('id,room_id,room_name,host_id,meeting_id,started_at,ended_at,ended_reason,participant_count,message_count,poll_count,whiteboard_stroke_count,disconnect_count,absent_count,attendance_summary,messages_snapshot,polls_snapshot,whiteboard_snapshot,output_package')
       .order('ended_at',{ascending:false}).limit(30);

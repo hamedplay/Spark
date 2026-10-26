@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Trash2, Save, Loader as Loader2, X, Eye, ChevronDown, RefreshCw, FileText, Info } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -431,6 +432,7 @@ function TemplatePreviewModal({ template, onClose }: { template: SmsTemplate; on
 }
 
 export function TemplatesTab() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => { await load(); });
   const [templates, setTemplates] = useState<SmsTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<SmsTemplate | null>(null);
@@ -439,7 +441,7 @@ export function TemplatesTab() {
   const [previewTemplate, setPreviewTemplate] = useState<SmsTemplate | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data } = await supabase.from('sms_templates').select('*').order('category').order('event_type');
     setTemplates((data || []) as SmsTemplate[]);
     setLoading(false);

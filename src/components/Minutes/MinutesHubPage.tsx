@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { FOLLOWUP_SCOPE_PARAM } from './followupHubScope';
 import { useCallback, useEffect, useState } from 'react';
 import '../../management-dashboard-theme.css';
@@ -13,7 +14,6 @@ import {
   Loader as Loader2,
   CircleAlert as AlertCircle,
   Plus,
-  RefreshCw,
   Sparkles,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -259,9 +259,10 @@ interface Props {
 }
 
 export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = false }: Props) {
+  useLiveData([...LIVE_DATA.minutes, ...LIVE_DATA.notifications], async () => { await fetchCounts(); });
   const [counts, setCounts] = useState<HubCounts>(EMPTY_COUNTS);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -382,16 +383,6 @@ export function MinutesHubPage({ onNavigate, visibleCards, canCreateMinute = fal
                 <p className="mt-0.5 text-[11px] text-slate-400">{timeFormatter.format(lastUpdated)}</p>
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => void fetchCounts(true)}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/50 px-3 py-2.5 text-xs font-semibold text-slate-300 transition hover:border-slate-600 hover:bg-slate-800/70 disabled:opacity-60"
-              aria-label="بروزرسانی آمار"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">بروزرسانی</span>
-            </button>
             {canCreateMinute && (
               <button
                 type="button"

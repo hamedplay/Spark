@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from './supabase';
 
 export interface OrgUserAssignment {
@@ -150,6 +151,15 @@ function buildGroups(users: OrgUserProfile[]): OrgUnitGroup[] {
 }
 
 export function useOrgUsers(currentUserId: string | null, enabled = true): UseOrgUsersResult {
+  const loadVersion = useRef(0);
+  useLiveData(LIVE_DATA.people, async () => {
+    if (!enabled || !currentUserId) return;
+    const version = ++loadVersion.current;
+    orgUsersCache.delete(currentUserId);
+    const users = await loadSelectableOrgUsers(currentUserId);
+    if (version !== loadVersion.current) return;
+    setAllUsers(users); setGroups(buildGroups(users)); setError(false); setLoading(false);
+  }, enabled && !!currentUserId);
   const [groups, setGroups] = useState<OrgUnitGroup[]>([]);
   const [allUsers, setAllUsers] = useState<OrgUserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,13 +172,14 @@ export function useOrgUsers(currentUserId: string | null, enabled = true): UseOr
       return;
     }
     let cancelled = false;
+    const version = ++loadVersion.current;
 
     (async () => {
       setLoading(true);
       setError(false);
       try {
         const users = await loadSelectableOrgUsers(currentUserId);
-        if (cancelled) return;
+        if (cancelled || version !== loadVersion.current) return;
         setAllUsers(users);
         setGroups(buildGroups(users));
       } catch (err) {

@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { formatJalaliTimestampDateOnly } from '../lib/minutesDate';
 import React, { useState, useEffect } from 'react';
 import { Mail, CreditCard as Edit2, Save, X, Plus, Loader2, Search, Trash2, Users, AtSign } from 'lucide-react';
@@ -6,6 +7,7 @@ import { ContactEmail } from '../types';
 import toast from 'react-hot-toast';
 
 export function ContactsEmailPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
+  useLiveData(LIVE_DATA.contacts, async () => { await fetchContacts(); });
   const [contacts, setContacts] = useState<ContactEmail[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);

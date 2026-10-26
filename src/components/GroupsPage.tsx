@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import { Users, MessageSquare, Plus, Search, X, Check, Loader as Loader2, Send, ChevronDown, Trash2, CreditCard as Edit2, CircleAlert as AlertCircle, Info, Building2, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -171,6 +172,7 @@ function GroupFormModal({ group, onClose, onDone }: {
 
 // ─── Members Modal ────────────────────────────────────────────────────────────
 function MembersModal({ group, onClose }: { group: UserGroup; onClose: () => void }) {
+  const liveRefreshRef = useLiveData([...LIVE_DATA.groups, ...LIVE_DATA.people], async () => { await fetchData(); });
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [allProfiles, setAllProfiles] = useState<OrgUserProfile[]>([]);
   const [search, setSearch] = useState('');
@@ -179,7 +181,7 @@ function MembersModal({ group, onClose }: { group: UserGroup; onClose: () => voi
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
-  setLoading(true);
+  if (!liveRefreshRef.current) setLoading(true);
   const [memRes, profilesRes, orgRes] = await Promise.all([
     supabase.from('group_members').select('user_id').eq('group_id', group.id),
     supabase.from('profiles_public').select('user_id, full_name, username, avatar_url, position').order('full_name'),
@@ -316,6 +318,7 @@ function MemberRow({ p, isMember, isLoading, onToggle }: { p: OrgUserProfile; is
 
 // ─── Broadcast Tab ────────────────────────────────────────────────────────────
 function BroadcastTab({ currentUserId, isAdmin }: { currentUserId: string | null; isAdmin: boolean }) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.groups, async () => { await fetchMessages(); });
   const [messages, setMessages] = useState<BroadcastMessage[]>([]);
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
@@ -327,7 +330,7 @@ function BroadcastTab({ currentUserId, isAdmin }: { currentUserId: string | null
   const canBroadcast = isAdmin;
 
   const fetchMessages = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const [msgRes, groupsRes, profilesRes] = await Promise.all([
       supabase.from('broadcast_messages').select('*').order('sent_at', { ascending: false }).limit(50),
       supabase.from('user_groups').select('id, name, display_name').order('name'),
@@ -500,6 +503,7 @@ function BroadcastTab({ currentUserId, isAdmin }: { currentUserId: string | null
 
 // ─── Groups Tab ───────────────────────────────────────────────────────────────
 function GroupsTab({ isAdmin }: { currentUserId: string | null; isAdmin: boolean }) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.groups, async () => { await fetchGroups(); });
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -510,7 +514,7 @@ function GroupsTab({ isAdmin }: { currentUserId: string | null; isAdmin: boolean
   const [deleting, setDeleting] = useState(false);
 
   const fetchGroups = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data } = await supabase.from('user_groups').select(`
       id, name, display_name, description, is_system, is_public, permissions,
       member_count:group_members(count)

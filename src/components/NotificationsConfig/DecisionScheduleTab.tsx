@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Clock3, Loader2, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
@@ -45,8 +46,15 @@ export function DecisionScheduleTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<ScheduleKey | null>(null);
 
+  const loadedSnapshot = useRef<string | null>(null);
+  const currentSnapshot = useRef(''); currentSnapshot.current = JSON.stringify(values);
+  const applyLoaded = (next: typeof values) => { loadedSnapshot.current = JSON.stringify(next); setValues(next); };
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => {
+    if (!(saving) && loadedSnapshot.current === currentSnapshot.current) await load();
+  });
+
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const { data, error } = await supabase
         .from('system_config')
@@ -68,7 +76,7 @@ export function DecisionScheduleTab() {
           weekdays: rawDays.length ? ALL_DAYS.filter(day => rawDays.includes(day)) : [...ALL_DAYS],
         };
       };
-      setValues({ decision_due: read('decision_due'), periodic_followup: read('periodic_followup') });
+      applyLoaded({ decision_due: read('decision_due'), periodic_followup: read('periodic_followup') });
     } catch {
       toast.error('بارگذاری زمان‌بندی اعلان‌های مصوبات ناموفق بود');
     } finally {
@@ -114,6 +122,7 @@ export function DecisionScheduleTab() {
         module: 'system_config', action: 'config_updated', entity_name: `minutes.${key}_schedule`,
         details: `enabled=${value.enabled}; time=${value.time}; weekdays=${value.weekdays.join(',')}`, severity: 'info',
       });
+      loadedSnapshot.current = currentSnapshot.current;
       toast.success('زمان‌بندی ذخیره شد');
     } catch {
       toast.error('ذخیره زمان‌بندی ناموفق بود');

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useLiveData, useLiveRevision, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bell, Check, Loader as Loader2, RefreshCw, Save, Info } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -20,6 +21,7 @@ const REGISTRY_CATEGORIES = ['minutes', 'decision'];
 const REGISTRY_CATEGORY_LABELS = new Set(['صورت‌جلسات', 'مصوبات']);
 
 export function GroupsTab() {
+  const optionsRevision = useLiveRevision([...LIVE_DATA.people, ...LIVE_DATA.config]);
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [rules, setRules] = useState<Record<string, boolean>>({});
@@ -31,7 +33,7 @@ export function GroupsTab() {
     supabase.from('user_groups').select('id, name, display_name').order('name').then(({ data }) => {
       const g = (data || []) as UserGroup[];
       setGroups(g);
-      if (g.length > 0) setSelectedGroup(g[0].id);
+      setSelectedGroup(current => current && g.some(row => row.id === current) ? current : (g[0]?.id || null));
     });
 
     // Load minutes/decision events from registry
@@ -52,14 +54,21 @@ export function GroupsTab() {
           setRegistryEvents(data as RegistryEvent[]);
         }
       });
-  }, []);
+  }, [optionsRevision]);
+
+  const loadedRules = useRef<string | null>(null);
+  const rulesSnapshot = useRef(''); rulesSnapshot.current = JSON.stringify(rules);
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => {
+    if (selectedGroup && !saving && loadedRules.current === rulesSnapshot.current) await loadRules(selectedGroup);
+  });
 
   const loadRules = useCallback(async (groupId: string) => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const { data } = await supabase.from('notification_group_rules').select('*').eq('group_id', groupId);
       const map: Record<string, boolean> = {};
       for (const r of (data || [])) map[r.notification_type] = r.enabled;
+      loadedRules.current = JSON.stringify(map);
       setRules(map);
     } catch {
       toast.error('خطا در بارگذاری قوانین اعلان');
@@ -97,6 +106,7 @@ export function GroupsTab() {
       await supabase.from('notification_group_rules')
         .upsert({ group_id: selectedGroup, notification_type: type, enabled }, { onConflict: 'group_id,notification_type' });
     }
+    loadedRules.current = rulesSnapshot.current;
     toast.success('تنظیمات اعلان ذخیره شد');
     setSaving(false);
   };

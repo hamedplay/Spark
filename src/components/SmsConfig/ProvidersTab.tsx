@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { MessageSquare, Plus, Trash2, RefreshCw, Loader as Loader2, EllipsisVertical as MoreVertical, CreditCard as Edit2, Globe, Phone, Lock, User, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -109,6 +110,7 @@ function PhoneLoginProviderCard({ providers }: { providers: SmsProvider[] }) {
 }
 
 export function ProvidersTab() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => { await load(); });
   const [providers, setProviders] = useState<SmsProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<SmsProvider> | null | 'new'>(null);
@@ -116,7 +118,7 @@ export function ProvidersTab() {
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data } = await supabase.from('sms_providers').select('*').order('created_at');
     setProviders((data || []) as SmsProvider[]);
     setLoading(false);

@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../shared/realtime/useLiveData';
 import React, { useState, useEffect } from 'react';
 import { CalendarDays, MessageSquare, SquareCheck as CheckSquare, Activity, Loader as Loader2 } from 'lucide-react';
 import { type Profile } from './SystemMonitoring/types';
@@ -17,6 +18,7 @@ const TABS: { key: Section; label: string; icon: React.ElementType; color: strin
 ];
 
 export function SystemMonitoringPage() {
+  const liveRevision = useLiveRevision(LIVE_DATA.people);
   const [section, setSection] = useState<Section>('meetings');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [profilesLoaded, setProfilesLoaded] = useState(false);
@@ -26,7 +28,7 @@ export function SystemMonitoringPage() {
       setProfiles(data || []);
       setProfilesLoaded(true);
     });
-  }, []);
+  }, [liveRevision]);
 
   if (!profilesLoaded) return (
     <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>

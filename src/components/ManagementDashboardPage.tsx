@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import '../management-dashboard-theme.css';
 import {
@@ -383,6 +384,7 @@ function EmptyState({ text }: { text: string }) {
 }
 
 export function ManagementDashboardPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+  useLiveData([...LIVE_DATA.tasks, ...LIVE_DATA.meetings, ...LIVE_DATA.minutes, ...LIVE_DATA.people], async () => { await loadDashboard(true); if (decisionReportOpen) await loadDecisionReport(decisionReportUnit); });
   const [data, setData] = useState<ManagementDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

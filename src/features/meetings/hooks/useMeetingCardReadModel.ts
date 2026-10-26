@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 import type { Meeting, AgendaItem } from '../../../types';
@@ -22,6 +23,7 @@ export function useMeetingCardReadModel(
   providedCurrentUserId: string | null = null,
   prefetchedReadModel?: MeetingCardPrefetchedReadModel,
 ): UseMeetingCardReadModelResult {
+  const liveRevision = useLiveRevision(LIVE_DATA.meetings, !prefetchedReadModel);
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, ParticipantStatusEntry>>({});
   const [delegateNames, setDelegateNames] = useState<Record<string, string>>({});
   const currentUserId = providedCurrentUserId;
@@ -40,7 +42,7 @@ export function useMeetingCardReadModel(
       .eq('meeting_id', meeting.id)
       .order('sort_order')
       .then(({ data }) => { if (data) setAgendaItems(data as AgendaItem[]); });
-  }, [meeting.id, prefetchedReadModel]);
+  }, [meeting.id, prefetchedReadModel, liveRevision]);
 
   const meetingWithParticipantIds = meeting as MeetingWithParticipantIds;
   const participantUserIds = meetingWithParticipantIds.participant_user_ids ?? [];
@@ -77,7 +79,7 @@ export function useMeetingCardReadModel(
           });
         }
       });
-  }, [meetingId, meetingUserId, currentUserId, participantUserIdsKey, hasParticipantUserIds, prefetchedReadModel]);
+  }, [meetingId, meetingUserId, currentUserId, participantUserIdsKey, hasParticipantUserIds, prefetchedReadModel, liveRevision]);
 
   const isCreator = !!(meetingUserId && currentUserId && meetingUserId === currentUserId);
 

@@ -1,3 +1,4 @@
+import { useLiveData } from '../shared/realtime/useLiveData';
 import { mobileZoomDayCount } from './Calendar/weekZoom';
 import { focusCalendarNow } from './Calendar/focusCalendarNow';
 import { weekDayIndex } from './Calendar/weekInteraction';
@@ -294,6 +295,12 @@ export function CalendarPage({
     supabase.from('calendar_occasions').select('id,title,calendar_type,month,day,is_holiday,is_celebration')
       .eq('is_active', true).then(({ data }) => { if (data) setOccasions(data as any); });
   }, []);
+
+  useLiveData(['calendar_occasions'], async () => {
+    const { data, error } = await supabase.from('calendar_occasions')
+      .select('id,title,calendar_type,month,day,is_holiday,is_celebration').eq('is_active', true);
+    if (!error && data) setOccasions(data as any);
+  });
 
   const handleToggleOccasions = useCallback(async () => {
     const next = !occasionsEnabled;
@@ -1002,6 +1009,11 @@ export function CalendarPage({
     setShowMeetingForm(true);
     setIsDragging(false); setDragStartSlot(null); setDragEndSlot(null);
   };
+
+  useEffect(() => {
+    setDetailMeeting(previous => previous ? meetings.find(meeting => meeting.id === previous.id) || null : null);
+    setPreviewMeeting(previous => previous ? meetings.find(meeting => meeting.id === previous.id) || null : null);
+  }, [meetings]);
 
   if (!currentJy) return null;
 

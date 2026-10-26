@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { Users, Search, Plus, RefreshCw, EllipsisVertical as MoreVertical, Download, Upload, EyeOff, CircleAlert as AlertCircle, Loader as Loader2, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -43,6 +44,7 @@ function adminCreateErrorMessage(error: string | undefined, status: number): str
 }
 
 export function UserManagementPanel({ currentUserId }: Props) {
+  useLiveData(LIVE_DATA.people, async () => { await load(); });
   const { hasPermission } = usePermissions();
   const canManageAccess = hasPermission('config_users.users_list.permissions');
   const [profiles, setProfiles] = useState<AdminProfile[]>([]);

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useLiveData, useLiveRevision, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Group as GroupIcon, Check, ChevronDown, Loader as Loader2, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -37,6 +38,7 @@ function GroupSelector({ groups, selected, onSelect }: { groups: UserGroup[]; se
 }
 
 export function GroupsTab() {
+  const optionsRevision = useLiveRevision([...LIVE_DATA.people, ...LIVE_DATA.config]);
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [providers, setProviders] = useState<SmsProvider[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -48,19 +50,26 @@ export function GroupsTab() {
     supabase.from('user_groups').select('id, name, display_name').order('name').then(({ data }) => {
       const g = (data || []) as UserGroup[];
       setGroups(g);
-      if (g.length > 0) setSelectedGroup(g[0].id);
+      setSelectedGroup(current => current && g.some(row => row.id === current) ? current : (g[0]?.id || null));
     });
     supabase.from('sms_providers').select('id, title, is_active, provider_type').eq('is_active', true).then(({ data }) => {
       setProviders((data || []) as SmsProvider[]);
     });
-  }, []);
+  }, [optionsRevision]);
+
+  const loadedRules = useRef<string | null>(null);
+  const rulesSnapshot = useRef(''); rulesSnapshot.current = JSON.stringify(rules);
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => {
+    if (selectedGroup && !saving && loadedRules.current === rulesSnapshot.current) await loadRules(selectedGroup);
+  });
 
   const loadRules = useCallback(async (groupId: string) => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data } = await supabase.from('sms_group_rules').select('*').eq('group_id', groupId);
     const map: Record<string, { enabled: boolean; provider_id: string | null }> = {};
     for (const r of (data || [])) map[r.sms_category] = { enabled: r.enabled, provider_id: r.provider_id };
-    setRules(map);
+    loadedRules.current = JSON.stringify(map);
+      setRules(map);
     setLoading(false);
   }, []);
 
@@ -75,6 +84,7 @@ export function GroupsTab() {
         { onConflict: 'group_id,sms_category' }
       );
     }
+    loadedRules.current = rulesSnapshot.current;
     toast.success('تنظیمات پیامک ذخیره شد');
     setSaving(false);
   };

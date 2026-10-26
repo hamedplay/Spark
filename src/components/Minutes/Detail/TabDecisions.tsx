@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useEffect, useMemo, useState } from 'react';
 import { TriangleAlert as AlertTriangle } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
@@ -41,6 +42,7 @@ interface ViewDecisionRow {
 }
 
 export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserId }: TabDecisionsProps) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { await fetchData(); });
   const [decisions, setDecisions] = useState<ViewDecisionRow[]>([]);
   const [historyMap, setHistoryMap] = useState<Record<string, DecisionUpdateRow[]>>({});
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,7 @@ export function TabDecisions({ minuteId, minuteStatus, secretaryId, currentUserI
   const isManager = () => !!(currentUserId && secretaryId && secretaryId === currentUserId);
 
   const fetchData = async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     setError(null);
     try {
       const [viewRes, histRes] = await Promise.all([

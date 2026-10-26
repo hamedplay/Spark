@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useEffect, useState, useRef } from 'react';
 import { ArrowRight, Printer, Users, SquareCheck as CheckSquare, FileText, Loader as Loader2 } from 'lucide-react';
 import {
   MinutesStatusBadge, ConfidentialityBadge, DecisionStatusBadge, DecisionPriorityBadge, ProgressIndicator,
@@ -72,6 +73,8 @@ const DECISION_STATUS_LABELS: Record<string, string> = {
 };
 
 export function MinutesMeetingReportPage({ onNavigate }: Props) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { await loadReport(); });
+  const requestRef = useRef(0);
   const [minute, setMinute] = useState<MinuteRow | null>(null);
   const [internal, setInternal] = useState<InternalPartRow[]>([]);
   const [external, setExternal] = useState<ExternalPartRow[]>([]);
@@ -80,12 +83,11 @@ export function MinutesMeetingReportPage({ onNavigate }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadReport = async () => {
+    const request = ++requestRef.current;
     const id = getMinuteIdFromUrl();
     if (!id) { setError('صورت‌جلسه‌ای انتخاب نشده است.'); setLoading(false); return; }
-    (async () => {
-      setLoading(true); setError(null);
+      if (!liveRefreshRef.current) setLoading(true); setError(null);
       try {
         const [mRes, iRes, eRes, aRes, dRes] = await Promise.all([
           supabase.from('minutes').select('id,meeting_title_snapshot,meeting_date_snapshot,secretary_name_snapshot,chair_name_snapshot,org_unit_name_snapshot,confidentiality,status,approval_mode,revision_number,notes').eq('id', id).maybeSingle(),
@@ -96,7 +98,7 @@ export function MinutesMeetingReportPage({ onNavigate }: Props) {
         ]);
         if (mRes.error) throw mRes.error;
         if (!mRes.data) { setError('صورت‌جلسه یافت نشد.'); setLoading(false); return; }
-        if (cancelled) return;
+        if (request !== requestRef.current) return;
         setMinute(mRes.data as MinuteRow);
         setInternal((iRes.data || []) as InternalPartRow[]);
         setExternal((eRes.data || []) as ExternalPartRow[]);
@@ -118,13 +120,12 @@ export function MinutesMeetingReportPage({ onNavigate }: Props) {
           discussion_result: null, result_type: null, additional_notes: null,
         })) as DecisionRow[]);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'بارگذاری گزارش ناموفق بود.');
+        if (request === requestRef.current) setError(e instanceof Error ? e.message : 'بارگذاری گزارش ناموفق بود.');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (request === requestRef.current) setLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  };
+  useEffect(() => { void loadReport(); return () => { requestRef.current++; }; }, []);
 
   const handlePrint = () => window.print();
 

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useState, useEffect, useRef } from 'react';
 import { Brain, Save, Plus, X, Eye, EyeOff, Key, Play, CircleCheck as CheckCircle2, Circle as XCircle, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -14,12 +15,21 @@ export function AiSettingsPanel() {
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    supabase.from('spark_ai_settings').select('*').maybeSingle().then(({ data }) => {
-      if (data) { setSettings(data as SparkAiSettings); setForm({ provider: data.provider, api_key: data.api_key ?? '', model: data.model, enabled: data.enabled }); }
-      setLoading(false);
-    });
-  }, []);
+  const loadedForm = useRef<string | null>(null);
+  const formSnapshot = useRef(''); formSnapshot.current = JSON.stringify(form);
+  const load = async () => {
+    const { data, error } = await supabase.from('spark_ai_settings').select('*').maybeSingle();
+    if (error) return;
+    if (data) {
+      const next = { provider: data.provider || 'groq', api_key: data.api_key ?? '', model: data.model || 'llama-3.3-70b-versatile', enabled: data.enabled };
+      setSettings(data as SparkAiSettings); loadedForm.current = JSON.stringify(next); setForm(next);
+    } else { loadedForm.current = formSnapshot.current; }
+    setLoading(false);
+  };
+  useLiveData(LIVE_DATA.spark, async () => {
+    if (!saving && !testing && loadedForm.current === formSnapshot.current) await load();
+  });
+  useEffect(() => { void load(); }, []);
 
   const save = async () => {
     setSaving(true);
@@ -31,6 +41,7 @@ export function AiSettingsPanel() {
         const { error } = await supabase.from('spark_ai_settings').insert([form]);
         if (error) { toast.error('خطا: ' + error.message); return; }
       }
+      loadedForm.current = formSnapshot.current;
       toast.success('تنظیمات هوش مصنوعی ذخیره شد');
       const { data } = await supabase.from('spark_ai_settings').select('*').maybeSingle();
       if (data) setSettings(data as SparkAiSettings);

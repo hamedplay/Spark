@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import { X, ChevronDown, ChevronUp, Clock, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle2, RefreshCw, MessageSquare, Flag, User } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -42,13 +43,14 @@ const EVENT_ICON: Record<string, React.ReactNode> = {
 };
 
 export function DecisionDetailsDrawer({ decision, onClose }: DecisionDetailsDrawerProps) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { await fetchHistory(); });
   const [tab, setTab] = useState<Tab>('info');
   const [history, setHistory] = useState<DecisionUpdateRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [actorNames, setActorNames] = useState<Record<string, string>>({});
 
   const fetchHistory = useCallback(async () => {
-    setHistoryLoading(true);
+    if (!liveRefreshRef.current) setHistoryLoading(true);
     try {
       const { data, error } = await supabase
         .from('minutes_decision_updates')

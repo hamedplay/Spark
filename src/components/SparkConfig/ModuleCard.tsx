@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bot, Save, Plus, X, ChevronDown, ChevronUp, Calendar, MessageSquare, ClipboardList, BookOpen, Users, ChartBar as BarChart2, User, Video } from 'lucide-react';
 import type { SparkModuleConfig, FieldKeyword } from './types';
 import { MODULE_META, colorMap, Spinner } from './constants';
@@ -23,9 +23,10 @@ export function ModuleCard({
     setDirty(JSON.stringify(form) !== JSON.stringify(config));
   }, [form, config]);
 
+  const previousConfig = useRef(config);
   useEffect(() => {
-    // Sync form when config prop changes (after external save)
-    setForm({ ...config });
+    if (JSON.stringify(form) === JSON.stringify(previousConfig.current)) setForm({ ...config });
+    previousConfig.current = config;
   }, [config]);
 
   const handleSave = async () => {

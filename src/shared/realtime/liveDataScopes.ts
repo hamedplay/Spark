@@ -1,0 +1,20 @@
+export const LIVE_DATA = {
+  chat: ['chat_conversations','chat_messages','chat_message_stars','chat_tags','chat_message_tag_assignments','chat_reminders'],
+  social: ['social_channel_configs','user_bale_mapping'],
+  conferences: ['conference_archives'],
+  notifications: ['notifications'],
+  sms: ['sms_dispatch_logs','rahyab_inbox'],
+  audit: ['audit_log'],
+  daily: ['daily_report_config','daily_report_runs'],
+  spark: ['spark_assistant_logs','spark_memory','spark_config','spark_field_keywords','spark_ai_settings'],
+  meetings: ['meetings','meeting_inbox','participants','shared_meetings','meeting_agenda_items','meeting_calendar_exclusions','actions','calendars','calendar_subscriptions','all_day_events','calendar_occasions'],
+  minutes: ['minutes','minutes_decisions','minutes_decision_updates','minutes_participants','minutes_external_participants','minutes_agenda_results','minutes_approvals','minutes_approval_comments','minutes_attachments','minutes_decision_reminders','minutes_audit_log'],
+  tasks: ['tasks','task_workflow_steps','task_checklist_items','task_dependencies','task_attachments','projects','task_personal_projects'],
+  notes: ['notes'],
+  contacts: ['contacts_email'],
+  groups: ['user_groups','user_group_members','broadcast_messages','broadcast_recipients'],
+  channels: ['channels','channel_members','channel_messages','channel_message_reactions','channel_message_stars','channel_group_tasks','channel_group_task_assignments','channel_group_task_activities','channel_message_private_pins','channel_message_read_log'],
+  people: ['profiles','org_organizations','org_units','org_positions','org_position_members','org_level_definitions','org_level_permissions','org_position_permissions','user_access_relations','user_group_members','user_groups'],
+  config: ['system_config','auth_security_settings','notification_templates','notification_group_rules','sms_templates','user_preferences','hr_sso_config','sms_providers','sms_group_rules','sms_delivery_policies','notification_event_registry'],
+} as const;
+export const LIVE_DATA_TABLES = [...new Set(Object.values(LIVE_DATA).flat())];

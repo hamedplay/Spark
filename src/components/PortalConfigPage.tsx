@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { Settings, Shield, Globe, Video, Calendar, Server, ChevronDown, ChevronLeft, Plus, Trash2, X, RefreshCw, Wifi, Mail, Image, Palette, Monitor, Menu } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -31,6 +32,7 @@ import { usePermissions } from '../context/PermissionsContext';
 import { canAccessConfigSection, getFirstVisibleConfigSection, getVisibleConfigNavigationItems } from '../features/permissions';
 
 export function PortalConfigPage({ currentUserId }: Props) {
+  useLiveData([...LIVE_DATA.config, ...LIVE_DATA.people], async () => { if (!uploadingKey) await loadConfigs(); if (activeSection === 'users_online') await loadOnlineUsers(); });
   const { isAdmin, userPermissions } = usePermissions();
   const [activeSection, setActiveSection] = useState('general');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());

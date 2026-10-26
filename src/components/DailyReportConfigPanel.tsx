@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { CalendarDays, Clock, MessageSquare, Bell, Users, Save, Loader as Loader2, Plus, X, Check, Send, ChevronDown, ChevronUp, Info, Radio, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -115,8 +116,15 @@ export function DailyReportConfigPanel() {
   const [showUserPicker, setShowUserPicker] = useState(false);
   const [showGroupPicker, setShowGroupPicker] = useState(false);
 
+  const loadedSnapshot = useRef<string | null>(null);
+  const currentSnapshot = useRef(''); currentSnapshot.current = JSON.stringify(config);
+  const applyLoaded = (next: typeof config) => { loadedSnapshot.current = JSON.stringify(next); setConfig(next); };
+  const liveRefreshRef = useLiveData([...LIVE_DATA.daily, ...LIVE_DATA.people], async () => {
+    if (!(saving || sending) && loadedSnapshot.current === currentSnapshot.current) await fetchData();
+  });
+
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     setLoadError(false);
     try {
       const [cfgRes, profilesRes, groupsRes] = await Promise.all([
@@ -126,7 +134,7 @@ export function DailyReportConfigPanel() {
       ]);
       if (cfgRes.data) {
         const d = cfgRes.data;
-        setConfig({
+        applyLoaded({
           id: d.id,
           is_enabled: d.is_enabled,
           send_time: d.send_time,
@@ -177,7 +185,7 @@ export function DailyReportConfigPanel() {
     } else {
       const { data, error: e } = await supabase.from('daily_report_config').insert(payload).select().maybeSingle();
       error = e;
-      if (data) setConfig(c => ({ ...c, id: data.id }));
+      if (data) setConfig(c => { const next = { ...c, id: data.id }; loadedSnapshot.current = JSON.stringify(next); return next; });
     }
     setSaving(false);
     if (error) toast.error('خطا در ذخیره تنظیمات');
@@ -209,7 +217,7 @@ export function DailyReportConfigPanel() {
     } else {
       const { data, error } = await supabase.from('daily_report_config').insert(payload).select().maybeSingle();
       saveOk = !error;
-      if (data) setConfig(c => ({ ...c, id: data.id }));
+      if (data) setConfig(c => { const next = { ...c, id: data.id }; loadedSnapshot.current = JSON.stringify(next); return next; });
     }
     setSaving(false);
     if (!saveOk) { toast.error('خطا در ذخیره تنظیمات — ارسال لغو شد'); return; }

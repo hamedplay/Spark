@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import moment from 'moment-jalaali';
 import { Bell, Users, Check, Loader as Loader2, RefreshCw, CircleCheck as CheckCircle, Clock, ChevronDown, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
@@ -13,6 +14,7 @@ import { jalaliToUtcRange } from './jalaliDateFilter';
 import type { NotifLog } from './types';
 
 export function LogsTab() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.notifications, async () => { await load(); });
   const [logs, setLogs] = useState<NotifLog[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -27,7 +29,7 @@ export function LogsTab() {
   const PAGE_SIZE = 20;
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     let q = supabase
       .from('notifications')
       .select('*', { count: 'exact' })

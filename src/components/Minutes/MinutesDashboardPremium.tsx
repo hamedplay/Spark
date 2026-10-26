@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useEffect, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -231,13 +232,14 @@ function Panel({ title, subtitle, icon: Icon, iconClass, onViewAll, children }: 
 }
 
 export function MinutesDashboardPage({ onNavigate }: Props) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { await load(true); });
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = async (isRefresh = false) => {
-    isRefresh ? setRefreshing(true) : setLoading(true);
+    if (!liveRefreshRef.current) { isRefresh ? setRefreshing(true) : setLoading(true); }
     setError(null);
     try {
       const { data, error: rpcError } = await supabase.rpc('get_minutes_dashboard_stats');
@@ -326,7 +328,6 @@ export function MinutesDashboardPage({ onNavigate }: Props) {
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">نمای کلی وضعیت صورت‌جلسات، مصوبات و موارد نیازمند اقدام شما</p>
             </div>
             <div className="mobile-scroll-actions flex items-center gap-2 self-stretch overflow-x-auto pb-1 lg:self-auto lg:overflow-visible lg:pb-0">
-              <button type="button" onClick={() => void load(true)} disabled={refreshing} className="inline-flex h-11 flex-shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-3 text-xs font-medium text-slate-600 transition hover:bg-white disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:bg-slate-800"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> بروزرسانی</button>
               <button type="button" onClick={() => onNavigate('calendar')} className="inline-flex h-11 flex-shrink-0 items-center gap-2 rounded-xl bg-gradient-to-l from-blue-600 to-indigo-600 px-4 text-xs font-semibold text-white shadow-[0_10px_30px_rgba(37,99,235,.24)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_35px_rgba(37,99,235,.3)]"><CalendarDays className="h-4 w-4" /> انتخاب جلسه از تقویم</button>
             </div>
           </header>

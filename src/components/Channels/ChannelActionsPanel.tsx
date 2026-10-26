@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, SlidersHorizontal, X, ChevronDown, Star, GitFork } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -54,6 +55,7 @@ const DATE_OPTIONS: { key: DateFilter; label: string }[] = [
 ];
 
 export function ChannelActionsPanel({ currentUserId, channelId, channelName, allProfiles, groupTasks: _groupTasksProp, onClose, onNavigateToMessage }: Props) {
+  useLiveData(LIVE_DATA.channels, async () => { await fetchGroupTasksInternal(); });
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<'type' | 'date' | null>(null);

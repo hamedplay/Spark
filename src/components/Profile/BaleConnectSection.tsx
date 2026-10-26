@@ -1,9 +1,11 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useRef } from 'react';
 import { Loader as Loader2, MessageCircle, CircleCheck as CheckCircle2, Link2, Unlink, RefreshCw, Info } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 export function BaleConnectSection() {
+  useLiveData([...LIVE_DATA.people, ...LIVE_DATA.social], async () => { setConnected(await checkConnection()); });
   const [connected, setConnected] = useState<boolean | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);

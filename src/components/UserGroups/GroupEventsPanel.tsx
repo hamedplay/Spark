@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import { Activity, Search, RefreshCw, ChevronDown, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Check, Info, Zap, Loader as Loader2, ListFilter as Filter, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -5,6 +6,7 @@ import toast from 'react-hot-toast';
 import type { AuditRow } from './types';
 
 export function GroupEventsPanel() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.audit, async () => { await load(); });
   const [logs, setLogs] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -14,7 +16,7 @@ export function GroupEventsPanel() {
   const [clearing, setClearing] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     let q = supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(500);
     if (severityFilter !== 'all') q = q.eq('severity', severityFilter);
     if (moduleFilter !== 'all') q = q.eq('module', moduleFilter);

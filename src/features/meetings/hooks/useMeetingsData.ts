@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, handleSupabaseError } from '../../../lib/supabase';
 import type { Meeting } from '../../../types';
@@ -18,6 +19,7 @@ const REALTIME_REFRESH_DEBOUNCE_MS = 180;
  * to the meetings page can paint cached content immediately before refreshing.
  */
 export function useMeetingsData(enabled: boolean, userId: string | null): MeetingsData {
+  useLiveData(LIVE_DATA.meetings, async () => { if (!enabled || !userId) return; await fetchMeetings(); });
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [pendingMeetingsCount, setPendingMeetingsCount] = useState(0);
   const meetingsRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

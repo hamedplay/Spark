@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useRef } from 'react';
 import { Search, SlidersHorizontal, X, ChevronDown, Clock, Star, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -31,6 +32,7 @@ type TypeFilter = 'mention' | 'important' | 'urgent' | 'unread' | 'starred' | 'p
 type DateFilter = 'all' | 'today' | 'week' | '2weeks' | 'month' | 'custom';
 
 export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }: Props) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.chat, async () => { await performSearch(); });
   const [query, setQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<'type' | 'date' | 'tag' | null>(null);
@@ -68,7 +70,7 @@ export function ChatActionsPanel({ currentUserId, onClose, onNavigateToMessage }
   }, [query, typeFilters, dateFilter, customDate, tagFilters, allUsers, currentUserId]);
 
   const performSearch = async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       // Build date filter
       let fromDate: string | null = null;

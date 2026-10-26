@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, Save, Loader as Loader2, RefreshCw, Wifi, WifiOff, Send, Inbox, CreditCard, Settings, Terminal } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -224,13 +225,14 @@ function SendTab() {
 //  TAB 4 — Inbox
 // ════════════════════════════════════════════════════════════════════
 function InboxTab() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.sms, async () => { await loadFromDb(); });
   const [messages, setMessages]   = useState<InboxMessage[]>([]);
   const [loading, setLoading]     = useState(false);
   const [fetching, setFetching]   = useState(false);
   const [lastRowId, setLastRowId] = useState(0);
 
   const loadFromDb = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const d = await callRahyab('inbox');
       setMessages(d.messages ?? []);

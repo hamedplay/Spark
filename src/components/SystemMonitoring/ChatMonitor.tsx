@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MessageSquare, ListFilter as Filter, Search, EllipsisVertical as MoreVertical, Trash2, GitBranch, X, Loader as Loader2, RefreshCw, Lock, Eye, Hash as ChannelIcon } from 'lucide-react';
 import { type ChatConversation, type ChatMessage, type ChannelRow, type ChannelMsgRow, type Profile } from './types';
@@ -10,6 +11,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 function ChatMonitor({ profiles }: { profiles: Profile[] }) {
+  const liveRefreshRef = useLiveData([...LIVE_DATA.chat,...LIVE_DATA.channels], async () => { await Promise.all([loadConvs(),loadChannels()]); });
   const [convs, setConvs] = useState<ChatConversation[]>([]);
   const [channels, setChannels] = useState<ChannelRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,7 @@ function ChatMonitor({ profiles }: { profiles: Profile[] }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const loadConvs = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data, error } = await supabase.from('chat_conversations').select('*').order('created_at', { ascending: false });
     if (error) { toast.error('خطا در بارگذاری چت'); setLoading(false); return; }
 
@@ -64,7 +66,7 @@ function ChatMonitor({ profiles }: { profiles: Profile[] }) {
   }, [profiles]);
 
   const loadChannels = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data, error } = await supabase.from('channels').select('*').order('created_at', { ascending: false });
     if (error) { toast.error('خطا در بارگذاری کانال‌ها'); setLoading(false); return; }
 

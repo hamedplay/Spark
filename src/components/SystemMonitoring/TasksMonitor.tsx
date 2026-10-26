@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { SquareCheck as CheckSquare, Users, ListFilter as Filter, Search, EllipsisVertical as MoreVertical, CreditCard as Edit2, Trash2, GitBranch, X, Loader as Loader2, RefreshCw } from 'lucide-react';
 import { type TaskRow, type TaskWorkflowStep, type GroupTaskRow, type Profile } from './types';
@@ -11,6 +12,7 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 function TasksMonitor({ profiles }: { profiles: Profile[] }) {
+  const liveRefreshRef = useLiveData([...LIVE_DATA.tasks,...LIVE_DATA.channels], async () => { await Promise.all([loadTasks(),loadGroupTasks()]); });
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [groupTasks, setGroupTasks] = useState<GroupTaskRow[]>([]);
   const [activeTab, setActiveTab] = useState<'tasks' | 'group'>('tasks');
@@ -31,7 +33,7 @@ function TasksMonitor({ profiles }: { profiles: Profile[] }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const loadTasks = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
     if (error) { toast.error('خطا در بارگذاری اقدامات'); setLoading(false); return; }
 
@@ -55,7 +57,7 @@ function TasksMonitor({ profiles }: { profiles: Profile[] }) {
   }, [profiles]);
 
   const loadGroupTasks = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data, error } = await supabase.from('channel_group_tasks').select('*').order('created_at', { ascending: false });
     if (error) { toast.error('خطا در بارگذاری اقدامات گروهی'); setLoading(false); return; }
     const rows = await Promise.all((data || []).map(async (t: any) => {

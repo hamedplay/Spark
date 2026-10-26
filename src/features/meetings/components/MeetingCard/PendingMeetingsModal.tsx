@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../../shared/realtime/useLiveData';
 import { formatMeetingRequestDate } from '../../formatMeetingRequestDate';
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -12,6 +13,7 @@ interface PendingMeetingsModalProps {
 }
 
 export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModalProps) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.meetings, async () => { if (!processingMeetingId) await fetchPendingMeetings(); });
   const panelRef = useRef<HTMLDivElement>(null);
   useModalFocus(true, panelRef, onClose);
 
@@ -38,7 +40,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
 
   const fetchPendingMeetings = async () => {
     try {
-      setLoading(true);
+      if (!liveRefreshRef.current) setLoading(true);
       setError(null);
       
       // Get current user

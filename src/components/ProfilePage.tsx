@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { User, Mail, Phone, Building, MapPin, Camera, Loader as Loader2, Save, Briefcase, Hash, Users, CreditCard, ChevronDown, ChevronUp, CircleCheck as CheckCircle2, Crown, Building2, Link2, AtSign } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -16,6 +17,8 @@ const SessionManagementPanel = lazy(() => import('../features/auth/components/Se
 
 
 export function ProfilePage({ currentUserId = null }: { currentUserId?: string | null }) {
+  const draftDirtyRef = useRef(false);
+  const liveRefreshRef = useLiveData(LIVE_DATA.people, async () => { if (!draftDirtyRef.current && !saving && !uploading) await fetchProfile(); });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -69,7 +72,7 @@ export function ProfilePage({ currentUserId = null }: { currentUserId?: string |
 
   const fetchProfile = async () => {
     try {
-      setLoading(true);
+      if (!liveRefreshRef.current) setLoading(true);
       let userId = currentUserId;
       let authEmail = '';
 
@@ -130,6 +133,7 @@ export function ProfilePage({ currentUserId = null }: { currentUserId?: string |
       const { error } = await supabase.from('profiles').update(payload).eq('id', profile.id);
       if (error) throw error;
       toast.success('پروفایل با موفقیت ذخیره شد');
+      draftDirtyRef.current = false;
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (error: any) {
@@ -225,8 +229,10 @@ export function ProfilePage({ currentUserId = null }: { currentUserId?: string |
     }
   };
 
-  const set = (field: keyof typeof empty, value: string) =>
+  const set = (field: keyof typeof empty, value: string) => {
+    draftDirtyRef.current = true;
     setProfile(p => p ? { ...p, [field]: value } : p);
+  };
 
   const SectionHeader = ({ id, title, subtitle }: { id: 'personal' | 'work' | 'social' | 'calendar' | 'security'; title: string; subtitle: string }) => (
     <button

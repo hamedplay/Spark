@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Inbox, Check, UserCheck, X, MapPin, Clock, Calendar, Search, ChevronRight, Users, Building2, ChevronDown, Circle as XCircle, CircleAlert as AlertCircle, RefreshCw, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -54,6 +55,7 @@ interface MeetingInboxButtonProps {
 }
 
 export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null }: MeetingInboxButtonProps) {
+  useLiveData(LIVE_DATA.meetings, async () => { await fetchData(); });
   const [open, setOpen] = useState(false);
   const { pos: fabPos, onDragStart, wasDragged } = useDraggableFab('inbox-fab-pos', 'right', 38);
   const [entries, setEntries] = useState<InboxEntry[]>([]);
@@ -68,6 +70,7 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
   const [conflictMeetingId, setConflictMeetingId] = useState<string | null>(null);
   const [delegateSearch, setDelegateSearch] = useState('');
   const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
+  const requestVersionRef = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const { groups: orgGroups, allUsers: orgAllUsers } = useOrgUsers(currentUserId, open || delegateForEntry !== null);
@@ -75,6 +78,7 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
   const pendingCount = entries.length;
 
   const fetchData = useCallback(async () => {
+    const version = ++requestVersionRef.current;
     let userId = providedCurrentUserId ?? currentUserId;
     if (!userId) {
       const { data: { user } } = await supabase.auth.getUser();
@@ -104,6 +108,7 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
       .is('delegate_to', null)
       .not('meeting_id', 'is', null);
 
+    if (version !== requestVersionRef.current) return;
     if (inboxErr) {
       console.error('[MeetingInbox] fetch error:', inboxErr);
       setFetchError('خطا در بارگذاری صندوق ورودی');
@@ -165,13 +170,6 @@ export function MeetingInboxButton({ currentUserId: providedCurrentUserId = null
   }, [fetchData]);
 
   // Auto-refresh when meeting_inbox changes (new invites from organizers)
-  useEffect(() => {
-    const channel = supabase
-      .channel(`meeting-inbox-realtime-${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => fetchData())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchData]);
 
   useEffect(() => {
     const handleOpenDelegate = async (event: Event) => {

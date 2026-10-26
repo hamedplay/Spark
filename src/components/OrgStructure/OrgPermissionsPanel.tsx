@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { OrgPosition, LevelDef, LevelPermState } from './types';
@@ -28,8 +29,17 @@ function OrgPermissionsPanel({
 
   const levels = [...levelDefs].sort((a, b) => a.level - b.level);
 
+  const loadedSelection = useRef('');
+  const loadedPerms = useRef<string | null>(null);
+  const permsSnapshot = useRef(''); permsSnapshot.current = JSON.stringify(perms);
+  const liveRefreshRef = useLiveData(LIVE_DATA.people, async () => {
+    if (saving || loadedPerms.current !== permsSnapshot.current) return;
+    if (mode === 'level') await loadLevelPerms(selectedLevel);
+    else if (selectedPositionId) await loadPositionPerms(selectedPositionId);
+  });
+
   const loadLevelPerms = useCallback(async (level: number) => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data, error } = await supabase
       .from('org_level_permissions')
       .select('permission_key, granted')
@@ -41,13 +51,15 @@ function OrgPermissionsPanel({
     }
     const map: LevelPermState = {};
     for (const p of (data || [])) map[p.permission_key] = p.granted;
+    loadedSelection.current = 'level:' + level;
+    loadedPerms.current = JSON.stringify(map);
     setPerms(map);
     setLoading(false);
   }, []);
 
   const loadPositionPerms = useCallback(async (positionId: string) => {
     if (!positionId) return;
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const pos = positions.find(p => p.id === positionId);
     const levelMap: LevelPermState = {};
     if (pos) {
@@ -75,6 +87,8 @@ function OrgPermissionsPanel({
     for (const p of (pd || [])) overrideMap[p.permission_key] = p.granted;
     setLevelPerms(levelMap);
     setOverrides(overrideMap);
+    loadedSelection.current = 'position:' + positionId;
+    loadedPerms.current = JSON.stringify({ ...levelMap, ...overrideMap });
     setPerms({ ...levelMap, ...overrideMap });
     setLoading(false);
   }, [positions]);
@@ -84,7 +98,7 @@ function OrgPermissionsPanel({
   }, [mode, selectedLevel, loadLevelPerms]);
 
   useEffect(() => {
-    if (mode === 'position' && selectedPositionId) loadPositionPerms(selectedPositionId);
+    if (mode === 'position' && selectedPositionId && (loadedSelection.current !== 'position:' + selectedPositionId || loadedPerms.current === permsSnapshot.current)) loadPositionPerms(selectedPositionId);
   }, [mode, selectedPositionId, loadPositionPerms]);
 
   const togglePerm = (key: string) => {

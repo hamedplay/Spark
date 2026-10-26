@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useEffect, useState, useCallback } from 'react';
 import { Eye, Check, CircleAlert as AlertCircle, Loader as Loader2, UserCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { await fetchInbox(); });
   const [rows, setRows] = useState<ApprovalInboxRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,7 @@ export function MinutesApprovalsPage({ onNavigate, currentUserId }: Props) {
 
   const fetchInbox = useCallback(async () => {
     if (!currentUserId) { setIsLoading(false); return; }
-    setIsLoading(true);
+    if (!liveRefreshRef.current) setIsLoading(true);
     setError(null);
     try {
       const { data: approvalsData, error: approvalsErr } = await supabase

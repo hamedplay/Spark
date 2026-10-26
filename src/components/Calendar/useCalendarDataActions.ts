@@ -1,3 +1,5 @@
+import { mergeLiveSelection } from '../../shared/realtime/mergeLiveSelection';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { buildCalendarGoogleEventUrl, openGoogleCalendarWindow } from './googleCalendarExport';
 import { buildRevertedMeetingTiming } from '../../features/meetings/builders/buildRevertedMeetingTiming';
 // @ts-nocheck
@@ -9,10 +11,11 @@ import { MeetingData, CalendarEntry } from './types';
 import { toJalaali, jalaaliToDate, getJalaaliMonthDays, parseRequestDateToDateStr } from './utils';
 
 export function useCalendarDataActions(scope: Record<string, any>) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.meetings, async () => { if (!scope.currentUserId && !scope.providedUserId) return; await Promise.all([fetchMeetings(), fetchCalendars(), fetchAllDayEvents()]); });
   const {
     allDayDragEnd, allDayDragStart, allDayEvents, buildMeetingPlaceholders, calendarForm, calendars,
     currentJm, currentJy, currentUserId, deleteMeetingDialog, dragMovedRef, editingCalendar,
-    insertNotification, isRefreshing, meetings, monthDayPopup, monthDayPopupRef, previewMeeting,
+    insertNotification, meetings, monthDayPopup, monthDayPopupRef, previewMeeting,
     previewRef, providedUserId, resolveName, setAllDayEvents, setCalendarForm, setCalendars,
     setCurrentUserId, setDeleteMeetingDialog, setDetailMeeting, setEditingCalendar, setEnabledCalendarIds, setIsRefreshing,
     setMeetings, setMonthDayPopup, setOccasionsEnabled, setPrefillData, setPreviewMeeting, setPreviewPos, setRepeatEditDialog,
@@ -22,6 +25,8 @@ export function useCalendarDataActions(scope: Record<string, any>) {
 
   // ---- Fetch ----
   // Ref so real-time callback always calls the latest version (avoids stale closure)
+  const knownCalendarIds = useRef<Set<string> | null>(null);
+  const fetchVersionRef = useRef(0);
   const fetchMeetingsRef = useRef<() => void>(() => {});
 
   const fetchCurrentUser = async () => {
@@ -31,8 +36,8 @@ export function useCalendarDataActions(scope: Record<string, any>) {
   };
 
   const fetchMeetings = useCallback(async (jy?: number, jm?: number) => {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
+    const version = ++fetchVersionRef.current;
+    if (!liveRefreshRef.current) setIsRefreshing(true);
     try {
       const userId = currentUserId ?? providedUserId;
       if (!userId) { console.log('[CalendarPage] fetchMeetings: no user, returning'); return; }
@@ -130,6 +135,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         };
       });
 
+      if (version !== fetchVersionRef.current) return;
       console.log('[CalendarPage] fetchMeetings → setMeetings count:', enriched.length, 'userId:', userId, 'jy/jm:', baseJy, baseJm);
       // Sample the first 5 meetings to debug date grouping
       enriched.slice(0, 5).forEach((m: any) => {
@@ -140,8 +146,8 @@ export function useCalendarDataActions(scope: Record<string, any>) {
       });
       setMeetings(enriched);
     } catch { toast.error('خطا در دریافت جلسات'); }
-    finally { setIsRefreshing(false); }
-  }, [currentJy, currentJm, isRefreshing, currentUserId, providedUserId]);
+    finally { if (version === fetchVersionRef.current) setIsRefreshing(false); }
+  }, [currentJy, currentJm, currentUserId, providedUserId]);
 
   // Keep ref in sync so real-time callbacks always call latest version
   useEffect(() => { fetchMeetingsRef.current = () => fetchMeetings(); }, [fetchMeetings]);
@@ -219,7 +225,9 @@ export function useCalendarDataActions(scope: Record<string, any>) {
       setSubscribedCalendars(subCals);
       const newEnabledIds = new Set([...ownCals.map(c => c.id), ...subCals.map(c => c.id)]);
       console.log('[CalendarPage] fetchCalendars → enabledCalendarIds:', [...newEnabledIds], 'ownCals:', ownCals.length, 'subCals:', subCals.length);
-      setEnabledCalendarIds(newEnabledIds);
+      const previousIds = knownCalendarIds.current;
+      knownCalendarIds.current = newEnabledIds;
+      setEnabledCalendarIds((current: Set<string>) => mergeLiveSelection(current, previousIds, newEnabledIds));
     } catch {}
   };
 

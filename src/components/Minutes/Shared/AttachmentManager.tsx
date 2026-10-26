@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useEffect, useState, useCallback } from 'react';
 import { Paperclip, Loader as Loader2, Trash2, Download, CloudUpload as UploadCloud } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -15,6 +16,7 @@ export interface AttachmentManagerProps {
 }
 
 export function AttachmentManager({ minuteId, canManage, revisionNumber, excludeKind }: AttachmentManagerProps) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { if (!uploading && !confirmDelete) await load(); });
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,7 @@ export function AttachmentManager({ minuteId, canManage, revisionNumber, exclude
   const [fileInput, setFileInput] = useState<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    if (!liveRefreshRef.current) setLoading(true); setError(null);
     try { setAttachments(await listMinuteAttachments(minuteId)); }
     catch (e) { setError(e instanceof Error ? e.message : 'بارگذاری پیوست‌ها ناموفق بود.'); }
     finally { setLoading(false); }

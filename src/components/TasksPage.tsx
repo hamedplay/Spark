@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { formatJalaliTimestampDateOnly } from '../lib/minutesDate';
 import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Loader as Loader2, X } from 'lucide-react';
@@ -59,6 +60,7 @@ function parseTags(value: string): string[] {
 }
 
 export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefillConsumed, currentUserId: propUserId }: TasksPageProps) {
+  useLiveData([...LIVE_DATA.tasks, ...LIVE_DATA.people], async () => { await Promise.all([fetchTasks(), fetchManagementProjects(), fetchUsers(), userId ? fetchPersonalProjects(userId) : Promise.resolve()]); if (workflowTask) await fetchWorkflow(workflowTask.id); });
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('tasks_create');
   const canEdit = hasPermission('tasks_edit');
@@ -86,6 +88,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [managementProjects, setManagementProjects] = useState<ManagementProjectOption[]>([]);
   const [personalProjects, setPersonalProjects] = useState<PersonalTaskProject[]>([]);
   const [detailTask, setDetailTask] = useState<ActionTask | null>(null);
+  useEffect(() => { setDetailTask((current: ActionTask | null) => current ? (tasks.find(task => task.id === current.id) || current) : null); }, [tasks]);
   const [createInitialDescription, setCreateInitialDescription] = useState('');
   const [createSourceMessageId, setCreateSourceMessageId] = useState<string | null>(null);
 

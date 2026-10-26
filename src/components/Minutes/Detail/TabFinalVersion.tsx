@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useState, useEffect, useRef } from 'react';
 import { Upload, Download, Trash2, Signature as FileSignature, Loader as Loader2, Maximize2, RefreshCw, FileDown, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -31,6 +32,11 @@ interface Props {
 }
 
 export function TabFinalVersion({ minuteId, revisionNumber, canManage, docData, docDataLoading, docDataError, configLoading, configError, onPrepareDocumentData, onRetryConfig, onPrint, onWordExport, wordLoading, printLoading }: Props) {
+  useLiveData(LIVE_DATA.minutes, async () => {
+    if (uploading || deletingId) return;
+    const rows = await listMinuteAttachments(minuteId);
+    setAttachments(rows.filter(r => r.attachment_kind === 'signed_final'));
+  });
   const [attachments, setAttachments] = useState<AttachmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

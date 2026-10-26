@@ -1,3 +1,4 @@
+import { useLiveData } from '../../../shared/realtime/useLiveData';
 import React, {
   createContext,
   useContext,
@@ -51,6 +52,11 @@ export function UserPreferencesProvider({
    */
   userId?: string | null;
 }) {
+  useLiveData(['user_preferences'], async () => {
+    if (!userId) return;
+    const row = await fetchUserPreferencesRow(userId);
+    if (row) applyLoadedPreferences(mapUserPreferencesRow(row));
+  });
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_USER_PREFERENCES);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(providedUserId ?? null);

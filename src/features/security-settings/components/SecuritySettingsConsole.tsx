@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Shield, Loader as Loader2, Save, Lock, LogIn, Settings as SettingsIcon, Clock, KeyRound } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -20,6 +21,7 @@ interface ConflictSnapshot {
 }
 
 export function SecuritySettingsConsole() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => { if (saving || (draft && state?.settings && JSON.stringify(draft) !== JSON.stringify(state.settings))) return; await loadState(); });
   const [state, setState] = useState<SecurityConsoleState | null>(null);
   const [draft, setDraft] = useState<SecuritySettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,7 @@ export function SecuritySettingsConsole() {
   const reasonRef = useRef<string>('');
 
   const loadState = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const result = await loadSecurityConsoleState();
       setState(result);

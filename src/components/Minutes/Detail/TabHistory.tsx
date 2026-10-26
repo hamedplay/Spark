@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useEffect, useState } from 'react';
 import { History } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -10,6 +11,7 @@ export interface TabHistoryProps {
 
 export function TabHistory({ minuteId }: TabHistoryProps) {
   const [rows, setRows] = useState<AuditLogRow[]>([]);
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { await loadInitial(); });
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,9 +19,9 @@ export function TabHistory({ minuteId }: TabHistoryProps) {
   const PAGE = 20;
 
   const loadInitial = async () => {
-    setLoading(true); setError(null);
+    if (!liveRefreshRef.current) setLoading(true); setError(null);
     try {
-      const { rows: r, hasMore: hm } = await listMinuteAudit(minuteId, PAGE, 0);
+      const { rows: r, hasMore: hm } = await listMinuteAudit(minuteId, liveRefreshRef.current ? Math.max(PAGE, rows.length) : PAGE, 0);
       setRows(r); setHasMore(hm);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'بارگذاری تاریخچه ناموفق بود.');

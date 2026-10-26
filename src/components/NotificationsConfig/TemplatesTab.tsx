@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useEffect, useState, useRef } from 'react';
 import { Loader as Loader2, RefreshCw, Save, CreditCard as Edit2, Plus, Trash2, Eye, X, ChevronDown, Bell, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -459,6 +460,7 @@ export function NotifPreviewModal({ template, onClose }: { template: Notificatio
 }
 
 export function TemplatesTab() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.config, async () => { await load(); });
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<NotificationTemplate | null>(null);
@@ -468,7 +470,7 @@ export function TemplatesTab() {
   const [previewTemplate, setPreviewTemplate] = useState<NotificationTemplate | null>(null);
 
   const load = async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const { data } = await supabase.from('notification_templates').select('*').order('category').order('event_type').order('audience');
       setTemplates((data || []) as NotificationTemplate[]);

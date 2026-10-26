@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect } from 'react';
 import { History, LogIn as LoginIcon, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -5,6 +6,7 @@ import type { AdminProfile, AuditRow } from './types';
 import { DetailPanel } from './DetailPanel';
 
 function LoginsPanel({ user, onBack }: { user: AdminProfile; onBack: () => void }) {
+  const liveRevision = useLiveRevision(LIVE_DATA.audit);
   const [logs, setLogs] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -13,7 +15,7 @@ function LoginsPanel({ user, onBack }: { user: AdminProfile; onBack: () => void 
       .or('action.ilike.%لاگین%,action.ilike.%ورود%,action.ilike.%login%')
       .order('created_at', { ascending: false }).limit(50)
       .then(({ data }) => { setLogs((data || []) as AuditRow[]); setLoading(false); });
-  }, [user.user_id]);
+  }, [user.user_id, liveRevision]);
 
   const parseUA = (ua: string | null) => {
     if (!ua) return '—';

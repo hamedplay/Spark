@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useEffect, useState } from 'react';
 import {
   Users,
@@ -21,6 +22,7 @@ interface ContentStats {
 }
 
 export function AdminOverviewCards({ totalUsers, activeUsers }: Props) {
+  const liveRevision = useLiveRevision([...LIVE_DATA.meetings, ...LIVE_DATA.tasks, ...LIVE_DATA.notes]);
   const [stats, setStats] = useState<ContentStats>({
     meetings: null,
     tasks: null,
@@ -48,7 +50,7 @@ export function AdminOverviewCards({ totalUsers, activeUsers }: Props) {
 
     void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [liveRevision]);
 
   const cards = [
     { label: 'کل کاربران', value: totalUsers, icon: Users },

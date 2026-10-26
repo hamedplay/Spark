@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck, Calendar, Mail, Globe, CircleCheck as CheckCircle2, Users, Activity, Shield, Loader as Loader2, UserPlus, UserMinus, RefreshCw, CreditCard as Edit3 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -31,6 +32,7 @@ function getIcon(key: string): typeof Calendar {
 }
 
 function AccessPanel({ user, onBack, onNavigateToGroup }: { user: AdminProfile; onBack: () => void; onNavigateToGroup?: (groupId: string) => void }) {
+  const liveRefreshRef = useLiveData([...LIVE_DATA.people, ...LIVE_DATA.groups], async () => { await loadGroups(); });
   const [groups, setGroups] = useState<GroupMembership[]>([]);
   const [allGroups, setAllGroups] = useState<{ id: string; display_name: string | null; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,7 @@ function AccessPanel({ user, onBack, onNavigateToGroup }: { user: AdminProfile; 
   const [resolvedPermissions, setResolvedPermissions] = useState<Record<string, boolean> | null | undefined>(undefined);
 
   const loadGroups = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data: memberships } = await supabase
       .from('user_group_members')
       .select('group_id')

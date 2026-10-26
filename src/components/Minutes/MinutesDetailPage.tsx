@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { FileText, Users, SquareCheck as CheckSquare, Paperclip, Shield, History, Signature as FileSignature } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -65,6 +66,7 @@ async function waitForPrintAssets(root: HTMLElement, timeoutMs = 3000): Promise<
 }
 
 export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin }: Props) {
+  const liveRefreshRef = useLiveData([...LIVE_DATA.minutes, ...LIVE_DATA.meetings, ...LIVE_DATA.config], async () => { if (acting || showRequestChanges || printLoading || wordLoading) return; await fetchDetail(); });
   const [activeTab, setActiveTab] = useState<MinutesDetailTab>(() => getMinutesTabFromUrl() || 'summary');
   const [minute, setMinute] = useState<MinuteDetail | null>(null);
   const [internalParts, setInternalParts] = useState<InternalParticipantRow[]>([]);
@@ -90,6 +92,7 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
 
   // Request token: incremented on every new load. Stale responses are rejected
   // by comparing their token against the current value.
+  const snapshotFingerprint = useRef('');
   const loadTokenRef = useRef(0);
 
   // Track the currently loaded minute identity for snapshot invalidation.
@@ -113,14 +116,14 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
   }, [printReady]);
 
   const fetchDetail = useCallback(async () => {
-    setIsLoading(true);
+    if (!liveRefreshRef.current) setIsLoading(true);
     setError(null);
     setNotFound(false);
-    setConfigLoading(true);
+    if (!liveRefreshRef.current) setConfigLoading(true);
     setConfigError(null);
 
     // Invalidate any previous snapshot
-    setFinalDocData(null);
+    if (!liveRefreshRef.current) setFinalDocData(null);
     setDocDataError(null);
 
     const targetId = minuteId || getMinuteIdFromUrl();
@@ -148,6 +151,11 @@ export function MinutesDetailPage({ onNavigate, minuteId, currentUserId, isAdmin
       // Reject if the minute identity has changed since this load started.
       if (loadedMinuteKeyRef.current !== minuteKey) return;
 
+      const fingerprint = JSON.stringify(snapshot);
+      if (liveRefreshRef.current && fingerprint === snapshotFingerprint.current) {
+        setConfigLoading(false); setIsLoading(false); return;
+      }
+      snapshotFingerprint.current = fingerprint;
       setMinute(snapshot.minute);
       setInternalParts(snapshot.internalParts);
       setExternalParts(snapshot.externalParts);

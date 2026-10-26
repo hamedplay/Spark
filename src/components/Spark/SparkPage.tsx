@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bot, Calendar, MessageSquare, ClipboardList, Navigation,
@@ -271,6 +272,7 @@ interface SparkPageProps {
 }
 
 export function SparkPage({ externalLogs, onSendToAssistant }: SparkPageProps) {
+  useLiveData(LIVE_DATA.spark, async () => { await fetchLogs(); });
   const [logs, setLogs] = useState<SparkLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');

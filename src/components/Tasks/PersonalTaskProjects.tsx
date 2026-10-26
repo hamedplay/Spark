@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import React, { useEffect, useState } from 'react';
 import { FolderPlus, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -12,6 +13,7 @@ export interface PersonalTaskProject {
 }
 
 export function PersonalTaskProjects({ userId, onClose, onChanged }: { userId: string; onClose: () => void; onChanged?: () => void }) {
+  useLiveData(LIVE_DATA.tasks, async () => { await load(); });
   const [projects, setProjects] = useState<PersonalTaskProject[]>([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');

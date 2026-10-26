@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Settings, Database, Shield, Wifi, WifiOff, Key, Check, RefreshCw as RefreshIcon, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { HrSsoConfig } from './types';
@@ -18,18 +18,24 @@ function HrSsoConfigPanel({ configs, onSave }: {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  const loadedForm = useRef('');
+  const loadedTab = useRef('');
   useEffect(() => {
+    if (loadedTab.current === activeTab && loadedForm.current && JSON.stringify(form) !== loadedForm.current) return;
+    loadedTab.current = activeTab;
     if (config) {
+      loadedForm.current = JSON.stringify(config);
       setForm({ ...config });
     } else {
-      setForm({ config_type: activeTab, provider_name: '', base_url: '', api_key: '', client_id: '', client_secret: '', sync_enabled: false, sync_interval_minutes: 60, is_active: false, field_mappings: {} });
+      const next = { config_type: activeTab, provider_name: '', base_url: '', api_key: '', client_id: '', client_secret: '', sync_enabled: false, sync_interval_minutes: 60, is_active: false, field_mappings: {} };
+      loadedForm.current = JSON.stringify(next); setForm(next);
     }
     setTestResult(null);
-  }, [activeTab, config?.id]);
+  }, [activeTab, config]);
 
   const handleSave = async () => {
     setSaving(true);
-    try { await onSave({ ...form, config_type: activeTab }); } finally { setSaving(false); }
+    try { loadedForm.current = JSON.stringify(form); await onSave({ ...form, config_type: activeTab }); } finally { setSaving(false); }
   };
 
   const handleTest = async () => {

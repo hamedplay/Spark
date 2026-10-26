@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, CircleCheck as CheckCircle, Circle as XCircle, Loader as Loader2, Save, RefreshCw, ChevronDown, ChevronUp, Eye, EyeOff, ExternalLink, TriangleAlert as AlertTriangle, Shield, Database, Link2, Key, Webhook, Trash2, Radio, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle2, Globe, Shuffle, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -317,14 +318,20 @@ export function ChannelCard({ channel, label, icon, accentClass }: {
   const [supabaseTestResult, setSupabaseTestResult] = useState<'idle' | 'ok' | 'error'>('idle');
   const [webhookUrlError, setWebhookUrlError] = useState('');
 
+  const loadedConfig = useRef<string | null>(null);
+  const configSnapshot = useRef(''); configSnapshot.current = JSON.stringify(config);
+  const liveRefreshRef = useLiveData(LIVE_DATA.social, async () => {
+    if (!saving && !testing && loadedConfig.current === configSnapshot.current) await load();
+  });
+
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data } = await supabase
       .from('social_channel_configs')
       .select('*')
       .eq('channel', channel)
       .maybeSingle();
-    if (data) setConfig({ ...BLANK, ...data } as ChannelConfig);
+    if (data) { const next = { ...BLANK, ...data } as ChannelConfig; loadedConfig.current = JSON.stringify(next); setConfig(next); } else { loadedConfig.current = configSnapshot.current; }
     setLoading(false);
   }, [channel]);
 

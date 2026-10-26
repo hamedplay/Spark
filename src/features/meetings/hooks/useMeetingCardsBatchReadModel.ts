@@ -1,3 +1,4 @@
+import { useLiveRevision, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase';
 import type { AgendaItem, Meeting } from '../../../types';
@@ -33,6 +34,7 @@ export function useMeetingCardsBatchReadModel(
   meetings: Meeting[],
   currentUserId: string | null,
 ): BatchReadModelState {
+  const liveRevision = useLiveRevision(LIVE_DATA.meetings);
   const [state, setState] = useState<BatchReadModelState>({ byMeetingId: {}, loading: false, failed: false });
 
   const meetingIdsKey = meetings.map((meeting) => meeting.id).filter(Boolean).join(',');
@@ -151,7 +153,7 @@ export function useMeetingCardsBatchReadModel(
     })();
 
     return () => { cancelled = true; };
-  }, [meetingIdsKey, creatorMeetingIdsKey]);
+  }, [meetingIdsKey, creatorMeetingIdsKey, liveRevision]);
 
   return state;
 }

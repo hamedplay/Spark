@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Users, Search, Plus, RefreshCw, EllipsisVertical as MoreVertical, CreditCard as Edit2, Trash2, ShieldCheck, Check, X, Group as GroupIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -15,6 +16,7 @@ import { AccessDenied } from '../features/permissions';
 export { GroupEventsPanel };
 
 export function UserGroupsPanel({}: Props) {
+  useLiveData([...LIVE_DATA.groups, ...LIVE_DATA.people], async () => { await load(); });
   const { hasPermission } = usePermissions();
   const canManageAccess = hasPermission('config_users.user_groups.permissions');
   const [groups, setGroups] = useState<UserGroup[]>([]);

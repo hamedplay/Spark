@@ -1,5 +1,6 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Eye, TrendingUp, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Flag, ChevronRight, ChevronLeft, MessageSquare, SquareArrowUpRight, ListChecks, CirclePause as PauseCircle } from 'lucide-react';
+import { Eye, TrendingUp, CircleCheck as CheckCircle2, TriangleAlert as AlertTriangle, Flag, ChevronRight, ChevronLeft, MessageSquare, SquareArrowUpRight, ListChecks, CirclePause as PauseCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   PageHeader, StatCard, DecisionStatusBadge, DecisionPriorityBadge,
@@ -38,6 +39,7 @@ interface MyDecisionsSummary {
 }
 
 export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
+  const liveRefreshRef = useLiveData(LIVE_DATA.minutes, async () => { await Promise.all([fetchData(offset), fetchSummary()]); });
   const [data, setData]                         = useState<MyDecisionRow[]>([]);
   const [total, setTotal]                       = useState(0);
   const [loading, setLoading]                   = useState(true);
@@ -84,7 +86,7 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     setError(null);
     try {
       const { data: rows, error: rpcErr } = await supabase.rpc('get_my_minutes_decisions', {
@@ -112,6 +114,10 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
       setLoading(false);
     }
   }, [filters.statusFilter, filters.priorityFilter, filters.search, filters.followupOnly, filters.deadlineFilter, filters.dueFrom, filters.dueTo, dateRangeError]);
+
+  useEffect(() => {
+    setDetailDecision(current => current ? (data.find(row => row.id === current.id) || current) : null);
+  }, [data]);
 
   // Reset pagination on any filter change
   useEffect(() => {
@@ -152,9 +158,6 @@ export function MyDecisionsPage({ onNavigate }: MyDecisionsPageProps) {
               label="بازگشت به صورت‌جلسات و مصوبات"
               onClick={() => onNavigate('minutes-hub')}
             />
-            <button onClick={() => { fetchData(offset); fetchSummary(); }} className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">
-              <RefreshCw className="h-4 w-4" /> بازآوری
-            </button>
           </div>
         }
       />

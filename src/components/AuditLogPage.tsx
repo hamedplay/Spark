@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useState, useCallback, useEffect } from 'react';
 import { Activity, Search, Download, RefreshCw, X, CircleAlert as AlertCircle, TriangleAlert as AlertTriangle, Info, Globe, FileText, ChevronDown, ChevronUp, Eye, Trash2, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -196,6 +197,7 @@ function EventDetailModal({ entry, onClose }: { entry: AuditEntry; onClose: () =
 
 // ─── Main AuditLogPage ────────────────────────────────────────────────────────
 export function AuditLogPage() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.audit, async () => { await search(); });
   const [logs, setLogs] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<AuditEntry | null>(null);
@@ -220,7 +222,7 @@ export function AuditLogPage() {
   const inp = 'w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors';
 
   const search = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       let q = supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(500);
 

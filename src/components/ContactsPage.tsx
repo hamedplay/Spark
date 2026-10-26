@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { formatJalaliTimestampDateOnly } from '../lib/minutesDate';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -163,6 +164,7 @@ function ShareContactModal({ contact, currentUserId, onClose }: {
 }
 
 export function ContactsPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
+  useLiveData(LIVE_DATA.contacts, async () => { await fetchContacts(); });
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('contacts_create');
   const canEdit = hasPermission('contacts_edit');

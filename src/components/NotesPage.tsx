@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import '../notes-theme.css';
 import { Plus, Mic } from 'lucide-react';
@@ -22,6 +23,7 @@ const AssignNoteModal = lazy(() => import('./Notes/AssignNoteModal').then((m) =>
 
 
 export function NotesPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
+  useLiveData(LIVE_DATA.notes, async () => { await fetchNotes(); });
   const isMobile = window.innerWidth < 768;
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('notes_create');

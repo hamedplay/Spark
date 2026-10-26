@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { insertNotification } from '../../lib/notifications';
@@ -103,6 +104,7 @@ function buildMeta(
 }
 
 export function ChannelConversationView({ channel, currentUserId, allProfiles, onBack, isMobile, scrollToMessageId, onScrollHandled, onNavigateToTasks, onOpenDirectChat }: Props) {
+  useLiveData(LIVE_DATA.channels, async () => { await Promise.all([fetchMessages(), fetchMembers(), fetchPinned(), fetchGroupTasks(), fetchMentionBar()]); });
   const theme = useChatTheme();
   const isDark = useDarkMode();
   const [messages, setMessages] = useState<MessageWithMeta[]>([]);

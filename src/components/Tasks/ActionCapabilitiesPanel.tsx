@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckSquare, FileText, FolderKanban, Link2, Plus, Trash2, Upload, Bell, Clock3, GitBranch } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -18,6 +19,7 @@ type CapabilityTask = ActionTask & {
 };
 
 export function ActionCapabilitiesPanel({ task, onTaskChanged }: { task: CapabilityTask; onTaskChanged?: () => void; }) {
+  useLiveData(LIVE_DATA.tasks, async () => { await load(); });
   const [tab, setTab] = useState<'checklist'|'files'|'relations'>('checklist');
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);

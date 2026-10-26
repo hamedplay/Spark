@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
@@ -125,6 +126,7 @@ const maskPhone = (phone: string | null) => {
 };
 
 export function DailyReportMonitor() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.daily, async () => { await load(); });
   const [data, setData] = useState<Diagnostics | null>(null);
   const [loading, setLoading] = useState(true);
   const [testPhone, setTestPhone] = useState('');
@@ -132,7 +134,7 @@ export function DailyReportMonitor() {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     const { data: result, error } = await supabase.rpc('get_daily_report_scheduler_diagnostics', {
       p_run_limit: 25,
       p_sms_limit: 50,

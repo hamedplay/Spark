@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bot, RefreshCw, CircleAlert as AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -11,12 +12,13 @@ import type { SparkModuleConfig, FieldKeyword } from './SparkConfig/types';
 import { Spinner } from './SparkConfig/constants';
 
 export function SparkConfigPanel() {
+  const liveRefreshRef = useLiveData(LIVE_DATA.spark, async () => { await fetchAll(); });
   const [configs, setConfigs] = useState<SparkModuleConfig[]>([]);
   const [fieldKeywords, setFieldKeywords] = useState<FieldKeyword[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const [{ data: cfg }, { data: fk }] = await Promise.all([
         supabase.from('spark_config').select('*').order('module'),

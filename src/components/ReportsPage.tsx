@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { useEffect, useState, type ElementType } from 'react';
 import {
   ChartBar as BarChart3,
@@ -190,6 +191,7 @@ function BarChartBlock({
 }
 
 export function ReportsPage() {
+  const liveRefreshRef = useLiveData([...LIVE_DATA.meetings, ...LIVE_DATA.tasks], async () => { await fetchStats(); });
   const { hasPermission } = usePermissions();
   const canExport = hasPermission('reports_export');
   const [stats, setStats] = useState<Stats | null>(null);
@@ -205,7 +207,7 @@ export function ReportsPage() {
   }, [range]);
 
   const fetchStats = async () => {
-    setLoading(true);
+    if (!liveRefreshRef.current) setLoading(true);
     try {
       const monthsBack = range === '1month' ? 1 : range === '3months' ? 3 : range === '6months' ? 6 : 12;
       const since = moment().subtract(monthsBack, 'months').toISOString();
