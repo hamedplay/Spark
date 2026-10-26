@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Phone, Video, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Search, User, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Phone, Video, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Search, User, X, Trash2, Loader as Loader2, RefreshCw } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { createChatRealtimeSync } from './chatRealtimeSync';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import type { UserProfile } from './types';
@@ -7,6 +9,8 @@ import type { CallSession } from './CallEngine';
 
 interface CallRecord extends CallSession {
   otherUser: UserProfile | null;
+  created_at: string;
+  duration_seconds: number;
 }
 
 interface Props {
@@ -22,19 +26,18 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<'all' | 'missed'>('all');
 
-  useEffect(() => { fetchHistory(); }, [currentUserId]);
+  const [error, setError] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const requestRef = useRef(0);
 
-  const fetchHistory = async () => {
-    setLoading(true);
-    const { data } = await supabase
-      .from('call_sessions')
-      .select('*')
-      .or(`caller_id.eq.${currentUserId},callee_id.eq.${currentUserId}`)
-      .in('status', ['ended', 'declined', 'missed'])
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    if (!data) { setLoading(false); return; }
+  const fetchHistory = useCallback(async () => {
+    const request = ++requestRef.current;
+    const { data, error: loadError } = await supabase.rpc('get_my_call_history', { p_limit: 100 });
+    if (request !== requestRef.current) return;
+    if (loadError || !data) { setError('دریافت تاریخچه تماس‌ها ناموفق بود'); setLoading(false); return; }
+    setError(null);
+    if (data.length === 0) { setRecords([]); setLoading(false); return; }
 
     const otherIds = data.map(r => r.caller_id === currentUserId ? r.callee_id : r.caller_id);
     const { data: profiles } = await supabase
@@ -42,6 +45,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
       .select('user_id, full_name, username')
       .in('user_id', [...new Set(otherIds)]);
 
+    if (request !== requestRef.current) return;
     const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
     setRecords(data.map((r: any) => ({
       ...r,
@@ -50,6 +54,35 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
       otherUser: profileMap.get(r.caller_id === currentUserId ? r.callee_id : r.caller_id) || null,
     })));
     setLoading(false);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    setRecords([]);
+    setLoading(true);
+    const sync = createChatRealtimeSync(fetchHistory);
+    void sync.request();
+    const channel = supabase.channel(`call-history-${currentUserId}-${crypto.randomUUID()}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions', filter: `caller_id=eq.${currentUserId}` }, () => { void sync.request(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions', filter: `callee_id=eq.${currentUserId}` }, () => { void sync.request(); })
+      .subscribe(status => sync.onStatus(status));
+    return () => { requestRef.current++; sync.dispose(); void supabase.removeChannel(channel); };
+  }, [currentUserId, fetchHistory]);
+
+  const clearHistory = async () => {
+    if (clearing) return;
+    setClearing(true);
+    requestRef.current++;
+    try {
+      const { error: clearError } = await supabase.rpc('clear_my_call_history');
+      if (clearError) throw clearError;
+      requestRef.current++;
+      setRecords([]);
+      setConfirmClear(false);
+      toast.success('تاریخچه تماس‌ها برای شما پاک شد');
+      await fetchHistory();
+    } catch {
+      toast.error('حذف تاریخچه تماس‌ها ناموفق بود؛ دوباره تلاش کنید');
+    } finally { setClearing(false); }
   };
 
   const filtered = records.filter(r => {
@@ -93,6 +126,12 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
             <h2 className="text-base font-bold text-gray-900 dark:text-white">تماس‌ها</h2>
             <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">تاریخچه تماس‌های سازمانی</p>
           </div>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setConfirmClear(v => !v)} disabled={clearing || loading || records.length === 0}
+              aria-label="حذف تاریخچه تماس‌ها" title="حذف تاریخچه تماس‌ها"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-red-500 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950/30">
+              <Trash2 className="h-4 w-4" />
+            </button>
           {onClose && (
             <button
               onClick={onClose}
@@ -102,7 +141,20 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
               <X className="w-4 h-4" />
             </button>
           )}
+          </div>
         </div>
+        {confirmClear && (
+          <div className="mb-3 rounded-xl border border-red-100 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/20">
+            <p className="text-xs leading-6 text-gray-700 dark:text-gray-200">همه سابقه تماس‌های پایان‌یافته فقط برای شما حذف شود؟ سابقه طرف مقابل و تماس‌های در حال انجام حفظ می‌شود.</p>
+            <div className="mt-2 flex gap-2">
+              <button type="button" disabled={clearing} onClick={clearHistory} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-red-600 px-3 text-xs font-medium text-white disabled:opacity-50">
+                {clearing && <Loader2 className="h-4 w-4 animate-spin" />}حذف تاریخچه
+              </button>
+              <button type="button" disabled={clearing} onClick={() => setConfirmClear(false)} className="min-h-10 rounded-lg px-3 text-xs text-gray-600 dark:text-gray-300">انصراف</button>
+            </div>
+          </div>
+        )}
+        {error && <div role="alert" className="mb-3 flex items-center justify-between gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">{error}<button type="button" onClick={() => { void fetchHistory(); }} aria-label="تلاش مجدد" className="inline-flex h-10 w-10 shrink-0 items-center justify-center"><RefreshCw className="h-4 w-4" /></button></div>}
 
         {/* Search */}
         <div className="relative mb-3">

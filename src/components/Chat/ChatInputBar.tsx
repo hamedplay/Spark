@@ -320,7 +320,7 @@ export function ChatInputBar({
       toast.error('خطا در آپلود صدا: ' + upErr.message);
       return;
     }
-    await supabase.from('chat_messages').insert({
+    const { error: messageError } = await supabase.from('chat_messages').insert({
       conversation_id: conversationId,
       sender_id: currentUserId,
       body: body.trim() || null,
@@ -329,6 +329,11 @@ export function ChatInputBar({
       voice_duration: recordingSeconds,
       reply_to_id: replyingTo?.id || null,
     });
+    if (messageError) {
+      await supabase.storage.from('chat-attachments').remove([path]);
+      toast.error('خطا در ثبت پیام صوتی؛ صدا برای تلاش مجدد حفظ شد');
+      return;
+    }
     // Notify recipient about voice message
     if (otherUserId) {
       insertNotification({
@@ -557,7 +562,7 @@ export function ChatInputBar({
         : file.type.startsWith('video') ? 'video'
         : file.type.startsWith('audio') ? 'audio'
         : 'document';
-      await supabase.from('chat_messages').insert({
+      const { error: messageError } = await supabase.from('chat_messages').insert({
         conversation_id: conversationId,
         sender_id: currentUserId,
         body: body.trim() || null,
@@ -568,6 +573,11 @@ export function ChatInputBar({
         file_size: file.size,
         reply_to_id: replyingTo?.id || null,
       });
+      if (messageError) {
+        await supabase.storage.from('chat-attachments').remove([path]);
+        toast.error('خطا در ثبت پیام فایل؛ دوباره تلاش کنید');
+        return;
+      }
       if (otherUserId) {
         const fileTypeLabel = file.type.startsWith('image') ? 'تصویر'
           : file.type.startsWith('video') ? 'ویدیو'

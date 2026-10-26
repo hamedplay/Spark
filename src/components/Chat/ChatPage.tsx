@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { MessageCircle, Plus, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+import { createChatRealtimeSync } from './chatRealtimeSync';
 import { ChatSidebar } from './ChatSidebar';
 import type { SidebarTab } from './ChatSidebar';
 import type { ConversationWithProfile, UserProfile } from './types';
@@ -48,16 +49,19 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
   const { startCall: globalStartCall } = useGlobalCall();
 
   const convChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const conversationRequestRef = useRef(0);
   const pendingConvIdRef = useRef<string | null>(null);
 
   // ── Fetch conversations ──────────────────────────────────────────────────
   const fetchConversations = useCallback(async (uid: string) => {
+    const request = ++conversationRequestRef.current;
     const { data, error } = await supabase
       .from('chat_conversations')
       .select('*')
       .or(`participant_a.eq.${uid},participant_b.eq.${uid}`)
       .order('last_message_at', { ascending: false, nullsFirst: false });
 
+    if (request !== conversationRequestRef.current) return;
     if (error) { console.error('fetchConversations:', error.message); setLoadingConvs(false); return; }
 
     // Filter out conversations the current user has deleted
@@ -171,6 +175,7 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
         isPinned: c.participant_a === uid ? !!c.pinned_for_a : !!c.pinned_for_b,
       };
     });
+    if (request !== conversationRequestRef.current) return;
     setConversations(mapped);
     // If the active conversation was deleted, clear it and return to sidebar
     setActiveId(prev => prev && mapped.some(c => c.id === prev) ? prev : null);
@@ -180,8 +185,8 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    let sync: ReturnType<typeof createChatRealtimeSync> | undefined;
     const channelName = `convs-${crypto.randomUUID()}`;
-    console.log('[ChatPage] Subscribing conversations realtime channel:', channelName);
 
     (async () => {
       let userId = providedCurrentUserId;
@@ -205,20 +210,22 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
       if (cancelled) return;
       setCurrentUserProfile(profile || { user_id: userId, full_name: null, email: fallbackEmail });
 
-      await fetchConversations(userId);
-      if (cancelled) return;
+      sync = createChatRealtimeSync(() => fetchConversations(userId));
+      void sync.request();
 
       convChannelRef.current = supabase
         .channel(channelName)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' },
-          () => fetchConversations(userId))
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' },
-          () => fetchConversations(userId))
-        .subscribe();
+          () => { void sync?.request(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' },
+          () => { void sync?.request(); })
+        .subscribe(status => sync?.onStatus(status));
 
     })();
     return () => {
       cancelled = true;
+      conversationRequestRef.current++;
+      sync?.dispose();
       if (convChannelRef.current) {
         supabase.removeChannel(convChannelRef.current);
         convChannelRef.current = null;

@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react'
 import { MessageCircle, CalendarDays } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ChatMessage } from './ChatMessage';
+import { createChatRealtimeSync } from './chatRealtimeSync';
 import { ChatInputBar } from './ChatInputBar';
 import { loadChatTheme, type ChatThemeSettings } from './chatTheme';
 import moment from 'moment-jalaali';
@@ -108,17 +109,22 @@ export function ChatConversationView({
   const reminderCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const firedReminderIds = useRef<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messageRequestRef = useRef(0);
+  const refreshMessagesRef = useRef<() => Promise<void>>(async () => {});
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [jumpPickerDate, setJumpPickerDate] = useState<{ jy: number; jm: number; jd: number } | null>(null);
 
   useEffect(() => {
     fetchMessages();
-    subscribeToMessages();
+    const sync = createChatRealtimeSync(() => refreshMessagesRef.current());
+    subscribeToMessages(sync);
     markAsRead();
     fetchReminders();
     fetchMentionBar();
     return () => {
+      messageRequestRef.current++;
+      sync.dispose();
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -222,7 +228,7 @@ export function ChatConversationView({
       .contains('mentioned_user_ids', [currentUserId])
       .order('created_at', { ascending: false })
       .limit(20);
-    if (!data || data.length === 0) return;
+    if (!data) return;
     setMentionBarItems(data.map((m: any) => ({
       id: m.id,
       body: m.body,
@@ -279,6 +285,9 @@ export function ChatConversationView({
   };
 
   const fetchMessages = useCallback(async () => {
+    const request = ++messageRequestRef.current;
+    const scroll = scrollRef.current;
+    const shouldScroll = !scroll || scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 100;
     const { data: msgs, error: msgsError } = await supabase
       .from('chat_messages')
       .select('*')
@@ -287,7 +296,7 @@ export function ChatConversationView({
       .order('created_at', { ascending: false })
       .limit(100);
 
-    if (msgsError || !msgs) { setMessages([]); return; }
+    if (request !== messageRequestRef.current || msgsError || !msgs) return;
 
     // Empty conversation — no further queries needed
     if (msgs.length === 0) { setMessages([]); setTimeout(() => scrollToBottom(), 50); return; }
@@ -343,12 +352,13 @@ export function ChatConversationView({
       }))
       .reverse();
 
+    if (request !== messageRequestRef.current) return;
     setMessages(enriched);
-    setTimeout(() => scrollToBottom(), 50);
+    if (shouldScroll) setTimeout(() => { if (request === messageRequestRef.current) scrollToBottom(); }, 50);
 
     // Mark incoming as read using a secure DB function (atomically appends uid to read_by)
     const unreadIncoming = msgs.filter(m => m.sender_id !== currentUserId && !(m.read_by || []).includes(currentUserId));
-    if (unreadIncoming.length > 0) {
+    if (unreadIncoming.length > 0 && document.visibilityState === 'visible') {
       // Single RPC call marks all unread messages in this conversation as read
       supabase.rpc('mark_conversation_messages_read', { p_conversation_id: conversation.id })
         .then(() => { /* triggers realtime UPDATE for sender to see eye icon */ });
@@ -356,7 +366,7 @@ export function ChatConversationView({
       // Show full-screen alarm for any unread urgent messages (uses global dedup to prevent re-firing)
       const urgentUnread = unreadIncoming.filter(m => m.message_type === 'urgent');
       if (urgentUnread.length > 0) {
-        const latest = urgentUnread[urgentUnread.length - 1];
+        const latest = urgentUnread[0];
         globalTriggerUrgentAlarm({
           id: latest.id,
           body: latest.body,
@@ -366,13 +376,13 @@ export function ChatConversationView({
         });
       }
     }
-  }, [conversation.id, currentUserId]);
+  }, [conversation.id, currentUserId, buildSenderProfile, resolveName, globalTriggerUrgentAlarm]);
+  refreshMessagesRef.current = async () => { await fetchMessages(); await fetchMentionBar(); };
 
-  const subscribeToMessages = () => {
+  const subscribeToMessages = (sync: ReturnType<typeof createChatRealtimeSync>) => {
 
   // جلوگیری از duplicate channel
   if (channelRef.current) {
-    console.log('Removing previous realtime channel...');
     supabase.removeChannel(channelRef.current);
     channelRef.current = null;
   }
@@ -392,14 +402,6 @@ export function ChatConversationView({
       (payload) => {
         const newMsg = payload.new as any;
 
-        console.log('[RT INSERT]', {
-          messageId: newMsg.id,
-          sender: newMsg.sender_id,
-          conversation: newMsg.conversation_id,
-          myUserId: currentUserId,
-          isMine: newMsg.sender_id === currentUserId
-        });
-
         if (newMsg.sender_id !== currentUserId) {
           if (newMsg.message_type === 'important') {
             toast('پیام مهم دریافت شد', {
@@ -409,8 +411,7 @@ export function ChatConversationView({
           }
         }
 
-        fetchMessages();
-        onConversationUpdate();
+        void sync.request();
       }
     )
 
@@ -423,10 +424,8 @@ export function ChatConversationView({
         table: 'chat_messages',
         filter: `conversation_id=eq.${conversation.id}`
       },
-      (payload) => {
-        console.log('[RT UPDATE]', payload);
-        fetchMessages();
-        onConversationUpdate();
+      () => {
+        void sync.request();
       }
     )
 
@@ -439,10 +438,8 @@ export function ChatConversationView({
         table: 'chat_messages',
         filter: `conversation_id=eq.${conversation.id}`
       },
-      (payload) => {
-        console.log('[RT DELETE]', payload);
-        fetchMessages();
-        onConversationUpdate();
+      () => {
+        void sync.request();
       }
     )
 
@@ -454,9 +451,8 @@ export function ChatConversationView({
         schema: 'public',
         table: 'chat_message_reactions'
       },
-      (payload) => {
-        console.log('[RT REACTION]', payload);
-        fetchMessages();
+      () => {
+        void sync.request();
       }
     )
 
@@ -469,28 +465,12 @@ export function ChatConversationView({
         table: 'chat_message_read_receipts',
         filter: `conversation_id=eq.${conversation.id}`
       },
-      (payload) => {
-        console.log('[RT READ RECEIPT]', payload);
-        fetchMessages();
+      () => {
+        void sync.request();
       }
     )
 
-    .subscribe((status) => {
-      console.log('Realtime status:', status);
-
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ Realtime connected for conversation:', conversation.id);
-      }
-
-      if (status === 'CHANNEL_ERROR') {
-        console.error('❌ Realtime channel error');
-      }
-
-      if (status === 'TIMED_OUT') {
-        console.error('❌ Realtime timed out');
-      }
-
-    });
+    .subscribe(status => sync.onStatus(status));
 
   channelRef.current = channel;
 };
@@ -504,6 +484,7 @@ export function ChatConversationView({
   };
 
   const markAsRead = async () => {
+    if (document.visibilityState !== 'visible') return;
     // Update read receipt timestamp
     await supabase.from('chat_message_read_receipts').upsert({
       conversation_id: conversation.id, user_id: currentUserId, last_read_at: new Date().toISOString(),

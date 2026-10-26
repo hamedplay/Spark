@@ -143,6 +143,8 @@ export type Database = Omit<BaseDatabase, 'public'> & {
       };
     };
     Functions: PublicSchema['Functions'] & {
+      get_my_call_history: { Args: { p_limit?: number }; Returns: { id: string; caller_id: string; callee_id: string; created_at: string; duration_seconds: number }[] };
+      clear_my_call_history: { Args: Record<string, never>; Returns: number };
       admin_correct_minutes: {
         Args: {
           p_minute_id: string; p_expected_updated_at: string; p_payload: Json;
