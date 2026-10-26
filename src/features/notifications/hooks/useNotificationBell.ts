@@ -1,3 +1,4 @@
+import { createNotificationUnreadTracker } from '../models/notificationUnreadTracker';
 import { notifyBrowser } from '../../../lib/pwaNotificationBridge';
 import {
   useState,
@@ -79,37 +80,31 @@ export function useNotificationBell(
   const deletedNotificationIds = useRef(new Set<string>());
   const onNavigateRef =
     useRef(onNavigate);
-  const unreadCountRef =
-    useRef(0);
+  const unreadTracker = useRef(createNotificationUnreadTracker());
 
   useEffect(() => {
     onNavigateRef.current =
       onNavigate;
   }, [onNavigate]);
 
-  useEffect(() => {
-    unreadCountRef.current =
-      unreadCount;
-  }, [unreadCount]);
-
   const refreshUnreadCount =
     useCallback(async (): Promise<
       number | null
     > => {
       if (!currentUserId) {
-        unreadCountRef.current = 0;
+        unreadTracker.current.reset();
         setUnreadCount(0);
         return 0;
       }
 
+      const token = unreadTracker.current.beginRequest();
       try {
         const count =
           await fetchUnreadNotificationCount(
             currentUserId
           );
 
-        unreadCountRef.current =
-          count;
+        if (!unreadTracker.current.applyResponse(token, count)) return null;
         setUnreadCount(count);
         return count;
       } catch (error: unknown) {
@@ -153,6 +148,7 @@ export function useNotificationBell(
 
     let disposed = false;
     deletedNotificationIds.current.clear();
+    unreadTracker.current.reset(); setUnreadCount(0);
     let unreadSyncTimer:
       number | null = null;
 
@@ -189,6 +185,7 @@ export function useNotificationBell(
           loaded
         ) => {
           const visible = loaded.filter(notification => !deletedNotificationIds.current.has(notification.id));
+          unreadTracker.current.snapshot(visible);
           setNotifications(visible);
           // The list is capped at fifty; the badge must count all unread rows.
           void refreshUnreadCount();
@@ -204,6 +201,7 @@ export function useNotificationBell(
                 notification
               )
           );
+          setUnreadCount(unreadTracker.current.inserted(notification));
           scheduleUnreadCountSync();
 
           void notifyBrowser(notification, currentUserId);
@@ -220,6 +218,7 @@ export function useNotificationBell(
           notification
         ) => {
           if (deletedNotificationIds.current.has(notification.id)) return;
+          setUnreadCount(unreadTracker.current.updated(notification));
           setNotifications(
             (previous) =>
               replaceUpdatedNotification(
@@ -230,6 +229,7 @@ export function useNotificationBell(
           scheduleUnreadCountSync();
         },
         onNotificationDeleted: id => {
+          setUnreadCount(unreadTracker.current.deleted(id));
           deletedNotificationIds.current.add(id);
           setNotifications(previous => previous.filter(notification => notification.id !== id));
           scheduleUnreadCountSync();
@@ -252,6 +252,7 @@ export function useNotificationBell(
 
     return () => {
       disposed = true;
+      unreadTracker.current.invalidate();
 
       if (
         unreadSyncTimer !== null
@@ -274,6 +275,7 @@ export function useNotificationBell(
     if (!currentUserId) return;
     const original = notifications.find(notification => notification.id === id);
     if (original?.read) return;
+    if (original) setUnreadCount(unreadTracker.current.updated({ ...original, read: true }));
     setNotifications((prev) =>
       markNotificationReadLocally(
         prev,
@@ -288,6 +290,7 @@ export function useNotificationBell(
       );
       void refreshUnreadCount();
     } catch {
+      if (original) setUnreadCount(unreadTracker.current.updated(original));
       if (original) setNotifications(previous => previous.map(notification => notification.id === id ? { ...notification, read: original.read } : notification));
       void refreshUnreadCount();
       toast.error(
@@ -300,6 +303,7 @@ export function useNotificationBell(
     if (!currentUserId) return;
     try {
       await deleteUserNotification(id, currentUserId);
+      setUnreadCount(unreadTracker.current.deleted(id));
       deletedNotificationIds.current.add(id);
       setNotifications(previous => previous.filter(notification => notification.id !== id));
       void refreshUnreadCount();
@@ -348,7 +352,7 @@ export function useNotificationBell(
         prev
       )
     );
-    setUnreadCount(0);
+    setUnreadCount(unreadTracker.current.markAllRead());
 
     try {
       await markAllUserNotificationsAsRead(
@@ -359,6 +363,7 @@ export function useNotificationBell(
         'همه اعلان‌ها خوانده شد'
       );
     } catch {
+      unreadTracker.current.snapshot(prevNotifications);
       setNotifications(prevNotifications);
       void refreshUnreadCount();
       toast.error(

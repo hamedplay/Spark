@@ -594,6 +594,10 @@ function enqueueIncomingNotification(
     return;
   }
 
+  // All notifications already live in the bell's history. A fresh banner must
+  // not wait six seconds per older banner during a burst or reconnection.
+  if (activeIncomingToastId || nextToastTimer !== null) resetIncomingNotificationQueue();
+
   queuedNotificationIds.add(
     notification.id
   );
@@ -602,46 +606,6 @@ function enqueueIncomingNotification(
     onNavigate,
   });
   scheduleNextIncomingNotification();
-}
-
-function showNativeBrowserNotification(
-  notification: AppNotification,
-  onNavigate?: (
-    page: PageId
-  ) => void
-): void {
-  const targetPage =
-    resolveNotificationToastPage(
-      notification
-    );
-
-  if (
-    typeof window === 'undefined' ||
-    !('Notification' in window) ||
-    Notification.permission !==
-      'granted' ||
-    document.visibilityState ===
-      'visible'
-  ) {
-    return;
-  }
-
-  const browserNotification =
-    new window.Notification(
-      notification.title,
-      {
-        body: notification.message,
-        icon: '/logo_spark.png',
-      }
-    );
-
-  browserNotification.onclick = () => {
-    window.focus();
-    if (onNavigate && targetPage) {
-      onNavigate(targetPage);
-    }
-    browserNotification.close();
-  };
 }
 
 export function resetIncomingNotificationQueue(): void {
@@ -672,16 +636,8 @@ export function showIncomingNotification(
     page: PageId
   ) => void
 ): void {
-  // Native/background delivery remains immediate and independent from the
-  // in-app presentation queue, so queueing never delays or drops the actual
-  // notification signal.
-  showNativeBrowserNotification(
-    notification,
-    onNavigate
-  );
-
-  // Foreground presentation is serialized: only one rich notification is
-  // visible at a time while every distinct notification remains queued FIFO.
+  // Browser/OS delivery is owned by pwaNotificationBridge. Show the latest
+  // in-app banner immediately; full history remains available in the bell.
   enqueueIncomingNotification(
     notification,
     onNavigate
