@@ -76,7 +76,7 @@ export async function updateCurrentUserPassword(
 
 export async function signOutCurrentUser():
   Promise<void> {
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: 'local' });
 }
 
 export function subscribeToAuthUserIdChanges(

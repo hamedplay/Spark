@@ -96,7 +96,7 @@ export function useAuthSession(): AuthSessionState {
           setReasonCode('ACCESS_CHECK_FAILED');
         } else {
           try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: 'local' });
           resetSessionState('login');
           setAccessLevel('BLOCKED');
           setReasonCode('SESSION_INVALID');

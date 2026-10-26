@@ -134,7 +134,7 @@ function AuthorizedApp({ authSession }: { authSession: ReturnType<typeof useAuth
               در حال حاضر سیستم به دلیل عملیات نگهداری در دسترس نیست. لطفاً کمی بعد مجدداً تلاش کنید.
             </p>
           </div>
-          <button onClick={() => supabase.auth.signOut()} className="mt-4 h-9 rounded-lg border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+          <button onClick={() => supabase.auth.signOut({ scope: 'local' })} className="mt-4 h-9 rounded-lg border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
             خروج از حساب
           </button>
         </div>
@@ -229,7 +229,7 @@ function AuthenticatedAppContent() {
         nextStep={nextStep}
         onRefresh={refreshAccessState}
         onSignOut={async () => {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: 'local' });
         }}
       />
     </div>

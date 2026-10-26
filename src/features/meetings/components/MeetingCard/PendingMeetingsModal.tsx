@@ -1,5 +1,7 @@
 import { formatMeetingRequestDate } from '../../formatMeetingRequestDate';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useModalFocus } from '../../../../app/layout/hooks/useModalFocus';
 import { Calendar, Clock, MapPin, User, X, Check, Loader as Loader2, CircleAlert as AlertCircle, RefreshCw, Phone } from 'lucide-react';
 import { supabase } from '../../../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -10,6 +12,15 @@ interface PendingMeetingsModalProps {
 }
 
 export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useModalFocus(true, panelRef, onClose);
+
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, []);
+
   const [pendingMeetings, setPendingMeetings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -195,20 +206,24 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-semibold dark:text-white">جلسات در انتظار تایید</h3>
+  return createPortal(
+    <div dir="rtl" className="fixed inset-0 z-[200] flex items-end justify-center bg-slate-950/50 p-2 backdrop-blur-sm sm:items-center sm:p-6" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="pending-meetings-title" tabIndex={-1} className="flex max-h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none dark:bg-gray-900 sm:max-h-[85dvh]">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-800 sm:px-6">
+          <div className="min-w-0">
+            <h3 id="pending-meetings-title" className="text-base font-bold text-gray-900 dark:text-white">جلسات در انتظار تأیید</h3>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">درخواست‌های دریافتی را بررسی، تأیید یا رد کنید.</p>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+            type="button" aria-label="بستن"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6">
           {loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
@@ -232,19 +247,19 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
               <p className="text-gray-500 dark:text-gray-400 text-lg">هیچ جلسه‌ای در انتظار تایید وجود ندارد</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {pendingMeetings.map((pendingMeeting) => (
-                <div key={pendingMeeting.id} className="border dark:border-gray-700 rounded-lg p-5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                <div key={pendingMeeting.id} className="flex min-w-0 flex-col rounded-2xl border border-gray-200 p-4 dark:border-gray-700">
                   {pendingMeeting.meeting ? (
                     <>
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h4 className="font-semibold text-lg dark:text-white">{pendingMeeting.meeting.subject}</h4>
+                      <div className="flex flex-wrap items-start justify-between gap-2 mb-4">
+                        <div className="min-w-0 flex-1 basis-40">
+                          <h4 className="break-words font-bold text-base text-gray-900 dark:text-white">{pendingMeeting.meeting.subject}</h4>
                           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                             ارسال شده توسط: {pendingMeeting.sender_name}
                           </p>
                         </div>
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                        <span className={`inline-flex shrink-0 items-center whitespace-nowrap px-2 py-1 rounded-lg text-[10px] font-medium ${
                           priorityColors[pendingMeeting.meeting.priority as keyof typeof priorityColors]
                         }`}>
                           {pendingMeeting.meeting.priority === 'high' ? 'اولویت بالا' : 
@@ -252,42 +267,42 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
                         </span>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div className="flex items-center text-gray-600 dark:text-gray-300">
+                      <div className="grid grid-cols-1 gap-3 mb-4 min-[420px]:grid-cols-2">
+                        <div className="flex min-w-0 items-start break-words text-gray-600 dark:text-gray-300">
                           <Calendar className="w-4 h-4 ml-2 flex-shrink-0" />
                           <span className="text-sm">{formatMeetingRequestDate(pendingMeeting.meeting.request_date, pendingMeeting.meeting.request_jalaali_date)}</span>
                         </div>
-                        <div className="flex items-center text-gray-600 dark:text-gray-300">
+                        <div className="flex min-w-0 items-start break-words text-gray-600 dark:text-gray-300">
                           <Clock className="w-4 h-4 ml-2 flex-shrink-0" />
-                          <span className="text-sm">{pendingMeeting.meeting.duration}</span>
+                          <span className="min-w-0 text-sm">{pendingMeeting.meeting.duration}</span>
                         </div>
-                        <div className="flex items-center text-gray-600 dark:text-gray-300">
+                        <div className="flex min-w-0 items-start break-words text-gray-600 dark:text-gray-300">
                           <MapPin className="w-4 h-4 ml-2 flex-shrink-0" />
-                          <span className="text-sm">{pendingMeeting.meeting.location}</span>
+                          <span className="min-w-0 text-sm">{pendingMeeting.meeting.location}</span>
                         </div>
-                        <div className="flex items-center text-gray-600 dark:text-gray-300">
+                        <div className="flex min-w-0 items-start break-words text-gray-600 dark:text-gray-300">
                           <User className="w-4 h-4 ml-2 flex-shrink-0" />
-                          <span className="text-sm">{pendingMeeting.meeting.representative}</span>
+                          <span className="min-w-0 text-sm">{pendingMeeting.meeting.representative}</span>
                         </div>
                         {pendingMeeting.meeting.phone && (
-                          <div className="flex items-center text-gray-600 dark:text-gray-300">
+                          <div className="flex min-w-0 items-start break-words text-gray-600 dark:text-gray-300">
                             <Phone className="w-4 h-4 ml-2 flex-shrink-0" />
-                            <span className="text-sm">{pendingMeeting.meeting.phone}</span>
+                            <span dir="ltr" className="min-w-0 text-sm">{pendingMeeting.meeting.phone}</span>
                           </div>
                         )}
                       </div>
                       
                       {pendingMeeting.meeting.notes && (
                         <div className="mb-4 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                          <p className="whitespace-pre-wrap">{pendingMeeting.meeting.notes}</p>
+                          <p className="whitespace-pre-wrap break-words">{pendingMeeting.meeting.notes}</p>
                         </div>
                       )}
                       
-                      <div className="flex gap-2 mt-4">
+                      <div className="grid grid-cols-1 gap-2 mt-auto pt-4 min-[420px]:grid-cols-2">
                         <button
                           onClick={() => handleApproveMeeting(pendingMeeting.id, pendingMeeting.meeting)}
-                          disabled={processingMeetingId === pendingMeeting.id}
-                          className="flex-1 flex items-center justify-center gap-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 disabled:opacity-70"
+                          disabled={processingMeetingId !== null}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                         >
                           {processingMeetingId === pendingMeeting.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -298,8 +313,8 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
                         </button>
                         <button
                           onClick={() => handleRejectMeeting(pendingMeeting.id)}
-                          disabled={processingMeetingId === pendingMeeting.id}
-                          className="flex-1 flex items-center justify-center gap-1 bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 disabled:opacity-70"
+                          disabled={processingMeetingId !== null}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
                         >
                           {processingMeetingId === pendingMeeting.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -322,7 +337,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
                       <div className="flex gap-2 mt-4 justify-center">
                         <button
                           onClick={() => handleRejectMeeting(pendingMeeting.id)}
-                          disabled={processingMeetingId === pendingMeeting.id}
+                          disabled={processingMeetingId !== null}
                           className="flex items-center justify-center gap-1 bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 disabled:opacity-70"
                         >
                           {processingMeetingId === pendingMeeting.id ? (
@@ -341,6 +356,7 @@ export function PendingMeetingsModal({ onClose, onUpdate }: PendingMeetingsModal
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

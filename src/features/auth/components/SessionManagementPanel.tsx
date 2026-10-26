@@ -50,7 +50,7 @@ export function SessionManagementPanel() {
         body: { mode: 'revoke_one', session_id: sessionId },
       });
       if (fnError || !data?.ok) throw new Error(data?.error ?? 'REVOKE_FAILED');
-      if (sessionId === currentSessionId) await supabase.auth.signOut();
+      if (sessionId === currentSessionId) await supabase.auth.signOut({ scope: 'local' });
       else await loadSessions();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'REVOKE_FAILED');
@@ -100,7 +100,7 @@ export function SessionManagementPanel() {
         body: { mode: 'revoke_all' },
       });
       if (fnError || !data?.ok) throw new Error(data?.error ?? 'REVOKE_FAILED');
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'global' });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'REVOKE_FAILED');
     } finally {

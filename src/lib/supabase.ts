@@ -67,7 +67,7 @@ export const isAuthenticated = async () => {
     const { data: { session }, error } = await supabase.auth.getSession();
     if (error) {
       try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       return false;
     }
 
@@ -78,14 +78,14 @@ export const isAuthenticated = async () => {
     const { data: { user }, error: refreshError } = await supabase.auth.getUser();
     if (refreshError || !user) {
       try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       return false;
     }
 
     return true;
   } catch (error) {
     try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: 'local' });
     return false;
   }
 };
@@ -162,7 +162,7 @@ export const handleSupabaseError = (error: any) => {
       error.code === 'refresh_token_not_found' ||
       error.message?.includes('Invalid Refresh Token')) {
     try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
-    supabase.auth.signOut();
+    supabase.auth.signOut({ scope: 'local' });
     return new Error('نشست شما منقضی شده است. لطفاً دوباره وارد شوید');
   }
   
@@ -207,6 +207,6 @@ supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || (event as string) === 'USER_DELETED') {
     try { localStorage.removeItem('meeting-manager-auth'); } catch { /* ignore */ }
   } else if (event === 'TOKEN_REFRESHED' && !session) {
-    supabase.auth.signOut();
+    supabase.auth.signOut({ scope: 'local' });
   }
 });

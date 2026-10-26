@@ -87,7 +87,7 @@ export function RestrictedAccessPage({ reasonCode, nextStep, onRefresh, onSignOu
 
   const handleSignOut = async () => {
     if (isSessionError) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
     }
     onSignOut();
   };

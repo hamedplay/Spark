@@ -169,7 +169,7 @@ export function VideoConferencePage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) { setNotLoggedIn(true); setLoading(false); return; }
         if (user.is_anonymous === true) {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: 'local' });
           setNotLoggedIn(true);
           setLoading(false);
           return;

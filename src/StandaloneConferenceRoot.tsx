@@ -48,7 +48,7 @@ export default function StandaloneConferenceRoot() {
           reasonCode={authSession.reasonCode}
           nextStep={authSession.nextStep}
           onRefresh={authSession.refreshAccessState}
-          onSignOut={() => { void supabase.auth.signOut(); }}
+          onSignOut={() => { void supabase.auth.signOut({ scope: 'local' }); }}
         />
       </div>
     );
