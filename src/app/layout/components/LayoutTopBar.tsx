@@ -1,8 +1,6 @@
 import { PRIMARY_NAVIGATION_ITEMS } from '../navigationMenu';
-import { useState, useRef, useEffect } from 'react';
 import {
   Menu,
-  LayoutGrid,
   Settings,
   Download,
 } from 'lucide-react';
@@ -27,62 +25,21 @@ function PortalButton({
   activePage: PageId;
   onPageChange: (p: PageId) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (
-        ref.current &&
-        !ref.current.contains(e.target as Node)
-      )
-        setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () =>
-      document.removeEventListener(
-        'mousedown',
-        handler
-      );
-  }, []);
-
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        title="پرتال پیکربندی"
-        aria-label="پرتال پیکربندی"
-        aria-expanded={open}
-        className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors ${
-          activePage === 'portal-config'
-            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-            : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'
-        }`}
-      >
-        <LayoutGrid className="w-5 h-5" />
-      </button>
-      {open && (
-        <div
-          className="absolute left-0 top-full mt-1.5 w-44 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden"
-          dir="rtl"
-        >
-          <button
-            onClick={() => {
-              onPageChange('portal-config');
-              setOpen(false);
-            }}
-            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-right"
-          >
-            <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-              <Settings className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            </div>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-              پیکربندی
-            </span>
-          </button>
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => onPageChange('portal-config')}
+      title="پیکربندی"
+      aria-label="پیکربندی"
+      aria-current={activePage === 'portal-config' ? 'page' : undefined}
+      className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-xl transition-colors ${
+        activePage === 'portal-config'
+          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+          : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'
+      }`}
+    >
+      <Settings className="w-5 h-5" />
+    </button>
   );
 }
 
