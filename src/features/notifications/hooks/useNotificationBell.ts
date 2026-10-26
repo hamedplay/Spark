@@ -6,9 +6,6 @@ import {
 } from 'react';
 import toast from 'react-hot-toast';
 
-const UNREAD_COUNT_RECONCILE_INTERVAL_MS =
-  60_000;
-
 import type {
   PageId,
 } from '../../../app/layout/types';
@@ -19,7 +16,6 @@ import type {
 } from '../types/appNotification';
 import {
   prependIncomingNotification,
-  reconcileNotificationSnapshot,
   replaceUpdatedNotification,
   markNotificationReadLocally,
   markAllNotificationsReadLocally,
@@ -125,98 +121,6 @@ export function useNotificationBell(
     }, [currentUserId]);
 
   useEffect(() => {
-    if (!currentUserId) return;
-
-    let disposed = false;
-    let running = false;
-
-    const reconcileUnreadCount =
-      async () => {
-        if (
-          disposed ||
-          running ||
-          document.visibilityState !==
-            'visible'
-        ) {
-          return;
-        }
-
-        running = true;
-        const previousCount =
-          unreadCountRef.current;
-
-        try {
-          const count =
-            await refreshUnreadCount();
-
-          if (
-            count !== null &&
-            count !== previousCount
-          ) {
-            const loaded =
-              await fetchUserNotifications(
-                currentUserId
-              );
-
-            if (!disposed) {
-              setNotifications(
-                (previous) =>
-                  reconcileNotificationSnapshot(
-                    previous,
-                    loaded.filter(notification => !deletedNotificationIds.current.has(notification.id))
-                  )
-              );
-            }
-          }
-        } catch (error: unknown) {
-          console.error(
-            'NotificationBell reconciliation error:',
-            error
-          );
-        } finally {
-          running = false;
-        }
-      };
-
-    const intervalId =
-      window.setInterval(
-        () => {
-          void reconcileUnreadCount();
-        },
-        UNREAD_COUNT_RECONCILE_INTERVAL_MS
-      );
-
-    const handleVisibilityChange =
-      () => {
-        if (
-          document.visibilityState ===
-          'visible'
-        ) {
-          void reconcileUnreadCount();
-        }
-      };
-
-    document.addEventListener(
-      'visibilitychange',
-      handleVisibilityChange
-    );
-
-    return () => {
-      disposed = true;
-      window.clearInterval(
-        intervalId
-      );
-      document.removeEventListener(
-        'visibilitychange',
-        handleVisibilityChange
-      );
-    };
-  }, [
-    currentUserId,
-    refreshUnreadCount,
-  ]);
-
-  useEffect(() => {
     return () => {
       resetIncomingNotificationQueue();
     };
@@ -285,12 +189,8 @@ export function useNotificationBell(
         ) => {
           const visible = loaded.filter(notification => !deletedNotificationIds.current.has(notification.id));
           setNotifications(visible);
-          const visibleUnread = visible.reduce(
-            (count, notification) => count + (notification.read ? 0 : 1),
-            0
-          );
-          unreadCountRef.current = visibleUnread;
-          setUnreadCount(visibleUnread);
+          // The list is capped at fifty; the badge must count all unread rows.
+          void refreshUnreadCount();
         },
         onNotificationInserted: (
           notification
@@ -326,34 +226,10 @@ export function useNotificationBell(
           );
           scheduleUnreadCountSync();
         },
-        onRealtimeSubscribed: (reconnected) => {
-          // The initial HTTP snapshot already ran above. Re-fetch only after a
-          // real realtime reconnect; otherwise startup issued the same
-          // notifications query twice.
-          if (!reconnected) return;
-
-          void (async () => {
-            try {
-              const loaded =
-                await fetchUserNotifications(
-                  currentUserId
-                );
-
-              setNotifications(
-                (previous) =>
-                  reconcileNotificationSnapshot(
-                    previous,
-                    loaded
-                  )
-              );
-              scheduleUnreadCountSync();
-            } catch (error: unknown) {
-              console.error(
-                'NotificationBell realtime resync error:',
-                error
-              );
-            }
-          })();
+        onNotificationDeleted: id => {
+          deletedNotificationIds.current.add(id);
+          setNotifications(previous => previous.filter(notification => notification.id !== id));
+          scheduleUnreadCountSync();
         },
         onRealtimeError: (
           error

@@ -16,6 +16,8 @@ export interface NotificationRealtimeHandlers {
         AppNotification
     ) => void;
 
+  onDelete?: (id: string) => void;
+
   onSubscribed?: (
     reconnected: boolean
   ) => void;
@@ -34,6 +36,7 @@ export function subscribeToUserNotificationChanges(
     NotificationRealtimeHandlers
 ): () => void {
   let disposed = false;
+  let deletionChannel: ReturnType<typeof supabase.channel> | null = null;
   let channel:
     ReturnType<typeof supabase.channel> | null =
       null;
@@ -52,6 +55,7 @@ export function subscribeToUserNotificationChanges(
   };
 
   const removeCurrentChannel = () => {
+    if (deletionChannel) { void supabase.removeChannel(deletionChannel); deletionChannel = null; }
     if (!channel) return;
 
     const currentChannel = channel;
@@ -112,6 +116,17 @@ export function subscribeToUserNotificationChanges(
     }
 
     if (disposed) return;
+
+    // DELETE cannot be filtered safely by recipient under Postgres Changes.
+    // Only the server can publish IDs on this recipient's private channel.
+    deletionChannel = supabase
+      .channel(`notification-deletes:${userId}`, { config: { private: true } })
+      .on('broadcast', { event: 'notification_deleted' }, ({ payload }) => {
+        if (!disposed && typeof payload?.id === 'string') handlers.onDelete?.(payload.id);
+      })
+      .subscribe(status => {
+        if (!disposed && status === 'SUBSCRIBED') handlers.onSubscribed?.(true);
+      });
 
     const nextChannel = supabase
       .channel(

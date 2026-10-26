@@ -42,6 +42,8 @@ export interface StartNotificationBellLifecycleInput {
         AppNotification
     ) => void;
 
+  onNotificationDeleted?: (id: string) => void;
+
   onRealtimeSubscribed?:
     (
       reconnected: boolean
@@ -59,82 +61,71 @@ export function startNotificationBellLifecycle(
     StartNotificationBellLifecycleInput
 ): () => void {
   let disposed = false;
-
-  input.onLoadingChange(true);
-
-  void (async () => {
+  let running = false;
+  let pending = false;
+  let initial = true;
+  let interval: ReturnType<typeof setInterval> | undefined;
+  const deletedIds = new Set<string>();
+  const changes = new Map<string, AppNotification | null>();
+  const schedule = (ms: number) => {
+    if (typeof window === 'undefined') return;
+    if (interval !== undefined) clearInterval(interval);
+    interval = setInterval(resume, ms);
+  };
+  const refresh = async () => {
+    if (disposed) return;
+    pending = true;
+    if (running) return;
+    running = true;
     try {
-      const notifications =
-        await input.loadNotifications(
-          input.userId
-        );
-
-      if (disposed) {
-        return;
+      while (pending && !disposed) {
+        pending = false;
+        changes.clear();
+        try {
+          const loaded = await input.loadNotifications(input.userId);
+          if (disposed) return;
+          // Preserve events received after the HTTP query started. Everything
+          // else comes from the server, including deletions and the top-50 limit.
+          const rows = new Map(loaded.filter(n => !deletedIds.has(n.id)).map(n => [n.id, n]));
+          changes.forEach((n, id) => { if (n) rows.set(id, n); else rows.delete(id); });
+          input.onNotificationsLoaded([...rows.values()].sort((a,b) => b.created_at.localeCompare(a.created_at)).slice(0,50));
+        } catch (error) { if (!disposed) input.onLoadError(error); }
+        finally { if (!disposed && initial) { initial = false; input.onLoadingChange(false); } }
       }
-
-      input.onNotificationsLoaded(
-        notifications
-      );
-    } catch (error: unknown) {
-      if (disposed) {
-        return;
-      }
-
-      input.onLoadError(error);
-    } finally {
-      if (!disposed) {
-        input.onLoadingChange(false);
-      }
-    }
-  })();
-
-  const unsubscribe =
-    input.subscribeToChanges(
-      input.userId,
-      {
-        onInsert: (notification) => {
-          if (!disposed) {
-            input.onNotificationInserted(
-              notification
-            );
-          }
-        },
-
-        onUpdate: (notification) => {
-          if (!disposed) {
-            input.onNotificationUpdated(
-              notification
-            );
-          }
-        },
-
-        onSubscribed: (
-          reconnected
-        ) => {
-          if (!disposed) {
-            input.onRealtimeSubscribed?.(
-              reconnected
-            );
-          }
-        },
-
-        onError: (error) => {
-          if (!disposed) {
-            input.onRealtimeError?.(
-              error
-            );
-          }
-        },
-      }
-    );
-
-  let cleanupDone = false;
-
+    } finally { running = false; }
+  };
+  const resume = () => {
+    if (typeof document === 'undefined' || document.visibilityState === 'visible') void refresh();
+  };
+  input.onLoadingChange(true);
+  // Register first; SUBSCRIBED triggers another reconciliation to close the
+  // gap between the initial HTTP snapshot and a working socket subscription.
+  const unsubscribe = input.subscribeToChanges(input.userId, {
+    onInsert: n => { if (!disposed) { if (running) changes.set(n.id,n); input.onNotificationInserted(n); } },
+    onUpdate: n => { if (!disposed) { if (running) changes.set(n.id,n); input.onNotificationUpdated(n); } },
+    onDelete: id => { if (!disposed) { deletedIds.add(id); if (running) changes.set(id,null); input.onNotificationDeleted?.(id); void refresh(); } },
+    onSubscribed: reconnected => {
+      if (disposed) return;
+      schedule(60_000); void refresh(); input.onRealtimeSubscribed?.(reconnected);
+    },
+    onError: error => { if (!disposed) { schedule(15_000); input.onRealtimeError?.(error); } },
+  });
+  void refresh();
+  schedule(60_000);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', resume);
+    window.addEventListener('online', resume);
+    document.addEventListener('visibilitychange', resume);
+  }
   return () => {
-    if (cleanupDone) return;
-    cleanupDone = true;
-    disposed = true;
+    if (disposed) return;
+    disposed = true; pending = false;
+    if (interval !== undefined) clearInterval(interval);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', resume);
+      window.removeEventListener('online', resume);
+      document.removeEventListener('visibilitychange', resume);
+    }
     unsubscribe();
   };
 }

@@ -342,3 +342,51 @@ test('ignores late load and Realtime events after cleanup', async () => {
     0
   );
 });
+
+
+test('initial snapshot cannot overwrite a newer insert or read update', async () => {
+  const h = createHarness();
+  const read = {...makeNotification('old'),read:true};
+  h.capturedHandlers!.onInsert(makeNotification('new'));
+  h.capturedHandlers!.onUpdate(read);
+  h.loadDeferred.resolve([makeNotification('old')]);
+  await flush();
+  assert.deepEqual(new Set(h.loadedNotifications[0].map(n=>n.id)),new Set(['old','new']));
+  assert.equal(h.loadedNotifications[0].find(n=>n.id==='old')!.read,true);
+  h.cleanup();
+});
+
+test('deletion is forwarded and never resurrected by an in-flight snapshot', async () => {
+  const h=createHarness();const deleted:string[]=[];
+  h.input.onNotificationDeleted=id=>deleted.push(id);
+  h.capturedHandlers!.onDelete?.('gone');
+  h.loadDeferred.resolve([makeNotification('gone'),makeNotification('keep')]);
+  await flush();
+  assert.deepEqual(deleted,['gone']);
+  assert.ok(h.loadedNotifications.every(rows=>!rows.some(n=>n.id==='gone')));
+  h.cleanup();h.capturedHandlers!.onDelete?.('late');assert.deepEqual(deleted,['gone']);
+});
+
+test('reconnect reloads server truth even when unread count has not changed', async () => {
+  const h=createHarness();h.loadDeferred.resolve([{...makeNotification('read-row'),read:true}]);await flush();
+  h.input.loadNotifications=async()=>[];
+  h.capturedHandlers!.onSubscribed?.(true);await flush();
+  assert.deepEqual(h.loadedNotifications.at(-1),[]);h.cleanup();
+});
+
+test('resume and periodic safety checks reconcile visible tabs without manual refresh', async t => {
+  t.mock.timers.enable({apis:['setInterval']});
+  const win=new EventTarget();const doc=Object.assign(new EventTarget(),{visibilityState:'visible'});
+  Object.assign(globalThis,{window:win,document:doc});
+  const h=createHarness();
+  try {
+    h.loadDeferred.resolve([]);await flush();
+    let reloads=0;h.input.loadNotifications=async()=>{reloads++;return []};
+    for(const event of ['focus','online']) {win.dispatchEvent(new Event(event));await flush();}
+    assert.equal(reloads,2);
+    doc.visibilityState='hidden';t.mock.timers.tick(60_000);await flush();assert.equal(reloads,2);
+    doc.visibilityState='visible';doc.dispatchEvent(new Event('visibilitychange'));await flush();assert.equal(reloads,3);
+    t.mock.timers.tick(60_000);await flush();assert.equal(reloads,4);
+    h.cleanup();win.dispatchEvent(new Event('online'));await flush();assert.equal(reloads,4);
+  } finally {h.cleanup();delete (globalThis as any).window;delete (globalThis as any).document;}
+});
