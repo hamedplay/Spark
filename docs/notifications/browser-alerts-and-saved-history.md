@@ -14,9 +14,11 @@
   installed PWAs, and lacked a user permission control. It now runs inside the fully
   authorized application and receives new inserts from the existing notification bell
   lifecycle. Initial snapshots/read updates do not trigger alerts.
-- The notification panel includes activation, per-device deactivation, a test button,
+- User Settings includes a default-on browser/sound switch, per-device deactivation, a test button,
   denied-permission guidance and iPhone Home Screen guidance. Permission is requested
-  directly by the activation gesture; calendar mount no longer prompts automatically.
+  directly by the permission button/activation gesture; calendar mount no longer prompts automatically.
+  The default-on application preference is separate from OS permission. Existing grants
+  register automatically; explicit per-device/account opt-outs remain respected.
 - Supported desktop and Android browsers can register Web Push without installing
   the PWA. The existing config function and subscription RPCs are reused. Registration
   errors leave open-page alerts available and expose a retry action.

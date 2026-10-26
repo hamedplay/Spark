@@ -24,6 +24,9 @@ function installed(): boolean {
 function deviceEnabled(userId: string): boolean {
   try { return localStorage.getItem(`spark-browser-notifications:${userId}`) !== 'off'; } catch { return true; }
 }
+export function isBrowserNotificationPreferenceEnabled(userId: string | null = activeUserId): boolean {
+  return !userId || deviceEnabled(userId); // Enabled by default; preserve explicit opt-outs.
+}
 function devicePreference(userId: string, enabled: boolean) {
   try { localStorage.setItem(`spark-browser-notifications:${userId}`, enabled ? 'on' : 'off'); } catch { /* private browsing */ }
 }
@@ -143,8 +146,10 @@ export function startPwaNotificationBridge(userId: string, enabled: boolean): ()
   };
 }
 export async function enableBrowserNotifications(): Promise<void> {
+  if (activeUserId) devicePreference(activeUserId, true);
   const support = getBrowserPushState().status;
-  if (support === 'unsupported' || support === 'not-installed') return;
+  emit(support);
+  if (['unsupported', 'not-installed', 'permission-denied'].includes(support)) return;
   unlockNotificationSound();
   const permission = await Notification.requestPermission(); // Must run directly in the click handler.
   if (permission !== 'granted') { emit(permission === 'denied' ? 'permission-denied' : 'permission-required'); return; }

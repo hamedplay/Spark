@@ -1,3 +1,4 @@
+import { BrowserNotificationControl } from '../../../features/notifications/components/BrowserNotificationControl';
 import { useState } from 'react';
 import {
   Settings,
@@ -45,6 +46,7 @@ const HALF_HOUR_OPTION_ELEMENTS = Array.from(
                       );
 
 export interface UserSettingsModalProps {
+  currentUserId?: string | null;
   onClose: () => void;
 }
 
@@ -101,6 +103,7 @@ type BooleanPreferenceKey =
 
 export function UserSettingsModal({
   onClose,
+  currentUserId = null,
 }: UserSettingsModalProps) {
   const { theme, toggleTheme, accent, setAccent } =
     useTheme();
@@ -438,6 +441,8 @@ export function UserSettingsModal({
               ))}
             </div>
           </div>
+
+          <BrowserNotificationControl userId={currentUserId} />
 
           {/* ── Toggle switches */}
           <div className="space-y-3">

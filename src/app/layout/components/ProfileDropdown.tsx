@@ -165,6 +165,7 @@ export function ProfileDropdown({
       )}
       {showSettingsModal && (
         <UserSettingsModal
+          currentUserId={currentUserId}
           onClose={() => setShowSettingsModal(false)}
         />
       )}

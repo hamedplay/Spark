@@ -78,3 +78,26 @@ test('saved messages expose a visible clear-history control; ordinary chats do n
   const regular = renderToStaticMarkup(createElement(ConversationHeader,{...props,isSavedMessages:false}));
   assert.ok(!regular.includes('پاک کردن تاریخچه پیام‌های ذخیره‌شده'));
 });
+
+test('default browser preference is enabled and an existing OS grant registers automatically without prompting',async()=>{
+  const h=await fixture('granted');
+  assert.equal(h.bridge.isBrowserNotificationPreferenceEnabled('owner'),true);
+  const stop=h.bridge.startPwaNotificationBridge('owner',true);await tick();
+  assert.equal(h.stats().requests,0);assert.equal(h.bridge.getBrowserPushState().status,'ready');
+  stop();await tick();
+});
+
+test('default-on user setting is separate from permission and an explicit opt-out persists',async()=>{
+  const h=await fixture();const stop=h.bridge.startPwaNotificationBridge('owner',true);await tick();
+  assert.equal(h.bridge.isBrowserNotificationPreferenceEnabled('owner'),true);
+  assert.equal(h.stats().requests,0);assert.equal(h.bridge.getBrowserPushState().status,'permission-required');
+  const {createElement}=await import('react');const {renderToStaticMarkup}=await import('react-dom/server');
+  const {BrowserNotificationControl}=await server.ssrLoadModule('/src/features/notifications/components/BrowserNotificationControl.tsx');
+  const html=renderToStaticMarkup(createElement(BrowserNotificationControl,{userId:'owner'}));
+  assert.match(html,/role="switch"[^>]*aria-label="اعلان مرورگر و صدا"[^>]*aria-checked="true"/);
+  assert.ok(html.includes('دادن مجوز مرورگر'));assert.equal(h.stats().requests,0);
+  await h.bridge.disableBrowserNotifications();assert.equal(h.bridge.isBrowserNotificationPreferenceEnabled('owner'),false);
+  stop();const resumed=h.bridge.startPwaNotificationBridge('owner',true);await tick();
+  assert.equal(h.bridge.isBrowserNotificationPreferenceEnabled('owner'),false);assert.equal(h.stats().invokes,0);
+  resumed();await tick();
+});
