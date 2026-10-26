@@ -122,6 +122,18 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
       const policy = await loadSmsDeliveryPolicy(supabase, category, eventType);
       const decision = evaluateSmsDeliveryPolicy(policy);
       if (!decision.sendNow && decision.nextAllowedAt) {
+        // Validate and snapshot the resolved context before postponing delivery.
+        // Otherwise a missing date is queued and retried without ever being repairable.
+        const preflight = await renderSystemSmsTemplate({
+          supabase, category, eventType, audience, context, meetingId,
+          targetUserId,
+        });
+        if (!preflight.ok) {
+          return json({
+            ok: false, status: "failed", errorCode: preflight.errorCode,
+            error: preflight.error, missing: preflight.missing ?? [],
+          }, 422);
+        }
         const queueResult = await queueDeferredSms(supabase, {
           deliveryMode: "dispatch",
           targetUserId,
@@ -131,7 +143,7 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
           meetingId,
           actorUserId: dbTriggeredBy,
           eventKey,
-          context,
+          context: preflight.context,
           availableAt: decision.nextAllowedAt,
         });
         return json({
@@ -381,6 +393,17 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
       const policy = await loadSmsDeliveryPolicy(supabase, category, eventType);
       const decision = evaluateSmsDeliveryPolicy(policy);
       if (!decision.sendNow && decision.nextAllowedAt) {
+        // Validate and snapshot the resolved context before postponing delivery.
+        // Otherwise a missing date is queued and retried without ever being repairable.
+        const preflight = await renderSystemSmsTemplate({
+          supabase, category, eventType, audience, context, meetingId,
+        });
+        if (!preflight.ok) {
+          return json({
+            ok: false, status: "failed", errorCode: preflight.errorCode,
+            error: preflight.error, missing: preflight.missing ?? [],
+          }, 422);
+        }
         const queueResult = await queueDeferredSms(supabase, {
           deliveryMode: "external",
           targetPhones: validMobiles,
@@ -390,7 +413,7 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
           meetingId,
           actorUserId: dbTriggeredBy,
           eventKey,
-          context,
+          context: preflight.context,
           availableAt: decision.nextAllowedAt,
         });
         return json({
