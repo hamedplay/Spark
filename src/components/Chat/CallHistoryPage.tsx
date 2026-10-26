@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Phone, Video, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Search, User, X, Trash2, Loader as Loader2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { loadCallHistory, callHistoryLoadError, type CallHistoryClient } from './callHistoryLoader';
 import { createChatRealtimeSync } from './chatRealtimeSync';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
@@ -27,15 +28,17 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
   const [tab, setTab] = useState<'all' | 'missed'>('all');
 
   const [error, setError] = useState<string | null>(null);
+  const [canClear, setCanClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const requestRef = useRef(0);
 
   const fetchHistory = useCallback(async () => {
     const request = ++requestRef.current;
-    const { data, error: loadError } = await supabase.rpc('get_my_call_history', { p_limit: 100 });
+    const { data, error: loadError, canClear: supportsClear } = await loadCallHistory(supabase as unknown as CallHistoryClient, currentUserId);
     if (request !== requestRef.current) return;
-    if (loadError || !data) { setError('دریافت تاریخچه تماس‌ها ناموفق بود'); setLoading(false); return; }
+    setCanClear(supportsClear);
+    if (loadError || !data) { setError(callHistoryLoadError(loadError)); setLoading(false); return; }
     setError(null);
     if (data.length === 0) { setRecords([]); setLoading(false); return; }
 
@@ -69,7 +72,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
   }, [currentUserId, fetchHistory]);
 
   const clearHistory = async () => {
-    if (clearing) return;
+    if (clearing || !canClear) return;
     setClearing(true);
     requestRef.current++;
     try {
@@ -127,7 +130,7 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
             <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">تاریخچه تماس‌های سازمانی</p>
           </div>
           <div className="flex items-center gap-1">
-            <button type="button" onClick={() => setConfirmClear(v => !v)} disabled={clearing || loading || records.length === 0}
+            <button type="button" onClick={() => setConfirmClear(v => !v)} disabled={clearing || loading || !canClear || records.length === 0}
               aria-label="حذف تاریخچه تماس‌ها" title="حذف تاریخچه تماس‌ها"
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-red-500 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950/30">
               <Trash2 className="h-4 w-4" />
@@ -155,6 +158,10 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
           </div>
         )}
         {error && <div role="alert" className="mb-3 flex items-center justify-between gap-2 rounded-xl bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">{error}<button type="button" onClick={() => { void fetchHistory(); }} aria-label="تلاش مجدد" className="inline-flex h-10 w-10 shrink-0 items-center justify-center"><RefreshCw className="h-4 w-4" /></button></div>}
+
+        {!canClear && !loading && !error && (
+          <p role="status" className="mb-3 rounded-xl bg-gray-50 p-3 text-xs leading-6 text-gray-500 dark:bg-gray-800 dark:text-gray-400">تاریخچه قابل مشاهده است؛ برای فعال‌شدن حذف تاریخچه، به‌روزرسانی دیتابیس باید تکمیل شود.</p>
+        )}
 
         {/* Search */}
         <div className="relative mb-3">
@@ -185,6 +192,8 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-40 text-gray-400 text-sm">در حال بارگذاری...</div>
+        ) : error && records.length === 0 ? (
+          <div className="flex min-h-40 items-center justify-center px-4 text-center text-sm text-gray-500 dark:text-gray-400">نمایش تاریخچه فعلاً امکان‌پذیر نیست؛ دوباره تلاش کنید.</div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 text-gray-400 gap-2">
             <Phone className="w-10 h-10 opacity-30" />
