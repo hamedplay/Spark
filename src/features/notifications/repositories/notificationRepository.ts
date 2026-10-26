@@ -56,26 +56,11 @@ export async function markNotificationAsRead(
   notificationId: string,
   userId: string | null
 ): Promise<void> {
-  const query = supabase
-    .from('notifications')
-    .update({
-      read: true,
-    })
-    .eq(
-      'id',
-      notificationId
-    );
-
-  const { error } = userId
-    ? await query.eq(
-        'user_id',
-        userId
-      )
-    : await query;
-
-  if (error) {
-    throw error;
-  }
+  if (!userId) throw new Error('AUTH_REQUIRED');
+  const { data, error } = await supabase.from('notifications').update({ read: true })
+    .eq('id', notificationId).eq('user_id', userId).select('id').maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('NOTIFICATION_NOT_FOUND');
 }
 
 export async function markAllUserNotificationsAsRead(
@@ -99,4 +84,12 @@ export async function markAllUserNotificationsAsRead(
   if (error) {
     throw error;
   }
+}
+
+
+export async function deleteUserNotification(notificationId: string, userId: string): Promise<void> {
+  const { data, error } = await supabase.from('notifications').delete()
+    .eq('id', notificationId).eq('user_id', userId).select('id').maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('NOTIFICATION_NOT_FOUND');
 }

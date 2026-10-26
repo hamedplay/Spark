@@ -28,6 +28,7 @@ import {
   resolveNotificationClickPage,
 } from '../navigation/notificationNavigation';
 import {
+  deleteUserNotification,
   fetchUserNotifications,
   fetchUnreadNotificationCount,
   markNotificationAsRead,
@@ -57,6 +58,9 @@ export interface UseNotificationBellResult {
         AppNotification
     ) => Promise<boolean>;
 
+  markAsRead: (id: string) => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+
   markAllAsRead:
     () => Promise<void>;
 }
@@ -75,6 +79,7 @@ export function useNotificationBell(
     useState(true);
   const [currentUserId, setCurrentUserId] =
     useState<string | null>(initialUserId);
+  const deletedNotificationIds = useRef(new Set<string>());
   const onNavigateRef =
     useRef(onNavigate);
   const unreadCountRef =
@@ -158,7 +163,7 @@ export function useNotificationBell(
                 (previous) =>
                   reconcileNotificationSnapshot(
                     previous,
-                    loaded
+                    loaded.filter(notification => !deletedNotificationIds.current.has(notification.id))
                   )
               );
             }
@@ -242,6 +247,7 @@ export function useNotificationBell(
     if (!currentUserId) return;
 
     let disposed = false;
+    deletedNotificationIds.current.clear();
     let unreadSyncTimer:
       number | null = null;
 
@@ -277,8 +283,9 @@ export function useNotificationBell(
         onNotificationsLoaded: (
           loaded
         ) => {
-          setNotifications(loaded);
-          const visibleUnread = loaded.reduce(
+          const visible = loaded.filter(notification => !deletedNotificationIds.current.has(notification.id));
+          setNotifications(visible);
+          const visibleUnread = visible.reduce(
             (count, notification) => count + (notification.read ? 0 : 1),
             0
           );
@@ -288,6 +295,7 @@ export function useNotificationBell(
         onNotificationInserted: (
           notification
         ) => {
+          if (deletedNotificationIds.current.has(notification.id)) return;
           setNotifications(
             (previous) =>
               prependIncomingNotification(
@@ -308,6 +316,7 @@ export function useNotificationBell(
         onNotificationUpdated: (
           notification
         ) => {
+          if (deletedNotificationIds.current.has(notification.id)) return;
           setNotifications(
             (previous) =>
               replaceUpdatedNotification(
@@ -383,9 +392,9 @@ export function useNotificationBell(
   const markAsRead = async (
     id: string
   ): Promise<void> => {
-    const prevNotifications =
-      notifications;
-
+    if (!currentUserId) return;
+    const original = notifications.find(notification => notification.id === id);
+    if (original?.read) return;
     setNotifications((prev) =>
       markNotificationReadLocally(
         prev,
@@ -400,11 +409,23 @@ export function useNotificationBell(
       );
       void refreshUnreadCount();
     } catch {
-      setNotifications(prevNotifications);
+      if (original) setNotifications(previous => previous.map(notification => notification.id === id ? { ...notification, read: original.read } : notification));
       void refreshUnreadCount();
       toast.error(
         'خطا در بروزرسانی اعلان'
       );
+    }
+  };
+
+  const deleteNotification = async (id: string): Promise<void> => {
+    if (!currentUserId) return;
+    try {
+      await deleteUserNotification(id, currentUserId);
+      deletedNotificationIds.current.add(id);
+      setNotifications(previous => previous.filter(notification => notification.id !== id));
+      void refreshUnreadCount();
+    } catch {
+      toast.error('حذف اعلان ناموفق بود؛ دوباره تلاش کنید');
     }
   };
 
@@ -472,6 +493,8 @@ export function useNotificationBell(
     unreadCount,
     loading,
     handleNotificationClick,
+    markAsRead,
+    deleteNotification,
     markAllAsRead,
   };
 }

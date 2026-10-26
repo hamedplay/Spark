@@ -1,3 +1,4 @@
+import { NotificationSwipeRow } from './NotificationSwipeRow';
 import {
   Bell,
   CheckCheck,
@@ -29,6 +30,9 @@ export interface NotificationPanelContentProps {
   notifications:
     AppNotification[];
 
+  onMarkAsRead: (id: string) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+
   onMarkAllAsRead:
     () => void;
 
@@ -48,6 +52,8 @@ export function NotificationPanelContent({
   unreadCount,
   notifications,
   onMarkAllAsRead,
+  onMarkAsRead,
+  onDelete,
   onClose,
   onNotificationClick,
 }: NotificationPanelContentProps) {
@@ -123,13 +129,9 @@ export function NotificationPanelContent({
               </div>
 
               {group.items.map((n) => (
+                <NotificationSwipeRow key={n.id} read={n.read} title={n.title}
+                  onOpen={() => onNotificationClick(n)} onRead={() => onMarkAsRead(n.id)} onDelete={() => onDelete(n.id)}>
                 <div
-                  key={n.id}
-                  onClick={() =>
-                    onNotificationClick(
-                      n
-                    )
-                  }
                   className={`flex gap-3 px-3 py-3 sm:px-4 border-b border-gray-50 dark:border-gray-700/40 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors ${
                     !n.read
                       ? 'bg-blue-50/60 dark:bg-blue-900/10'
@@ -200,6 +202,7 @@ export function NotificationPanelContent({
                     </p>
                   </div>
                 </div>
+                </NotificationSwipeRow>
               ))}
             </div>
           ))

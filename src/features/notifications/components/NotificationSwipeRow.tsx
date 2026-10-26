@@ -1,0 +1,81 @@
+import { useRef, useState, type ReactNode, type PointerEvent } from 'react';
+import { CheckCheck, Trash2, Loader as Loader2 } from 'lucide-react';
+import { notificationRowAction, notificationRowGesture } from '../models/notificationRowGesture';
+
+interface Props {
+  read: boolean;
+  title: string;
+  onOpen: () => void;
+  onRead: () => Promise<void>;
+  onDelete: () => Promise<void>;
+  children: ReactNode;
+}
+
+export function NotificationSwipeRow({ read, title, onOpen, onRead, onDelete, children }: Props) {
+  const [dragX, setDragX] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const suppressClick = useRef(false);
+  const gesture = useRef<{ id: number; x: number; y: number; axis: string } | null>(null);
+  const run = async (action: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true; setBusy(true);
+    try { await action(); } finally { busyRef.current = false; setBusy(false); }
+  };
+  const reset = () => { gesture.current = null; setDragX(0); };
+  const start = (event: PointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary) { suppressClick.current = true; reset(); return; }
+    if (busyRef.current || event.button !== 0 || (event.target as HTMLElement).closest('button,a,input,textarea')) return;
+    suppressClick.current = false;
+    gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, axis: 'pending' };
+  };
+  const move = (event: PointerEvent<HTMLDivElement>) => {
+    const g = gesture.current;
+    if (!g || g.id !== event.pointerId) return;
+    const dx = event.clientX - g.x, dy = event.clientY - g.y;
+    if (g.axis === 'pending') g.axis = notificationRowGesture(dx, dy);
+    if (g.axis !== 'pending') suppressClick.current = true;
+    if (g.axis === 'horizontal') {
+      event.preventDefault();
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.setPointerCapture(event.pointerId);
+      setDragX(Math.max(-110, Math.min(110, dx)));
+    }
+  };
+  const finish = (event: PointerEvent<HTMLDivElement>) => {
+    const g = gesture.current;
+    if (!g || g.id !== event.pointerId) return;
+    const dx = event.clientX - g.x, dy = event.clientY - g.y;
+    const axis = g.axis === 'pending' ? notificationRowGesture(dx, dy) : g.axis;
+    if (axis !== 'pending') suppressClick.current = true;
+    reset();
+    if (axis === 'horizontal') {
+      const action = notificationRowAction(dx, read);
+      if (action) void run(action === 'delete' ? onDelete : onRead);
+    }
+  };
+  return (
+    <div className="relative overflow-hidden border-b border-gray-100 dark:border-gray-700/40">
+      <div aria-hidden="true" className="absolute inset-0 flex items-center justify-between bg-gray-100 dark:bg-gray-900" dir="ltr">
+        <span className="flex h-full items-center gap-2 bg-emerald-600 px-4 text-xs text-white"><CheckCheck className="h-5 w-5" />خوانده شد</span>
+        <span className="flex h-full items-center gap-2 bg-red-600 px-4 text-xs text-white">حذف<Trash2 className="h-5 w-5" /></span>
+      </div>
+      <div role="button" tabIndex={busy ? -1 : 0} aria-label={`باز کردن اعلان: ${title}`} aria-busy={busy}
+        className="relative bg-white outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:bg-gray-800"
+        style={{ transform: `translateX(${dragX}px)`, touchAction: 'pan-y pinch-zoom', transition: dragX ? 'none' : 'transform 160ms ease-out' }}
+        onPointerDown={start} onPointerMove={move} onPointerUp={finish}
+        onPointerCancel={() => { suppressClick.current = true; reset(); }}
+        onLostPointerCapture={reset}
+        onClick={() => { if (!busyRef.current && !suppressClick.current) onOpen(); }}
+        onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); if (!busyRef.current) onOpen(); } }}>
+        {children}
+        <div className="flex items-center justify-end gap-1 px-3 pb-2 sm:px-4" onClick={event => event.stopPropagation()}>
+          <button type="button" disabled={busy || read} onClick={() => { void run(onRead); }}
+            title={read ? 'خوانده شده' : 'علامت‌گذاری به‌عنوان خوانده‌شده'} aria-label="خوانده‌شدن اعلان"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-blue-600 hover:bg-blue-50 disabled:opacity-40 dark:text-blue-400 dark:hover:bg-blue-950/30"><CheckCheck className="h-4 w-4" /></button>
+          <button type="button" disabled={busy} onClick={() => { void run(onDelete); }} title="حذف اعلان" aria-label="حذف اعلان"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950/30">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
