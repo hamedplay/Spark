@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
+import { readSessionHeartbeatError, sessionHeartbeatRetrySeconds } from './sessionHeartbeatErrors';
 
 const DEFAULT_HEARTBEAT_SECONDS = 300;
 const MIN_HEARTBEAT_SECONDS = 30;
 const MAX_HEARTBEAT_SECONDS = 3600;
-const RETRY_SECONDS = 60;
 
 function normalizeIntervalSeconds(value: unknown): number {
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -19,6 +19,9 @@ const FATAL_SESSION_ERRORS = new Set([
   'SESSION_ABSOLUTE_EXPIRED',
   'SESSION_IDLE_EXPIRED',
   'SESSION_INVALID',
+  'SESSION_NOT_FOUND',
+  'PROFILE_NOT_FOUND',
+  'UNAUTHORIZED',
 ]);
 
 export function useSessionHeartbeat(enabled: boolean): void {
@@ -27,6 +30,7 @@ export function useSessionHeartbeat(enabled: boolean): void {
 
     let cancelled = false;
     let timer: number | null = null;
+    let retryAttempt = 0;
 
     const schedule = (seconds: number) => {
       if (cancelled) return;
@@ -43,20 +47,22 @@ export function useSessionHeartbeat(enabled: boolean): void {
 
         if (cancelled) return;
 
-        const errorCode = typeof data?.error === 'string' ? data.error : null;
+        const errorCode = await readSessionHeartbeatError(data, error);
+        if (cancelled) return;
         if ((!data?.ok || error) && errorCode && FATAL_SESSION_ERRORS.has(errorCode)) {
           await supabase.auth.signOut({ scope: 'local' });
           return;
         }
 
         if (!data?.ok || error) {
-          schedule(RETRY_SECONDS);
+          schedule(sessionHeartbeatRetrySeconds(retryAttempt++));
           return;
         }
 
+        retryAttempt = 0;
         schedule(normalizeIntervalSeconds(data.heartbeat_interval_seconds));
       } catch {
-        if (!cancelled) schedule(RETRY_SECONDS);
+        if (!cancelled) schedule(sessionHeartbeatRetrySeconds(retryAttempt++));
       }
     };
 

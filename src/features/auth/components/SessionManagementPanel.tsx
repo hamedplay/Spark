@@ -16,6 +16,7 @@ interface SessionInfo {
 
 export function SessionManagementPanel() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -107,6 +108,7 @@ export function SessionManagementPanel() {
     }
   };
 
+  const visibleSessions = showHistory ? sessions : sessions.filter(session => session.status === 'active');
   const hasHistoricalSessions = sessions.some((session) => session.session_id !== currentSessionId && session.status !== 'active');
 
   if (loading) return <div className="py-4 text-center text-sm text-gray-500">در حال بارگذاری...</div>;
@@ -150,11 +152,18 @@ export function SessionManagementPanel() {
         </div>
       </div>
 
-      {sessions.length === 0 ? (
-        <p className="rounded-xl bg-gray-50 px-3 py-4 text-center text-sm text-gray-500 dark:bg-gray-700/30 dark:text-gray-400">نشستی یافت نشد.</p>
+      {hasHistoricalSessions && (
+        <button type="button" onClick={() => setShowHistory(value => !value)}
+          className="text-xs text-blue-600 dark:text-blue-400">
+          {showHistory ? 'نمایش فقط نشست‌های فعال' : 'نمایش سوابق ۳۰ روز اخیر'}
+        </button>
+      )}
+
+      {visibleSessions.length === 0 ? (
+        <p className="rounded-xl bg-gray-50 px-3 py-4 text-center text-sm text-gray-500 dark:bg-gray-700/30 dark:text-gray-400">{showHistory ? 'نشستی یافت نشد.' : 'نشست فعالی یافت نشد.'}</p>
       ) : (
         <div className="space-y-2">
-          {sessions.map((s) => {
+          {visibleSessions.map((s) => {
             const statusLabel = s.status === 'active' ? 'فعال' : s.status === 'revoked' ? 'لغوشده' : 'منقضی';
             const statusClass = s.status === 'active'
               ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
