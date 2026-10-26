@@ -390,3 +390,29 @@ test('resume and periodic safety checks reconcile visible tabs without manual re
     h.cleanup();win.dispatchEvent(new Event('online'));await flush();assert.equal(reloads,4);
   } finally {h.cleanup();delete (globalThis as any).window;delete (globalThis as any).document;}
 });
+
+test('broadcast invalidation discovers missed inserts immediately, alerts once and preserves read/delete changes', async () => {
+  const h=createHarness();
+  const old={...makeNotification('old'),created_at:'2026-10-26T10:00:00Z'};
+  const fresh={...makeNotification('fresh'),created_at:'2026-10-26T11:00:00Z'};
+  h.loadDeferred.resolve([old]);await flush();assert.equal(h.insertedNotifications.length,0);
+  h.input.loadNotifications=async()=>[fresh,{...old,read:true}];
+  await h.capturedHandlers!.onInvalidated?.();await flush();
+  assert.equal(h.loadedNotifications.at(-1)![0].id,'fresh');
+  assert.deepEqual(h.insertedNotifications.map(n=>n.id),['fresh']);
+  await h.capturedHandlers!.onInvalidated?.();
+  h.capturedHandlers!.onInsert(fresh);await flush();
+  assert.equal(h.insertedNotifications.length,1);
+  h.input.loadNotifications=async()=>[{...old,read:true}];
+  await h.capturedHandlers!.onInvalidated?.();
+  assert.deepEqual(h.loadedNotifications.at(-1)!.map(n=>n.id),['old']);h.cleanup();
+});
+
+test('catch-up does not alert read notifications or older rows entering the list', async () => {
+  const h=createHarness();h.loadDeferred.resolve([{...makeNotification('baseline'),created_at:'2026-10-26T10:00:00Z'}]);await flush();
+  h.input.loadNotifications=async()=>[
+    {...makeNotification('older'),created_at:'2026-10-26T09:00:00Z'},
+    {...makeNotification('read'),read:true,created_at:'2026-10-26T11:00:00Z'},
+  ];
+  await h.capturedHandlers!.onInvalidated?.();assert.equal(h.insertedNotifications.length,0);h.cleanup();
+});

@@ -1,3 +1,4 @@
+import { watchLiveData } from '../../../shared/realtime/liveDataBus';
 import { supabase } from '../../../lib/supabase';
 import type {
   AppNotification,
@@ -17,6 +18,7 @@ export interface NotificationRealtimeHandlers {
     ) => void;
 
   onDelete?: (id: string) => void;
+  onInvalidated?: () => Promise<void>;
 
   onSubscribed?: (
     reconnected: boolean
@@ -36,6 +38,7 @@ export function subscribeToUserNotificationChanges(
     NotificationRealtimeHandlers
 ): () => void {
   let disposed = false;
+  const stopInvalidations = watchLiveData(['notifications'], async () => { if (!disposed) await handlers.onInvalidated?.(); });
   let deletionChannel: ReturnType<typeof supabase.channel> | null = null;
   let channel:
     ReturnType<typeof supabase.channel> | null =
@@ -132,6 +135,15 @@ export function subscribeToUserNotificationChanges(
       .channel(
         `notifications-bell-${userId}`
       )
+      .on('system', {}, payload => {
+        if (disposed || channel !== nextChannel || payload?.extension !== 'postgres_changes') return;
+        if (payload.status === 'ok') { isSubscribed = true; reconnectAttempt = 0; }
+        else if (payload.status === 'error') {
+          isSubscribed = false;
+          handlers.onError?.(new Error(payload.message || 'Notification Postgres Changes subscription failed'));
+          scheduleReconnect();
+        }
+      })
       .on(
         'postgres_changes',
         {
@@ -194,7 +206,6 @@ export function subscribeToUserNotificationChanges(
 
           hasSubscribed = true;
           isSubscribed = true;
-          reconnectAttempt = 0;
 
           handlers.onSubscribed?.(
             reconnected
@@ -279,6 +290,7 @@ export function subscribeToUserNotificationChanges(
     if (disposed) return;
 
     disposed = true;
+    stopInvalidations();
     clearReconnectTimer();
 
     if (typeof window !== 'undefined') {

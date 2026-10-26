@@ -64,6 +64,13 @@ export function startNotificationBellLifecycle(
   let running = false;
   let pending = false;
   let initial = true;
+  let snapshotEstablished = false;
+  let newestCreatedAt = -Infinity;
+  const seenIds = new Set<string>();
+  const remember = (n: AppNotification) => {
+    seenIds.add(n.id); newestCreatedAt = Math.max(newestCreatedAt, Date.parse(n.created_at) || 0);
+    if (seenIds.size > 256) seenIds.delete(seenIds.values().next().value!);
+  };
   let interval: ReturnType<typeof setInterval> | undefined;
   const deletedIds = new Set<string>();
   const changes = new Map<string, AppNotification | null>();
@@ -88,7 +95,13 @@ export function startNotificationBellLifecycle(
           // else comes from the server, including deletions and the top-50 limit.
           const rows = new Map(loaded.filter(n => !deletedIds.has(n.id)).map(n => [n.id, n]));
           changes.forEach((n, id) => { if (n) rows.set(id, n); else rows.delete(id); });
-          input.onNotificationsLoaded([...rows.values()].sort((a,b) => b.created_at.localeCompare(a.created_at)).slice(0,50));
+          const snapshot = [...rows.values()].sort((a,b) => b.created_at.localeCompare(a.created_at)).slice(0,50);
+          // Catch missed inserts without replaying initial history, read rows,
+          // already delivered events or older rows entering the fifty-row window.
+          const incoming = snapshotEstablished ? snapshot.filter(n => !n.read && !seenIds.has(n.id) && Date.parse(n.created_at) >= newestCreatedAt) : [];
+          snapshot.forEach(remember); snapshotEstablished = true;
+          input.onNotificationsLoaded(snapshot);
+          incoming.reverse().forEach(n => input.onNotificationInserted(n));
         } catch (error) { if (!disposed) input.onLoadError(error); }
         finally { if (!disposed && initial) { initial = false; input.onLoadingChange(false); } }
       }
@@ -101,9 +114,10 @@ export function startNotificationBellLifecycle(
   // Register first; SUBSCRIBED triggers another reconciliation to close the
   // gap between the initial HTTP snapshot and a working socket subscription.
   const unsubscribe = input.subscribeToChanges(input.userId, {
-    onInsert: n => { if (!disposed) { if (running) changes.set(n.id,n); input.onNotificationInserted(n); } },
+    onInsert: n => { if (!disposed) { if (running) changes.set(n.id,n); if (!seenIds.has(n.id)) { remember(n); input.onNotificationInserted(n); } } },
     onUpdate: n => { if (!disposed) { if (running) changes.set(n.id,n); input.onNotificationUpdated(n); } },
     onDelete: id => { if (!disposed) { deletedIds.add(id); if (running) changes.set(id,null); input.onNotificationDeleted?.(id); void refresh(); } },
+    onInvalidated: refresh,
     onSubscribed: reconnected => {
       if (disposed) return;
       schedule(60_000); void refresh(); input.onRealtimeSubscribed?.(reconnected);
