@@ -77,6 +77,7 @@ performed by this repair task, so clean-install reproducibility is not claimed.
 Run with `psql -X -v ON_ERROR_STOP=1 -f <file>`:
 
 - `tests/database/internalRpcExecution.sql`
+- `tests/database/diagnosticAndCalendarSecurity.sql`
 - `tests/database/remainingAuditRepairs.sql`
 - `tests/database/meetingSchedulerReadiness.sql`
 - `tests/database/recurringMeetingSeriesSafety.sql`
