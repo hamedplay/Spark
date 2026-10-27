@@ -77,6 +77,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
           >
             <Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-gray-500">در حال آماده‌سازی فرم جلسه...</div>}>
               <CalendarMeetingForm
+              key={prefillData?.meetingId || 'new-meeting'}
               prefillData={prefillData}
               calendars={[...calendars.filter(c => !c.is_occasions && c.type !== 'private'), ...subscribedCalendars.filter(c => !c.is_occasions && c.type !== 'private')]}
               onCancel={() => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); }}

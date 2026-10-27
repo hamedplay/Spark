@@ -193,8 +193,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (prefillData.dateJy && prefillData.dateJm && prefillData.dateJd) {
       setScheduleDate({ jy: prefillData.dateJy, jm: prefillData.dateJm, jd: prefillData.dateJd });
     }
+    setPrefillMeetingId(prefillData.meetingId || null);
     if (prefillData.meetingId) {
-      setPrefillMeetingId(prefillData.meetingId);
       loadMeetingParticipants(prefillData.meetingId);
     }
     setPrefillEditAllIds(prefillData.editAllIds && prefillData.editAllIds.length > 0 ? prefillData.editAllIds : null);
