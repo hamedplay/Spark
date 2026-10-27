@@ -9,7 +9,7 @@ SPARK_MIGRATIONS_DIR="${SPARK_ROOT}/supabase/migrations"
 
 spark_database_pending_migrations() {
   local migrations_dir="$SPARK_MIGRATIONS_DIR"
-  local latest_applied file base version
+  local applied_versions file base version
 
   # The repository may legitimately contain no migrations yet. Once a migration
   # is added, this canonical directory is the only supported source.
@@ -19,23 +19,27 @@ spark_database_pending_migrations() {
     return 1
   }
 
-  if ! latest_applied="$(compose exec -T db psql -X -U postgres -d postgres -Atqc \
-    "select coalesce(max(version), '00000000000000') from supabase_migrations.schema_migrations where version ~ '^[0-9]{14}$'" \
+  if ! applied_versions="$(compose exec -T db psql -X -U postgres -d postgres -Atqc \
+    "select version from supabase_migrations.schema_migrations where version ~ '^[0-9]{14}$' order by version" \
     2>>"${CURRENT_LOG}")"; then
     fail "Unable to read Supabase migration history."
     return 1
   fi
-  latest_applied="${latest_applied//$'\r'/}"
-  [[ "$latest_applied" =~ ^[0-9]{14}$ ]] || {
-    fail "Invalid latest migration version returned by database: ${latest_applied}"
-    return 1
-  }
+  applied_versions="${applied_versions//$'\r'/}"
+  while IFS= read -r version; do
+    [[ -z "$version" || "$version" =~ ^[0-9]{14}$ ]] || {
+      fail "Invalid migration version returned by database: ${version}"
+      return 1
+    }
+  done <<< "$applied_versions"
 
   while IFS= read -r file; do
     base="$(basename "$file")"
     version="${base%%_*}"
     [[ "$version" =~ ^[0-9]{14}$ ]] || continue
-    if [[ "$version" > "$latest_applied" ]]; then
+    # Restored histories can contain gaps or a later timestamp from another
+    # environment. A maximum-version check silently skips such pending files.
+    if ! grep -Fxq -- "$version" <<< "$applied_versions"; then
       printf '%s\n' "$file"
     fi
   done < <(find "$migrations_dir" -maxdepth 1 -type f -name '*.sql' -print | sort)
