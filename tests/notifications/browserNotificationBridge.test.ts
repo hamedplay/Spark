@@ -27,7 +27,7 @@ async function fixture(permission = 'default', ios = false) {
   Object.defineProperty(globalThis,'Notification',{value:Notification,configurable:true});
   Object.defineProperty(globalThis,'navigator',{value:{serviceWorker,userAgent:ios?'iPhone':'Desktop',platform:'',maxTouchPoints:0},configurable:true});
   Object.defineProperty(globalThis,'localStorage',{value:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)},configurable:true});
-  (globalThis as any).__pushClient = { functions: { async invoke() { invokes++; return { data: { publicKey: 'AQID' }, error: null }; } }, async rpc(name: string,args: any) { rpc.push({name,args}); return { data: null, error: null }; } };
+  (globalThis as any).__pushClient = { functions: { async invoke() { invokes++; return { data: { publicKey: 'AQID' }, error: null }; } }, async rpc(name: string,args: any) { rpc.push({name,args}); return { data: name === 'get_my_pwa_push_config' ? {publicKey:'AQID'} : null, error: null }; } };
   const bridge = await server.ssrLoadModule(`/src/lib/pwaNotificationBridge.ts?test=${++counter}`);
   return { bridge, window, Notification, workerMessages, rpc, storage, client:(globalThis as any).__pushClient, stats:()=>({requests,invokes,unsubscribed}) };
 }
@@ -35,7 +35,7 @@ test('desktop web registers without PWA installation; permission is requested on
   const h = await fixture(); const stop = h.bridge.startPwaNotificationBridge('owner',true);
   await tick(); assert.equal(h.stats().requests,0); assert.equal(h.stats().invokes,0);
   const activation = h.bridge.enableBrowserNotifications(); assert.equal(h.stats().requests,1); await activation; await tick();
-  assert.equal(h.bridge.getBrowserPushState().status,'ready'); assert.equal(h.rpc[0].name,'upsert_my_pwa_push_subscription');
+  assert.equal(h.bridge.getBrowserPushState().status,'ready'); assert.deepEqual(h.rpc.slice(0,2).map((call:any)=>call.name),['get_my_pwa_push_config','upsert_my_pwa_push_subscription']); assert.equal(h.stats().invokes,0);
   await h.bridge.notifyBrowser({id:'one',user_id:'owner'},'owner'); await h.bridge.notifyBrowser({id:'one',user_id:'owner'},'owner');
   await h.bridge.notifyBrowser({id:'read',read:true},'owner'); await h.bridge.notifyBrowser({id:'other',user_id:'other'},'owner');
   assert.equal(h.workerMessages.length,1); stop(); await tick();
@@ -57,7 +57,8 @@ test('disabled preferences suppress registration and notifications; local disabl
 });
 test('logout cancels a pending subscription before it can be saved for the wrong account', async () => {
   const h=await fixture('granted'); let release!: Function;
-  h.client.functions.invoke=()=>new Promise(resolve=>{release=resolve;});
+  const originalRpc=h.client.rpc;
+  h.client.rpc=(name:string,args:any)=>name==='get_my_pwa_push_config'?new Promise(resolve=>{release=resolve;}):originalRpc(name,args);
   const stop=h.bridge.startPwaNotificationBridge('owner',true); await tick(); stop();
   release({data:{publicKey:'AQID'},error:null}); await tick();
   assert.ok(!h.rpc.some((call:any)=>call.name==='upsert_my_pwa_push_subscription'));

@@ -76,9 +76,11 @@ async function ensurePushSubscription(userId: string): Promise<boolean> {
       const worker = await registration();
       if (!current()) return false;
       if (!worker.pushManager) throw new Error('Push در این مرورگر در دسترس نیست؛ اعلان هنگام بازبودن برنامه فعال است.');
-      const { data, error } = await withTimeout(supabase.functions.invoke('pwa-push-config', { body: {} }));
+      const { data, error } = await withTimeout(pushClient.rpc('get_my_pwa_push_config'));
       if (!current()) return false;
-      if (error || !data?.publicKey) throw new Error('ثبت اعلان پس‌زمینه ناموفق بود؛ اعلان هنگام بازبودن برنامه فعال است.');
+      if (error || !data?.publicKey) throw new Error(error?.message?.includes('PWA_PUSH_NOT_CONFIGURED')
+        ? 'کلید ارسال Push روی سرور تنظیم نشده است؛ اعلان هنگام بازبودن برنامه فعال است.'
+        : 'ثبت اعلان پس‌زمینه ناموفق بود؛ اعلان هنگام بازبودن برنامه فعال است.');
       const key = serverKey(data.publicKey);
       let subscription = await worker.pushManager.getSubscription();
       if (!current()) return false;

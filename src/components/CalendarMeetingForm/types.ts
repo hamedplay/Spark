@@ -49,6 +49,7 @@ export interface CalendarMeetingFormProps {
   onCancel: () => void;
   calendars?: CalendarEntry[];
   prefillData?: {
+    mode?: 'create';
     subject?: string;
     location?: string;
     representative?: string;

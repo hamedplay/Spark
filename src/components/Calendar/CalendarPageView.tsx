@@ -77,7 +77,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
           >
             <Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-gray-500">در حال آماده‌سازی فرم جلسه...</div>}>
               <CalendarMeetingForm
-              key={prefillData?.meetingId || 'new-meeting'}
+              key={prefillData?.mode === 'create' ? 'similar-meeting' : prefillData?.meetingId || 'new-meeting'}
               prefillData={prefillData}
               calendars={[...calendars.filter(c => !c.is_occasions && c.type !== 'private'), ...subscribedCalendars.filter(c => !c.is_occasions && c.type !== 'private')]}
               onCancel={() => { setShowMeetingForm(false); setActivePendingSchedule(null); setPrefillData(null); }}
@@ -108,6 +108,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
               (calendar) => calendar.id === meeting.calendar_id && !calendar.is_occasions && calendar.type !== 'private'
             ) ? meeting.calendar_id : undefined;
             setPrefillData({
+              mode: 'create',
               subject: meeting.subject || '',
               location: meeting.location || '',
               representative: meeting.representative || '',

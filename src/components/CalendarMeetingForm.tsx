@@ -46,8 +46,11 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [scheduleDate, setScheduleDate] = useState<{jy:number;jm:number;jd:number}|null>(null);
-  const [prefillMeetingId, setPrefillMeetingId] = useState<string|null>(null);
-  const [prefillEditAllIds, setPrefillEditAllIds] = useState<string[]|null>(null);
+  // Identity is an input, never mutable draft state. Similar drafts cannot edit the source.
+  const prefillMeetingId = prefillData?.mode === 'create' ? null : prefillData?.meetingId || null;
+  const prefillEditAllIds = prefillMeetingId && prefillData?.editAllIds?.length ? prefillData.editAllIds : null;
+  const currentEditIdRef = useRef(prefillMeetingId);
+  currentEditIdRef.current = prefillMeetingId;
   const [saveContact, setSaveContact] = useState(false);
   const [membersOnly, setMembersOnly] = useState(false);
   const lastPrefillRef = useRef<string>('');
@@ -198,11 +201,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (prefillData.dateJy && prefillData.dateJm && prefillData.dateJd) {
       setScheduleDate({ jy: prefillData.dateJy, jm: prefillData.dateJm, jd: prefillData.dateJd });
     }
-    setPrefillMeetingId(prefillData.meetingId || null);
-    if (prefillData.meetingId) {
-      loadMeetingParticipants(prefillData.meetingId);
+    if (prefillMeetingId) {
+      loadMeetingParticipants(prefillMeetingId);
     }
-    setPrefillEditAllIds(prefillData.editAllIds && prefillData.editAllIds.length > 0 ? prefillData.editAllIds : null);
     if (prefillData.calendarId) setSelectedCalendarId(prefillData.calendarId);
     if (prefillData.membersOnly !== undefined) setMembersOnly(prefillData.membersOnly);
     if (prefillData.repeatEnabled) {
@@ -244,7 +245,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
 
   const loadMeetingParticipants = async (meetingId: string) => {
     const { data } = await supabase.from('meetings').select('participant_user_ids, notify_users, external_participants, external_informees, meeting_manager, is_online, conference_room_id, send_sms').eq('id', meetingId).maybeSingle();
-    if (!data) return;
+    if (!data || currentEditIdRef.current !== meetingId) return;
     if (data.is_online !== undefined && data.is_online !== null) setIsOnline(!!data.is_online);
     if (data.send_sms !== undefined && data.send_sms !== null) setSendSms(!!data.send_sms);
 
@@ -264,6 +265,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       .select('*')
       .eq('meeting_id', meetingId)
       .order('sort_order');
+    if (currentEditIdRef.current !== meetingId) return;
     if (items && items.length > 0) {
       setAgendaEnabled(true);
       setAgendaItems(items as AgendaItem[]);

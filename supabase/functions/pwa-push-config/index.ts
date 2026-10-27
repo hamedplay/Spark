@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2.111.0";
 import webpush from "npm:web-push@3.6.7";
-import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
+import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +21,16 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "GET" && req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   const authResult = await requireFullAuthAccess(req);
-  if (!authResult.ok) return deniedResponse();
+  if (!authResult.ok) return json({ error: authResult.error?.message || 'AUTH_ACCESS_RESTRICTED' }, authResult.error?.status || 403);
+
+  // Normal reads use the caller's session and return only the public key.
+  const { data: config, error: configError } = await authResult.userClient!.rpc('get_my_pwa_push_config');
+  if (!configError && config?.publicKey) return json(config);
+  // Preserve first-install provisioning; never replace existing keys on a read error.
+  if (!configError?.message?.includes('PWA_PUSH_NOT_CONFIGURED')) {
+    console.error('pwa-push-config read failed', configError?.code || 'CONFIG_EMPTY');
+    return json({ error: 'VAPID_CONFIG_READ_FAILED', code: configError?.code || 'CONFIG_EMPTY' }, 503);
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";

@@ -116,3 +116,27 @@ test('managed series editing submits membership and fields in one server command
   assert.equal(successful,true);assert.equal(calls.length,1);assert.equal(calls[0].name,'update_meeting_series');
   assert.deepEqual(calls[0].args.p_patch,{subject:'Updated',participant_user_ids:['retained','new']});
 });
+
+test('saving a similar draft invites only its final recipients and never writes or cancels the source', async () => {
+  const source = read('src/components/CalendarMeetingForm.tsx');
+  const start = source.indexOf("        const { data: meeting, error: meetingError } = await supabase.from('meetings').insert");
+  const end = source.indexOf('\n      }\n\n      if (saveContact', start);
+  const events:any[]=[];const writes:any[]=[];
+  const db={from(table:string){return {insert(rows:any){writes.push({table,rows});return {select(){return {single:async()=>({data:{id:'new-meeting'},error:null})};}};}};}};
+  const run=evaluate(`async function run(){${source.slice(start,end)}}`,{
+    supabase:db,record:{subject:'Similar',participant_user_ids:['retained']},
+    saveNewMeetingDetails:async(steps:any)=>{await steps.saveParticipants();await steps.saveAgenda();},
+    participantDisplayItems:[{name:'Retained'}],agendaEnabled:false,agendaItems:[],
+    meetingDateStr:'1405/08/07',subject:'Similar',meetingTimeStr:'09:00-10:00',agendaSummary:'',smsPlaceholders:{},
+    userId:'owner',senderName:'Owner',participantIds:['retained'],observerIds:[],participantNameMap:{retained:'Retained'},
+    selectedExternal:[],selectedExternalInformees:[],sendSms:false,contacts:[],
+    getMeetingTemplateKey:()=> 'meeting_created',insertNotification:async(event:any)=>{events.push(event);return {status:'skipped'};},
+    showSmsSummary(){},
+  },'run');
+  await run();
+  assert.deepEqual(writes[0],{table:'meetings',rows:[{subject:'Similar',participant_user_ids:['retained']}]});
+  assert.deepEqual(events.map(event=>[event.meetingId,event.userId,event.eventType]),[
+    ['new-meeting','owner','meeting_created'],['new-meeting','retained','invite'],
+  ]);
+  assert.ok(!events.some(event=>event.userId==='removed'||event.eventType==='cancel'));
+});
