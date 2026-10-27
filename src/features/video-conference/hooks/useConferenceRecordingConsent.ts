@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useConferenceLiveData } from './useConferenceLiveData';
+import { useCallback, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import {
   loadConferenceRecordingConsent,
@@ -45,29 +46,7 @@ export function useConferenceRecordingConsent(
     }
   }, [client, roomId]);
 
-  useEffect(() => {
-    void refresh();
-
-    const channel = client
-      .channel(`conference-recording-consent-${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conference_recordings',
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => void refresh(),
-      )
-      .subscribe();
-
-    const timer = window.setInterval(() => void refresh(), 5000);
-    return () => {
-      window.clearInterval(timer);
-      void client.removeChannel(channel);
-    };
-  }, [client, refresh, roomId]);
+  useConferenceLiveData(['conference_recordings', 'conference_recording_consents', 'conference_rooms'], refresh, client, roomId, true);
 
   const setConsent = useCallback(async (accepted: boolean) => {
     if (state.busy) return false;

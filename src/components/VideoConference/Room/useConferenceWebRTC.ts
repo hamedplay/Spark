@@ -1,3 +1,4 @@
+import { useLiveData } from '../../../shared/realtime/useLiveData';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { startDiagnostics, stopDiagnostics, attemptICERestart } from '../../../lib/webrtcDiagnostics';
 import toast from 'react-hot-toast';
@@ -347,8 +348,17 @@ export function useConferenceWebRTC(scope: any) {
       }
     });
 
-    const roomChannel = supabase.channel(`room-status-${room.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conference_rooms', filter: `id=eq.${room.id}` }, ({ new: row }: any) => {
+    return () => {
+      supabase.removeChannel(channel);
+      authorizedPeersRef.current.clear();
+      for (const peer of peersRef.current.values()) peer.pc.close();
+      peersRef.current.clear();
+    };
+  }, [room.id, currentUserId, currentUserName, myPeerId, supabase, validateSignalSender]);
+
+  useLiveData(['conference_rooms'], async () => {
+    const { data: row, error } = await supabase.from('conference_rooms').select('status,host_id,chat_enabled,speaking_limit_enabled,presenter_user_id,pinned_user_id').eq('id', room.id).maybeSingle();
+    if (error || !row) return;
         if (row.status === 'ended' && !leavingFromDbRef.current) {
           leavingFromDbRef.current = true;
           for (const peer of peersRef.current.values()) peer.pc.close();
@@ -362,21 +372,10 @@ export function useConferenceWebRTC(scope: any) {
         if (typeof row.speaking_limit_enabled === 'boolean') setSpeakingLimitEnabled(row.speaking_limit_enabled);
         setPresenterUserId(row.presenter_user_id ?? null);
         setDbPinnedUserId(row.pinned_user_id ?? null);
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      supabase.removeChannel(roomChannel);
-      authorizedPeersRef.current.clear();
-      for (const peer of peersRef.current.values()) peer.pc.close();
-      peersRef.current.clear();
-    };
-  }, [room.id, currentUserId, currentUserName, myPeerId, supabase, validateSignalSender]);
+  }, true, supabase, room.id);
 
   const [participants, setParticipants] = useState<ConferenceParticipant[]>([]);
-  useEffect(() => {
-    const load = async () => {
+  useLiveData(['conference_participants'], async () => {
       const { data, error } = await supabase
         .from('conference_participants')
         .select('*')
@@ -405,14 +404,8 @@ export function useConferenceWebRTC(scope: any) {
         dispatch({ type: 'FORCE_MUTE' });
       }
       if (!own.is_hand_raised && mediaRef.current.isHandRaised) dispatch({ type: 'SET_HAND', value: false });
-    };
 
-    void load();
-    const channel = supabase.channel(`conf-parts-${room.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_participants', filter: `room_id=eq.${room.id}` }, () => { void load(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [room.id, currentUserId, supabase, onLeave, dispatch, localStreamRef, mediaRef, peersRef, setMyRole, setMyLimitSecs]);
+  }, true, supabase, room.id);
 
   return {
     participants,

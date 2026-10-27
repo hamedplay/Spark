@@ -97,6 +97,8 @@ export function PortalConfigPage({ currentUserId }: Props) {
     setOnlineUsers((pData || []) as Profile[]);
   }, []);
 
+  useLiveData(LIVE_DATA.presence, loadOnlineUsers, activeSection === 'users_online');
+
   useEffect(() => { loadConfigs(); }, [loadConfigs]);
   useEffect(() => { if (activeSection === 'users_online') loadOnlineUsers(); }, [activeSection, loadOnlineUsers]);
 

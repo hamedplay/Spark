@@ -85,3 +85,17 @@ test('live calendar options retain hidden calendars, include new ones and remove
   assert.deepEqual([...mergeLiveSelection(new Set(['a','deleted']), new Set(['a','b','deleted']), new Set(['a','b','new']))], ['a','new']);
   assert.equal(mergeLiveSelection(new Set(), new Set(['a','b']), new Set(['a','b'])).size, 0);
 });
+
+test('expanded shared sources route call clearing, presence, conference roles, forwarding and runtime changes independently', async () => {
+  const f=fixture();
+  const tables=['chat_call_history_hidden','user_presence','conference_private_messages','conference_role_assignments','conference_recording_consents','system_config','contacts_email','chat_message_read_log','pending_approvals','banned_users'];
+  const counts=tables.map(()=>0);
+  const stops=tables.map((table,index)=>f.watchLiveData([table],async()=>{counts[index]++;}));
+  await pause();assert.deepEqual(counts,tables.map(()=>1));
+  for(let index=0;index<tables.length;index++){
+    f.emit(tables[index]);await pause();
+    assert.equal(counts[index],2,`${tables[index]} must reach its shared reader`);
+    assert.ok(counts.every((count,i)=>count===(i<=index?2:1)),'unrelated readers must not refetch');
+  }
+  stops.forEach(stop=>stop());assert.equal(f.stats.channels,1);assert.equal(f.stats.removed,1);
+});

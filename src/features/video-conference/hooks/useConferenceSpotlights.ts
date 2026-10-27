@@ -1,3 +1,4 @@
+import { useConferenceLiveData } from './useConferenceLiveData';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import {
@@ -64,28 +65,8 @@ export function useConferenceSpotlights({
     }
   }, [canUse, client, roomId]);
 
-  useEffect(() => {
-    void refresh();
-    if (!canUse) return undefined;
-
-    const channel = client
-      .channel(`conference-spotlights-${roomId}-${currentUserId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conference_spotlights',
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => void refresh(),
-      )
-      .subscribe();
-
-    return () => {
-      void client.removeChannel(channel);
-    };
-  }, [canUse, client, currentUserId, refresh, roomId]);
+  useConferenceLiveData(['conference_spotlights'], refresh, client, roomId, canUse);
+  useEffect(() => { if (!canUse) void refresh(); }, [canUse, refresh]);
 
   const spotlightedUserIds = useMemo(
     () => snapshot.items.map((item) => item.userId),

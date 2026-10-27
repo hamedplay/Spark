@@ -1,3 +1,4 @@
+import { useLiveData } from '../../shared/realtime/useLiveData';
 import { useEffect, useRef, useState } from 'react';
 import { CircleCheck as CheckCircle, Clock, Circle as XCircle } from 'lucide-react';
 import { useConferenceClient } from './conferenceClient';
@@ -84,60 +85,20 @@ export function ApprovalWaitingGate({ roomId, userId, displayName, onApproved, o
     return () => { cancelled = true; };
   }, [roomId, userId, displayName]);
 
-  // ── Realtime + poll subscription ─────────────────────────────────────────────
+  const approvedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useLiveData(['pending_approvals'], async () => {
+    if (!approvalId) return;
+    const { data, error } = await supabase.from('pending_approvals').select('status,expires_at').eq('id', approvalId).maybeSingle();
+    if (error) return;
+    if (!data) { if (!firedRef.current) setStatus('expired'); return; }
+    if (data.status === 'approved') approvedTimerRef.current = fireApproved() ?? undefined;
+    else if (data.status === 'rejected') fireRejected();
+    else if (Date.parse(data.expires_at) <= Date.now() && !firedRef.current) setStatus('expired');
+  }, !!approvalId, supabase, approvalId || '');
   useEffect(() => {
     if (!approvalId) return;
-
-    let approvedTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const handleRow = (row: Partial<PendingApproval>) => {
-      if (row.status === 'approved') { approvedTimer = fireApproved() ?? undefined; }
-      if (row.status === 'rejected') { fireRejected(); }
-    };
-
-    const ch = supabase.channel(`approval-wait-${approvalId}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'pending_approvals',
-        filter: `id=eq.${approvalId}`,
-      }, ({ new: row, eventType }) => {
-        if (eventType === 'DELETE') {
-          // Record removed (room closed / admin purge) — treat as cancelled
-          if (!firedRef.current) setStatus('expired');
-          return;
-        }
-        handleRow(row as Partial<PendingApproval>);
-      })
-      .subscribe();
-
-    // Fallback poll every 12 s
-    const poll = setInterval(async () => {
-      const { data } = await supabase
-        .from('pending_approvals')
-        .select('status, expires_at')
-        .eq('id', approvalId)
-        .maybeSingle();
-      if (!data) return;
-      if (data.status !== 'pending') { handleRow(data); return; }
-      const left = Math.round((new Date(data.expires_at).getTime() - Date.now()) / 1000);
-      if (left <= 0 && !firedRef.current) setStatus('expired');
-    }, 12000);
-
-    // Countdown ticker
-    const ticker = setInterval(() => {
-      setSecondsLeft(prev => {
-        if (prev === null || prev <= 0) return 0;
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      ch.unsubscribe();
-      clearInterval(poll);
-      clearInterval(ticker);
-      if (approvedTimer !== undefined) clearTimeout(approvedTimer);
-    };
-  // Only re-run when the approvalId changes, not the callbacks
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const ticker = setInterval(() => setSecondsLeft(prev => prev === null || prev <= 0 ? 0 : prev - 1), 1000);
+    return () => { clearInterval(ticker); if (approvedTimerRef.current !== undefined) clearTimeout(approvedTimerRef.current); };
   }, [approvalId]);
 
   const formatSecs = (s: number) => {

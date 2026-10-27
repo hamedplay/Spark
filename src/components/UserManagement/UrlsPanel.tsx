@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useState, useEffect, useRef } from 'react';
 import { MapPin, Loader as Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { AdminProfile, AuditRow } from './types';
@@ -7,12 +8,17 @@ import { DetailPanel } from './DetailPanel';
 function UrlsPanel({ user, onBack }: { user: AdminProfile; onBack: () => void }) {
   const [logs, setLogs] = useState<AuditRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const targetUser = useRef(user.user_id); targetUser.current = user.user_id;
+  useEffect(() => { setLogs([]); setLoading(true); }, [user.user_id]);
 
-  useEffect(() => {
-    supabase.from('audit_log').select('*').eq('user_id', user.user_id)
-      .not('module', 'is', null).order('created_at', { ascending: false }).limit(200)
-      .then(({ data }) => { setLogs((data || []) as AuditRow[]); setLoading(false); });
-  }, [user.user_id]);
+  useLiveData(LIVE_DATA.audit, async () => {
+    const target = user.user_id;
+    const { data, error } = await supabase.from('audit_log').select('*').eq('user_id', user.user_id)
+      .not('module', 'is', null).order('created_at', { ascending: false }).limit(200);
+    if (target !== targetUser.current) return;
+    if (!error) setLogs((data || []) as AuditRow[]);
+    setLoading(false);
+  }, true, undefined, user.user_id);
 
   const moduleMap: Record<string, { count: number; last: string }> = {};
   logs.forEach(l => {

@@ -1,8 +1,8 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Phone, Video, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Search, User, X, Trash2, Loader as Loader2, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { loadCallHistory, callHistoryLoadError, type CallHistoryClient } from './callHistoryLoader';
-import { createChatRealtimeSync } from './chatRealtimeSync';
 import { supabase } from '../../lib/supabase';
 import moment from 'moment-jalaali';
 import type { UserProfile } from './types';
@@ -62,14 +62,10 @@ export function CallHistoryPage({ currentUserId, onStartCall, onClose }: Props) 
   useEffect(() => {
     setRecords([]);
     setLoading(true);
-    const sync = createChatRealtimeSync(fetchHistory);
-    void sync.request();
-    const channel = supabase.channel(`call-history-${currentUserId}-${crypto.randomUUID()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions', filter: `caller_id=eq.${currentUserId}` }, () => { void sync.request(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'call_sessions', filter: `callee_id=eq.${currentUserId}` }, () => { void sync.request(); })
-      .subscribe(status => sync.onStatus(status));
-    return () => { requestRef.current++; sync.dispose(); void supabase.removeChannel(channel); };
+    return () => { requestRef.current++; };
   }, [currentUserId, fetchHistory]);
+
+  useLiveData([...LIVE_DATA.calls, 'profiles'], fetchHistory, !!currentUserId, undefined, currentUserId);
 
   const clearHistory = async () => {
     if (clearing || !canClear) return;

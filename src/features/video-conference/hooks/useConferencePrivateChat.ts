@@ -1,3 +1,4 @@
+import { useConferenceLiveData } from './useConferenceLiveData';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import {
@@ -65,21 +66,7 @@ export function useConferencePrivateChat({
     }
   }, [client, roomId]);
 
-  useEffect(() => {
-    void refreshMessages();
-
-    const channel = client
-      .channel(`conference-private-chat-${roomId}-${currentUserId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_private_messages',
-        filter: `room_id=eq.${roomId}`,
-      }, () => void refreshMessages())
-      .subscribe();
-
-    return () => { void client.removeChannel(channel); };
-  }, [client, currentUserId, refreshMessages, roomId]);
+  useConferenceLiveData(['conference_private_messages'], refreshMessages, client, roomId, true);
 
   useEffect(() => {
     if (

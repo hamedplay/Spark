@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useLiveData } from '../../shared/realtime/useLiveData';
+import { useState } from 'react';
 import { Bot } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { logAudit } from '../../lib/audit';
@@ -8,17 +9,15 @@ export function SparkVisibilityToggle() {
   const [visible, setVisible] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    supabase
+  useLiveData(['system_config'], async () => {
+    const { data, error } = await supabase
       .from('system_config')
       .select('value')
       .eq('section', 'spark')
       .eq('key', 'spark_visible')
-      .maybeSingle()
-      .then(({ data }) => {
-        setVisible(data ? data.value !== 'false' : true);
-      });
-  }, []);
+      .maybeSingle();
+    if (!error) setVisible(data?.value === 'true');
+  });
 
   const toggle = async () => {
     if (visible === null) return;
@@ -33,14 +32,16 @@ export function SparkVisibilityToggle() {
         .maybeSingle();
 
       if (existing?.id) {
-        await supabase
+        const { error } = await supabase
           .from('system_config')
           .update({ value: newVal ? 'true' : 'false' })
           .eq('id', existing.id);
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('system_config')
           .insert([{ section: 'spark', key: 'spark_visible', value: newVal ? 'true' : 'false' }]);
+        if (error) throw error;
       }
       setVisible(newVal);
       window.dispatchEvent(new CustomEvent('spark-visible-changed', { detail: { visible: newVal } }));

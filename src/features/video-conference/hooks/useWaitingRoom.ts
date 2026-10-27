@@ -1,3 +1,4 @@
+import { useConferenceLiveData } from './useConferenceLiveData';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import {
@@ -88,90 +89,10 @@ export function useWaitingRoom({
     }
   }, [client, roomId]);
 
-  useEffect(() => {
-    if (uiState !== 'waiting') {
-      settledRef.current = null;
-      return;
-    }
-
-    void refreshOwnState();
-
-    const channel = client
-      .channel(`sfu-wait-${roomId}-${currentUserId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conference_waiting_room',
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            user_id?: string;
-            status?: ConferenceWaitingStatus;
-          };
-          if (row.user_id !== currentUserId || !row.status) return;
-          handleOwnStatus(row.status);
-          void refreshOwnState();
-        },
-      )
-      .subscribe();
-
-    const poll = window.setInterval(() => {
-      void refreshOwnState();
-    }, 5000);
-
-    return () => {
-      window.clearInterval(poll);
-      void client.removeChannel(channel);
-    };
-  }, [
-    client,
-    currentUserId,
-    handleOwnStatus,
-    refreshOwnState,
-    roomId,
-    uiState,
-  ]);
-
-  useEffect(() => {
-    if (!isManager || uiState !== 'connected') {
-      setWaitingRows([]);
-      return;
-    }
-
-    void refreshWaitingRows();
-
-    const channel = client
-      .channel(`sfu-host-wait-${roomId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conference_waiting_room',
-          filter: `room_id=eq.${roomId}`,
-        },
-        () => void refreshWaitingRows(),
-      )
-      .subscribe();
-
-    const poll = window.setInterval(() => {
-      void refreshWaitingRows();
-    }, 15000);
-
-    return () => {
-      window.clearInterval(poll);
-      void client.removeChannel(channel);
-    };
-  }, [
-    client,
-    isManager,
-    refreshWaitingRows,
-    roomId,
-    uiState,
-  ]);
+  useConferenceLiveData(['conference_waiting_room','conference_rooms'], refreshOwnState, client, roomId, uiState === 'waiting');
+  useConferenceLiveData(['conference_waiting_room','conference_participants'], refreshWaitingRows, client, roomId, isManager && uiState === 'connected');
+  useEffect(() => { if (uiState !== 'waiting') settledRef.current = null; }, [uiState]);
+  useEffect(() => { if (!isManager || uiState !== 'connected') setWaitingRows([]); }, [isManager, uiState]);
 
   return {
     waitingRows,

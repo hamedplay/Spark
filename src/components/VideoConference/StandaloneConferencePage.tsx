@@ -1,3 +1,4 @@
+import { useLiveData } from '../../shared/realtime/useLiveData';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, Loader2, Radio, ShieldAlert, ShieldCheck, Video } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -206,22 +207,13 @@ export default function StandaloneConferencePage() {
     return () => { cancelled = true; };
   }, [loadRecordingConsent, roomCode, sessionKey]);
 
-  useEffect(() => {
+  useLiveData(['conference_rooms','conference_recordings','conference_recording_consents'], async () => {
     if (!room?.id) return;
-    const channel = supabase
-      .channel(`standalone-room-lifecycle-${room.id}-${sessionIdRef.current}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'conference_rooms', filter: `id=eq.${room.id}` },
-        payload => {
-          const status = (payload.new as { status?: string } | null)?.status;
-          if (status === 'ended') finishSession('جلسه پایان یافت.');
-        },
-      )
-      .subscribe();
-
-    return () => { void supabase.removeChannel(channel); };
-  }, [finishSession, room?.id]);
+    const { data, error } = await supabase.from('conference_rooms').select('status').eq('id', room.id).maybeSingle();
+    if (error) return;
+    if (!data || data.status === 'ended') { finishSession('جلسه پایان یافت.'); return; }
+    await loadRecordingConsent(room.id);
+  }, !!room?.id, undefined, room?.id || '');
 
   useEffect(() => {
     const handlePageHide = () => {

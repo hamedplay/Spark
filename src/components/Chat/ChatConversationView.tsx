@@ -159,39 +159,10 @@ export function ChatConversationView({
     return () => clearInterval(interval);
   }, [currentUserId]);
   
-  useEffect(() => {
-  const loadPresence = async () => {
-    const { data } = await supabase
-      .from('user_presence')
-      .select('last_seen')
-      .eq('user_id', conversation.otherUser.user_id)
-      .maybeSingle();
-
-    if (data) setOtherUserPresence(data);
-  };
-
-  loadPresence();
-
-  const channel = supabase
-    .channel(`presence-${conversation.otherUser.user_id}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'user_presence',
-        filter: `user_id=eq.${conversation.otherUser.user_id}`
-      },
-      (payload) => {
-        setOtherUserPresence(payload.new as any);
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-  }, [conversation.otherUser.user_id]);
+  useLiveData(['user_presence'], async () => {
+    const { data, error } = await supabase.from('user_presence').select('last_seen').eq('user_id', conversation.otherUser.user_id).maybeSingle();
+    if (!error) setOtherUserPresence(data || { last_seen: null });
+  }, true, undefined, conversation.otherUser.user_id);
   // Reminder alarm: check every 30s if any reminder's time has passed
   useEffect(() => {
     const check = () => {

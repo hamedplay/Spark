@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useConferenceLiveData } from './useConferenceLiveData';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 
 interface Params {
@@ -10,16 +10,7 @@ interface Params {
 }
 
 export function useConferenceRealtime({ client, roomId, refreshMessages, refreshParticipants, refreshRoomState }: Params) {
-  useEffect(() => {
-    const channel = client.channel(`sfu-collab-${roomId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_messages', filter: `room_id=eq.${roomId}` }, () => void refreshMessages())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_message_reactions', filter: `room_id=eq.${roomId}` }, () => void refreshMessages())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_message_mentions', filter: `room_id=eq.${roomId}` }, () => void refreshMessages())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_participants', filter: `room_id=eq.${roomId}` }, () => void refreshParticipants())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conference_rooms', filter: `id=eq.${roomId}` }, () => void refreshRoomState())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_recordings', filter: `room_id=eq.${roomId}` }, () => void refreshRoomState())
-      .subscribe();
-
-    return () => { void client.removeChannel(channel); };
-  }, [client, refreshMessages, refreshParticipants, refreshRoomState, roomId]);
+  useConferenceLiveData(['conference_messages','conference_message_reactions','conference_message_mentions'], refreshMessages, client, roomId);
+  useConferenceLiveData(['conference_participants'], refreshParticipants, client, roomId);
+  useConferenceLiveData(['conference_rooms','conference_recordings','conference_recording_consents'], refreshRoomState, client, roomId);
 }

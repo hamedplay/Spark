@@ -1,3 +1,4 @@
+import { useLiveData } from '../../shared/realtime/useLiveData';
 import { useState, useEffect } from 'react';
 import { X, Search, Send, Bookmark, Users, MessageSquare } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -41,28 +42,29 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
 
   // Tab 2: all users + channels
   const [broadcastTargets, setBroadcastTargets] = useState<BroadcastTarget[]>([]);
-  const [loadingBroadcast, setLoadingBroadcast] = useState(false);
-  const [broadcastLoaded, setBroadcastLoaded] = useState(false);
+  const [loadingBroadcast, setLoadingBroadcast] = useState(true);
   const [sendingBroadcast, setSendingBroadcast] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      const { data: selfConvId } = await supabase.rpc('find_or_create_direct_conversation', {
-        user_a: currentUserId,
-        user_b: currentUserId,
-      });
+  const [selfConversationId, setSelfConversationId] = useState<string | null>(null);
+  useEffect(() => { let disposed = false;
+    setTargets([]); setBroadcastTargets([]); setLoadingChats(true); setLoadingBroadcast(true); setSelfConversationId(null);
+    void supabase.rpc('find_or_create_direct_conversation', { user_a: currentUserId, user_b: currentUserId }).then(({data}) => { if (!disposed) setSelfConversationId(data as string | null); });
+    return () => { disposed = true; };
+  }, [currentUserId]);
 
-      const { data: convs } = await supabase
+  const loadChatTargets = async () => {
+      const { data: convs, error: convError } = await supabase
         .from('chat_conversations')
         .select('id, participant_a, participant_b, deleted_for_a, deleted_for_b')
         .or(`participant_a.eq.${currentUserId},participant_b.eq.${currentUserId}`)
         .order('last_message_at', { ascending: false, nullsFirst: false });
 
+      if (convError) return;
       const list: ForwardTarget[] = [];
-      if (selfConvId) {
-        list.push({ conversationId: selfConvId as string, isSelf: true, name: 'پیام‌های ذخیره‌شده' });
+      if (selfConversationId) {
+        list.push({ conversationId: selfConversationId, isSelf: true, name: 'پیام‌های ذخیره‌شده' });
       }
       for (const c of (convs || [])) {
         const isDeleted = c.participant_a === currentUserId ? c.deleted_for_a : c.deleted_for_b;
@@ -79,13 +81,9 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
       }
       setTargets(list);
       setLoadingChats(false);
-    })();
-  }, [currentUserId]);
+  };
 
   const loadBroadcastTargets = async () => {
-    if (broadcastLoaded) return;
-    setLoadingBroadcast(true);
-
     // All profiles except self
     const userList: BroadcastTarget[] = allUsers
       .filter(u => u.user_id !== currentUserId)
@@ -98,18 +96,20 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
       }));
 
     // Channels/groups where current user is member
-    const { data: memberships } = await supabase
+    const { data: memberships, error: membershipError } = await supabase
       .from('channel_members')
       .select('channel_id')
       .eq('user_id', currentUserId);
 
+    if (membershipError) return;
     const channelIds = (memberships || []).map((m: any) => m.channel_id);
     let channelList: BroadcastTarget[] = [];
     if (channelIds.length > 0) {
-      const { data: channels } = await supabase
+      const { data: channels, error: channelError } = await supabase
         .from('channels')
         .select('id, name, type')
         .in('id', channelIds);
+      if (channelError) return;
       channelList = (channels || []).map((c: any) => ({
         type: 'channel' as const,
         id: c.id,
@@ -119,13 +119,12 @@ export function ForwardModal({ body, fileUrl, fileName, fileType, currentUserId,
     }
 
     setBroadcastTargets([...channelList, ...userList]);
-    setBroadcastLoaded(true);
     setLoadingBroadcast(false);
   };
 
-  useEffect(() => {
-    if (tab === 'all') loadBroadcastTargets();
-  }, [tab]);
+  useLiveData(['chat_conversations','profiles'], loadChatTargets, !!currentUserId, undefined, `${currentUserId}:${selfConversationId || ''}`);
+  useLiveData(['channels','channel_members','profiles'], loadBroadcastTargets, tab === 'all', undefined, currentUserId);
+  useEffect(() => { void loadChatTargets(); if (tab === 'all') void loadBroadcastTargets(); }, [allUsers, selfConversationId]);
 
   const handleForwardToChat = async (target: ForwardTarget) => {
     setSendingChat(target.conversationId);

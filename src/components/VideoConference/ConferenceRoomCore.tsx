@@ -1,3 +1,4 @@
+import { useLiveData } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { useConferenceClient } from './conferenceClient';
 import type { PeerDiagnostics } from '../../lib/webrtcDiagnostics';
@@ -172,9 +173,7 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
   const ROLE_COLORS_REF = ROLE_COLORS;
 
   // Load pending approvals for host/admin
-  useEffect(() => {
-    if (!isHost && myRole !== 'admin') return;
-    const loadApprovals = async () => {
+  useLiveData(['pending_approvals'], async () => {
       const { data } = await supabase
         .from('pending_approvals')
         .select('*')
@@ -183,14 +182,8 @@ export function ConferenceRoomView({ room, currentUserId, currentUserName, myPee
         .gt('expires_at', new Date().toISOString())
         .order('created_at');
       setPendingApprovals((data as PendingApproval[]) || []);
-    };
-    loadApprovals();
-    const ch = supabase.channel(`conf-approvals-${room.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_approvals', filter: `room_id=eq.${room.id}` }, loadApprovals)
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.id, isHost, myRole]);
+
+  }, isHost || myRole === 'admin', supabase, room.id);
 
   const approveUser = async (approvalId: string) => {
     await supabase.from('pending_approvals').update({ status: 'approved', approved_by: currentUserId }).eq('id', approvalId);

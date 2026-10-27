@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useState } from 'react';
 import { Search, Plus, RefreshCw, SquareCheck as CheckSquare, Phone, MessageCircle, Settings2, Bookmark } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { ConversationWithProfile } from './types';
@@ -55,53 +56,12 @@ export function ChatSidebar({
   const unreadTotal = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
   const mentionTotal = conversations.filter(c => c.hasMention).length;
 
-  useEffect(() => {
-    if (!conversations.length) return;
-
+  useLiveData(LIVE_DATA.presence, async () => {
     const userIds = conversations.map(c => c.otherUser.user_id);
-
-    const loadPresence = async () => {
-      const { data } = await supabase
-        .from('user_presence')
-        .select('user_id,last_seen,status')
-        .in('user_id', userIds);
-
-      if (!data) return;
-
-      const map: Record<string, { last_seen: string | null; status: string | null }> = {};
-      data.forEach(p => {
-        map[p.user_id] = { last_seen: p.last_seen, status: p.status ?? null };
-      });
-
-      setPresenceMap(map);
-    };
-
-    void loadPresence();
-
-    const channel = supabase
-      .channel(`sidebar-presence-${Date.now()}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_presence'
-        },
-        payload => {
-          const row = payload.new as any;
-
-          setPresenceMap(prev => ({
-            ...prev,
-            [row.user_id]: { last_seen: row.last_seen, status: row.status ?? null }
-          }));
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [conversations]);
+    if (!userIds.length) { setPresenceMap({}); return; }
+    const { data, error } = await supabase.from('user_presence').select('user_id,last_seen,status').in('user_id', userIds);
+    if (!error) setPresenceMap(Object.fromEntries((data || []).map(p => [p.user_id, { last_seen: p.last_seen, status: p.status ?? null }])));
+  }, !!currentUserId, undefined, conversations.map(c => c.otherUser.user_id).sort().join(','));
 
   const renderConversation = (c: ConversationWithProfile) => (
     <ChatConversationItem

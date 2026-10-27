@@ -1,3 +1,4 @@
+import { useLiveData } from '../../shared/realtime/useLiveData';
 import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import {
   Trash2, Undo2, Redo2, Type, Minus, Square, Circle as CircleIcon,
@@ -18,14 +19,14 @@ type BoardAction =
   | { type: 'POP_REDO' }
   | { type: 'CLEAR_ALL' }
   | { type: 'REMOVE_DB_ROW'; dbRowId: string }
-  | { type: 'LOAD'; rows: BoardEntry[] };
+  | { type: 'LOAD' | 'SYNC'; rows: BoardEntry[] };
 
 function boardReducer(s: BoardState, a: BoardAction): BoardState {
   switch (a.type) {
     case 'ADD_OWN':
-      return { entries: [...s.entries, { stroke: a.stroke, dbRowId: a.dbRowId, isOwn: true }], redoStack: [] };
+      return { entries: s.entries.some(e => e.stroke.id === a.stroke.id) ? s.entries.map(e => e.stroke.id === a.stroke.id ? { ...e, dbRowId: a.dbRowId ?? e.dbRowId, isOwn: true } : e) : [...s.entries, { stroke: a.stroke, dbRowId: a.dbRowId, isOwn: true }], redoStack: [] };
     case 'ADD_OWN_FROM_REDO':
-      return { entries: [...s.entries, { stroke: a.stroke, dbRowId: a.dbRowId, isOwn: true }], redoStack: s.redoStack };
+      return { entries: s.entries.some(e => e.stroke.id === a.stroke.id) ? s.entries.map(e => e.stroke.id === a.stroke.id ? { ...e, dbRowId: a.dbRowId ?? e.dbRowId, isOwn: true } : e) : [...s.entries, { stroke: a.stroke, dbRowId: a.dbRowId, isOwn: true }], redoStack: s.redoStack };
     case 'ADD_REMOTE':
       return { ...s, entries: [...s.entries, { stroke: a.stroke, isOwn: false }] };
     case 'UNDO': {
@@ -40,6 +41,8 @@ function boardReducer(s: BoardState, a: BoardAction): BoardState {
       return { entries: [], redoStack: [] };
     case 'REMOVE_DB_ROW':
       return { ...s, entries: s.entries.filter(e => e.dbRowId !== a.dbRowId) };
+    case 'SYNC':
+      return { entries: [...a.rows, ...s.entries.filter(e => !e.dbRowId && !a.rows.some(row => row.stroke.id === e.stroke.id))], redoStack: s.redoStack };
     case 'LOAD':
       return { entries: a.rows, redoStack: [] };
     default:
@@ -192,8 +195,7 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
   useEffect(() => { redrawMain(); }, [board, redrawMain]);
 
   // ─── Load + realtime ───────────────────────────────────────────────────────
-  useEffect(() => {
-    const load = async () => {
+  useLiveData(['conference_whiteboard'], async () => {
       // user_id را هم select می‌کنیم تا echo-suppression سروری باشد، نه از stroke_data
       const { data, error } = await supabase
         .from('conference_whiteboard')
@@ -202,31 +204,18 @@ export function Whiteboard({ roomId, userId, isHost = false }: WhiteboardProps) 
         .order('created_at');
       if (error) { console.error('whiteboard load error:', error); return; }
       if (data) dispatch({
-        type: 'LOAD',
+        type: 'SYNC',
         rows: data.map(r => {
           const stroke = validateStroke(r.stroke_data);
           if (!stroke) return null;
           return { stroke, dbRowId: r.id, isOwn: r.user_id === userId };
         }).filter((e): e is BoardEntry => e !== null),
       });
-    };
-    load();
 
+  }, true, supabase, roomId);
+
+  useEffect(() => {
     const ch = supabase.channel(`wb-${roomId}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'conference_whiteboard', filter: `room_id=eq.${roomId}` },
-        ({ new: row }) => {
-          // echo-suppression: بر اساس ستون واقعی user_id، نه stroke_data.userId
-          if (row.user_id === userId) return;
-          const stroke = validateStroke(row.stroke_data);
-          if (stroke) dispatch({ type: 'ADD_REMOTE', stroke });
-        })
-      .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'conference_whiteboard', filter: `room_id=eq.${roomId}` },
-        ({ old: row }) => {
-          if (row.id) dispatch({ type: 'REMOVE_DB_ROW', dbRowId: row.id });
-          else dispatch({ type: 'CLEAR_ALL' });
-        })
       .on('broadcast', { event: 'wb_clear' }, () => {
         drawing.current = false; penPath.current = []; startPt.current = null;
         clearOverlay(); dispatch({ type: 'CLEAR_ALL' });

@@ -1,3 +1,4 @@
+import { useLiveData } from '../../shared/realtime/useLiveData';
 import { useEffect, useRef, useState } from 'react';
 import { ShieldOff, UserCheck, Clock } from 'lucide-react';
 import { useConferenceClient } from './conferenceClient';
@@ -36,6 +37,7 @@ export function BanList({ roomId }: Props) {
   const [bans, setBans] = useState<BannedUser[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const isMountedRef = useRef(true);
+  useEffect(() => { isMountedRef.current = true; return () => { isMountedRef.current = false; }; }, []);
 
   // Tick every 30s to refresh countdown labels
   useEffect(() => {
@@ -43,50 +45,15 @@ export function BanList({ roomId }: Props) {
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    const load = async () => {
+  useLiveData(['banned_users'], async () => {
       const { data } = await supabase
         .from('banned_users')
         .select('id, room_id, user_id, display_name, banned_at, expires_at, reason')
         .eq('room_id', roomId)
         .order('banned_at', { ascending: false });
       if (isMountedRef.current && data) setBans(data as BannedUser[]);
-    };
-    load();
 
-    // Listen to ALL events — upsert on existing rows fires UPDATE, not INSERT
-    const ch = supabase
-      .channel(`bans-${roomId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'banned_users', filter: `room_id=eq.${roomId}` },
-        ({ eventType, new: newRow, old: oldRow }) => {
-          if (!isMountedRef.current) return;
-
-          if (eventType === 'INSERT') {
-            setBans(prev => {
-              // Avoid duplicates (belt-and-suspenders)
-              if (prev.some(b => b.id === (newRow as BannedUser).id)) return prev;
-              return [newRow as BannedUser, ...prev];
-            });
-          } else if (eventType === 'UPDATE') {
-            setBans(prev =>
-              prev.map(b => b.id === (newRow as BannedUser).id ? newRow as BannedUser : b)
-            );
-          } else if (eventType === 'DELETE') {
-            setBans(prev => prev.filter(b => b.id !== (oldRow as { id: string }).id));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      isMountedRef.current = false;
-      ch.unsubscribe();
-    };
-  }, [roomId]);
+  }, true, supabase, roomId);
 
   const unban = async (id: string) => {
     const { error } = await supabase.from('banned_users').delete().eq('id', id);

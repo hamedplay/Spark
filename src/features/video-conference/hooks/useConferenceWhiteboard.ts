@@ -1,3 +1,4 @@
+import { useConferenceLiveData } from './useConferenceLiveData';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RoomEvent, type Room } from 'livekit-client';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
@@ -135,9 +136,9 @@ export function useConferenceWhiteboard({
     }
   }, []);
 
-  useEffect(() => {
-    void refreshSnapshot();
+  useConferenceLiveData(['conference_whiteboard_pages','conference_whiteboard_boards'], refreshSnapshot, client, roomId);
 
+  useEffect(() => {
     const decoder = new TextDecoder();
     const onData = (
       payload: Uint8Array,
@@ -202,22 +203,6 @@ export function useConferenceWhiteboard({
     room.on(RoomEvent.DataReceived, onData);
     room.on(RoomEvent.Reconnected, onReconnected);
 
-    const channel = client
-      .channel(`conference-whiteboard-v2-${roomId}-${currentUserId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_whiteboard_pages',
-        filter: `room_id=eq.${roomId}`,
-      }, scheduleRefresh)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_whiteboard_boards',
-        filter: `room_id=eq.${roomId}`,
-      }, scheduleRefresh)
-      .subscribe();
-
     const presenceTimer = window.setInterval(() => {
       const cutoff = Date.now() - 1500;
       setPresence((current) => {
@@ -234,7 +219,6 @@ export function useConferenceWhiteboard({
     return () => {
       room.off(RoomEvent.DataReceived, onData);
       room.off(RoomEvent.Reconnected, onReconnected);
-      void client.removeChannel(channel);
       window.clearInterval(presenceTimer);
       if (refreshTimerRef.current !== null) {
         window.clearTimeout(refreshTimerRef.current);

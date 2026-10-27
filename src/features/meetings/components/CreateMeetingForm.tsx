@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../../../shared/realtime/useLiveData';
 import { createMeetingSeries } from '../services/createMeetingSeries';
 import {
   useEffect,
@@ -437,6 +438,8 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
     }
     finally { setLoading(false); }
   };
+
+  useLiveData(LIVE_DATA.contacts, async () => { if (userId) { const next = await fetchMeetingContacts(userId); setContacts(next); setAllContacts(next); } }, !!userId, undefined, userId || '');
 
   const resetForm = () => {
     seriesOperationRef.current = crypto.randomUUID();

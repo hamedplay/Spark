@@ -1,3 +1,4 @@
+import { useConferenceLiveData } from './useConferenceLiveData';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import {
@@ -53,20 +54,7 @@ export function useConferenceSpeakerTimer({ client, roomId, currentUserId }: Par
     }
   }, [client, roomId]);
 
-  useEffect(() => {
-    void refresh();
-
-    const channel = client.channel(`speaker-timer-${roomId}-${currentUserId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_speaker_sessions',
-        filter: `room_id=eq.${roomId}`,
-      }, () => void refresh())
-      .subscribe();
-
-    return () => { void client.removeChannel(channel); };
-  }, [client, currentUserId, refresh, roomId]);
+  useConferenceLiveData(['conference_speaker_sessions'], refresh, client, roomId, true);
 
   useEffect(() => {
     const timer = window.setInterval(() => setDisplayTick(Date.now()), 500);

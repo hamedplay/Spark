@@ -1,3 +1,4 @@
+import { useConferenceLiveData } from './useConferenceLiveData';
 import { useCallback, useEffect, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import {
@@ -56,26 +57,8 @@ export function useConferenceModeratorChat({
     }
   }, [canUse, client, roomId]);
 
-  useEffect(() => {
-    if (!canUse) {
-      setMessages([]);
-      return undefined;
-    }
-
-    void refreshMessages();
-
-    const channel = client
-      .channel(`conference-moderator-chat-${roomId}-${currentUserId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_moderator_messages',
-        filter: `room_id=eq.${roomId}`,
-      }, () => void refreshMessages())
-      .subscribe();
-
-    return () => { void client.removeChannel(channel); };
-  }, [canUse, client, currentUserId, refreshMessages, roomId]);
+  useConferenceLiveData(['conference_moderator_messages'], refreshMessages, client, roomId, canUse);
+  useEffect(() => { if (!canUse) setMessages([]); }, [canUse]);
 
   const resetComposer = useCallback(() => {
     setMessage('');

@@ -1,10 +1,11 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { useEffect, useRef, useState } from 'react';
 import { watchLiveData } from './liveDataBus';
 export { LIVE_DATA } from './liveDataScopes';
 
 // Returns a ref so existing data loaders can refresh quietly, without resetting
 // loading screens, filters, pagination, editor drafts or the calendar viewport.
-export function useLiveData(tables: readonly string[], refresh: () => Promise<unknown>, enabled = true) {
+export function useLiveData(tables: readonly string[], refresh: () => Promise<unknown>, enabled = true, client?: SupabaseClient, scopeKey = '') {
   const latest = useRef(refresh); latest.current = refresh;
   const quiet = useRef(false);
   const key = [...tables].sort().join(',');
@@ -13,8 +14,8 @@ export function useLiveData(tables: readonly string[], refresh: () => Promise<un
     return watchLiveData(key.split(','), async () => {
       quiet.current = true;
       try { await latest.current(); } finally { quiet.current = false; }
-    });
-  }, [key, enabled]);
+    }, client);
+  }, [key, enabled, client, scopeKey]);
   return quiet;
 }
 

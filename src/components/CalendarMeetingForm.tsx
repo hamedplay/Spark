@@ -1,3 +1,4 @@
+import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { createMeetingSeries } from '../features/meetings/services/createMeetingSeries';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { FormEvent } from 'react';
@@ -151,6 +152,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     setContacts(data || []);
     setAllContacts(data || []);
   };
+
+  useLiveData(LIVE_DATA.contacts, async () => { if (userId) await fetchContacts(userId); }, !!userId);
 
   useEffect(() => {
     (async () => {

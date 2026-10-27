@@ -1,6 +1,6 @@
+import { watchLiveData } from '../../shared/realtime/liveDataBus';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { getStartupSystemConfig } from '../../lib/startupSystemConfig';
 
 interface AppRuntimeConfig {
   maintenanceMode: boolean;
@@ -29,37 +29,20 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
   useEffect(() => {
     let cancelled = false;
 
-    const applyRow = (row: RuntimeConfigRow | null | undefined) => {
-      if (!row) return;
-
-      if (row.section === 'security' && row.key === 'maintenance_mode') {
-        setConfig((current) => ({ ...current, maintenanceMode: row.value === 'true' }));
-      }
-
-      if (row.section === 'spark' && row.key === 'spark_visible') {
-        setConfig((current) => ({ ...current, sparkVisible: row.value === 'true' }));
-      }
-    };
-
-    const load = async (useSharedStartup = false) => {
+    let revision = 0;
+    const load = async () => {
+      const request = ++revision;
       let rows: RuntimeConfigRow[];
       try {
-        if (useSharedStartup) {
-          rows = await getStartupSystemConfig();
-        } else {
-          const { data, error } = await supabase
-            .from('system_config')
-            .select('section,key,value')
-            .in('section', ['security', 'spark'])
-            .in('key', ['maintenance_mode', 'spark_visible']);
-          if (error) return;
-          rows = (data ?? []) as RuntimeConfigRow[];
-        }
+        const { data, error } = await supabase.from('system_config').select('section,key,value')
+          .in('section', ['security','spark']).in('key', ['maintenance_mode','spark_visible']);
+        if (error) return;
+        rows = (data ?? []) as RuntimeConfigRow[];
       } catch {
         return;
       }
 
-      if (cancelled) return;
+      if (cancelled || request !== revision) return;
 
       const next: AppRuntimeConfig = { ...INITIAL_CONFIG };
       for (const row of rows) {
@@ -72,7 +55,7 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
       setConfig(next);
     };
 
-    void load(true);
+    const stop = watchLiveData(['system_config'], load);
 
     const handleSparkVisibleEvent = (event: Event) => {
       const detail = (event as CustomEvent<{ visible?: boolean }>).detail;
@@ -89,27 +72,11 @@ export function useAppRuntimeConfig(): AppRuntimeConfig {
     window.addEventListener('spark-visible-changed', handleSparkVisibleEvent);
     window.addEventListener('maintenance-mode-changed', handleMaintenanceModeEvent);
 
-    const channel = supabase
-      .channel('app-runtime-config')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'system_config' },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            void load();
-            return;
-          }
-
-          applyRow(payload.new as RuntimeConfigRow);
-        },
-      )
-      .subscribe();
-
     return () => {
       cancelled = true;
       window.removeEventListener('spark-visible-changed', handleSparkVisibleEvent);
       window.removeEventListener('maintenance-mode-changed', handleMaintenanceModeEvent);
-      void supabase.removeChannel(channel);
+      stop();
     };
   }, []);
 

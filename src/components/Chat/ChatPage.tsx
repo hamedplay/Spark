@@ -1,9 +1,9 @@
+import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { MessageCircle, Plus, Loader as Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-import { createChatRealtimeSync } from './chatRealtimeSync';
 import { ChatSidebar } from './ChatSidebar';
 import type { SidebarTab } from './ChatSidebar';
 import type { ConversationWithProfile, UserProfile } from './types';
@@ -48,7 +48,6 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
   // Call state is managed globally in GlobalCallContext
   const { startCall: globalStartCall } = useGlobalCall();
 
-  const convChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const conversationRequestRef = useRef(0);
   const pendingConvIdRef = useRef<string | null>(null);
 
@@ -182,11 +181,11 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
     setLoadingConvs(false);
   }, []);
 
+  useLiveData(LIVE_DATA.chat, async () => { if (currentUserId) await fetchConversations(currentUserId); }, !!currentUserId, undefined, currentUserId || '');
+
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    let sync: ReturnType<typeof createChatRealtimeSync> | undefined;
-    const channelName = `convs-${crypto.randomUUID()}`;
 
     (async () => {
       let userId = providedCurrentUserId;
@@ -210,26 +209,12 @@ export function ChatPage({ currentUserId: providedCurrentUserId = null, onNaviga
       if (cancelled) return;
       setCurrentUserProfile(profile || { user_id: userId, full_name: null, email: fallbackEmail });
 
-      sync = createChatRealtimeSync(() => fetchConversations(userId));
-      void sync.request();
-
-      convChannelRef.current = supabase
-        .channel(channelName)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' },
-          () => { void sync?.request(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' },
-          () => { void sync?.request(); })
-        .subscribe(status => sync?.onStatus(status));
 
     })();
     return () => {
       cancelled = true;
       conversationRequestRef.current++;
-      sync?.dispose();
-      if (convChannelRef.current) {
-        supabase.removeChannel(convChannelRef.current);
-        convChannelRef.current = null;
-      }
+
     };
   }, [providedCurrentUserId, fetchConversations]);
 

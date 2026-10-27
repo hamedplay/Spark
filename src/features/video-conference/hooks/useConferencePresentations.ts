@@ -1,3 +1,4 @@
+import { useConferenceLiveData } from './useConferenceLiveData';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RoomEvent, type Room } from 'livekit-client';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
@@ -79,7 +80,6 @@ export function useConferencePresentations({
   const [lasers, setLasers] = useState<Record<string, ConferencePresentationLaser>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const refreshTimerRef = useRef<number | null>(null);
   const lastLaserRef = useRef(0);
 
   const canUse = authorization.loaded && authorization.role !== null;
@@ -107,45 +107,8 @@ export function useConferencePresentations({
     }
   }, [canUse, client, roomId]);
 
-  const scheduleRefresh = useCallback(() => {
-    if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
-    refreshTimerRef.current = window.setTimeout(() => {
-      refreshTimerRef.current = null;
-      void refresh();
-    }, 200);
-  }, [refresh]);
-
-  useEffect(() => {
-    void refresh();
-    if (!canUse) return undefined;
-
-    const channel = client
-      .channel(`conference-presentations-${roomId}-${currentUserId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_presentations',
-        filter: `room_id=eq.${roomId}`,
-      }, scheduleRefresh)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_presentation_state',
-        filter: `room_id=eq.${roomId}`,
-      }, scheduleRefresh)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_presentation_annotations',
-        filter: `room_id=eq.${roomId}`,
-      }, scheduleRefresh)
-      .subscribe();
-
-    return () => {
-      void client.removeChannel(channel);
-      if (refreshTimerRef.current !== null) window.clearTimeout(refreshTimerRef.current);
-    };
-  }, [canUse, client, currentUserId, refresh, roomId, scheduleRefresh]);
+  useConferenceLiveData(['conference_presentations', 'conference_presentation_state', 'conference_presentation_annotations'], refresh, client, roomId, canUse);
+  useEffect(() => { if (!canUse) void refresh(); }, [canUse, refresh]);
 
   const selected = useMemo(
     () => snapshot.presentations.find((item) => item.id === selectedId) || null,

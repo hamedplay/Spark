@@ -1,3 +1,4 @@
+import { useLiveData } from '../../shared/realtime/useLiveData';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CheckCircle2, Loader2, Radio, ShieldAlert, Video, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -202,21 +203,10 @@ export function VideoConferencePage() {
     })();
   }, [fetchRooms, fetchRuntimeConfig]);
 
-  useEffect(() => {
-    if (!userId) return;
-    const timer = window.setInterval(() => { void fetchRuntimeConfig(); }, 30000);
-    return () => window.clearInterval(timer);
-  }, [userId, fetchRuntimeConfig]);
-
-  useEffect(() => {
-    if (!userId) return;
-    const ch = supabase.channel('conf-rooms-lobby')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conference_rooms' }, () => {
-        if (!activeRoomRef.current) fetchRooms(userIdRef.current || undefined);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [userId, fetchRooms]);
+  useLiveData(['system_config'], fetchRuntimeConfig, !!userId);
+  useLiveData(['conference_rooms','conference_participants'], async () => {
+    if (!activeRoomRef.current) await fetchRooms(userIdRef.current || undefined);
+  }, !!userId, undefined, userId || '');
 
   const readRecordingConsentState = useCallback(async (roomId: string) => {
     const { data, error } = await supabase.rpc(

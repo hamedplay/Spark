@@ -1,3 +1,4 @@
+import { useConferenceLiveData } from './useConferenceLiveData';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import {
@@ -79,34 +80,8 @@ export function useConferencePolls({
     }
   }, [canUse, client, roomId]);
 
-  useEffect(() => {
-    void refresh();
-    if (!canUse) return undefined;
-
-    const channel = client
-      .channel(`conference-polls-${roomId}-${currentUserId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_polls',
-        filter: `room_id=eq.${roomId}`,
-      }, () => void refresh())
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_poll_options',
-        filter: `room_id=eq.${roomId}`,
-      }, () => void refresh())
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_poll_votes',
-        filter: `room_id=eq.${roomId}`,
-      }, () => void refresh())
-      .subscribe();
-
-    return () => { void client.removeChannel(channel); };
-  }, [canUse, client, currentUserId, refresh, roomId]);
+  useConferenceLiveData(['conference_polls', 'conference_poll_options', 'conference_poll_votes'], refresh, client, roomId, canUse);
+  useEffect(() => { if (!canUse) void refresh(); }, [canUse, refresh]);
 
   useEffect(() => {
     if (!snapshot.loaded) return undefined;

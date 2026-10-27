@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useConferenceLiveData } from './useConferenceLiveData';
+import { useCallback, useState } from 'react';
 import type { ConferenceSupabaseClient } from '../../../components/VideoConference/conferenceClient';
 import { getMyConferenceAuthorization } from '../services/conferenceAuthorization';
 import type { ConferenceAuthorization } from '../types/conference.types';
@@ -27,29 +28,7 @@ export function useConferenceAuthorization({ client, roomId, currentUserId }: Pa
     }
   }, [client, roomId]);
 
-  useEffect(() => {
-    void refreshAuthorization();
-
-    const channel = client.channel(`sfu-rbac-${roomId}-${currentUserId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'conference_participants',
-        filter: `room_id=eq.${roomId}`,
-      }, (payload) => {
-        const row = (payload.new || payload.old) as { user_id?: string };
-        if (row.user_id === currentUserId) void refreshAuthorization();
-      })
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'conference_rooms',
-        filter: `id=eq.${roomId}`,
-      }, () => void refreshAuthorization())
-      .subscribe();
-
-    return () => { void client.removeChannel(channel); };
-  }, [client, currentUserId, refreshAuthorization, roomId]);
+  useConferenceLiveData(['conference_participants', 'conference_rooms', 'conference_role_assignments', 'conference_role_permissions', 'conference_permissions', 'conference_rbac_roles'], refreshAuthorization, client, roomId, true);
 
   return { authorization, refreshAuthorization };
 }

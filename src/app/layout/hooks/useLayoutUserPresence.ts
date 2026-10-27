@@ -1,3 +1,4 @@
+import { useLiveData } from '../../../shared/realtime/useLiveData';
 import { useEffect, useState } from 'react';
 
 import { getCurrentAuthUserId } from '../../../features/auth';
@@ -19,6 +20,11 @@ export function useLayoutUserPresence(
 ): LayoutUserProfile | null {
   const [userProfile, setUserProfile] =
     useState<LayoutUserProfile | null>(null);
+
+  useLiveData(['profiles'], async () => {
+    const userId = providedUserId !== undefined ? providedUserId : await getCurrentAuthUserId();
+    if (userId) setUserProfile(await fetchLayoutUserProfile(userId));
+  }, providedUserId !== null, undefined, providedUserId || '');
 
   useEffect(() => {
     let disposed = false;
