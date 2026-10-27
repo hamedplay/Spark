@@ -429,6 +429,7 @@ export function CalendarPage({
       const tehranNow = new Date(now.getTime() + IST_OFFSET_MS);
       const todayStr = `${tehranNow.getUTCFullYear()}-${String(tehranNow.getUTCMonth()+1).padStart(2,'0')}-${String(tehranNow.getUTCDate()).padStart(2,'0')}`;
       meetings.forEach(m => {
+        if (m.series_id) return; // Server scheduler owns reminders for managed series.
         if (!m.reminder_minutes || m.reminder_minutes === 0) return;
         if (!m.start_time) return;
         const isParticipant = m.user_id === currentUserId ||

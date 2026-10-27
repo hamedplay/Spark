@@ -84,6 +84,15 @@ Deno.serve(async (req: Request) => {
 
     const body = await req.json();
     let mode: string = body.mode || "send";
+    if (body.category === 'meeting' && String(body.eventType || '').startsWith('series_') && caller.userId !== 'service') {
+      return json({ ok: false, errorCode: 'SERVER_MANAGED_EVENT' }, 403);
+    }
+    if (body.category === 'meeting' && body.meetingId && ['invite','change','cancel','meeting_created','informee_invite','informee_change','informee_cancel'].includes(body.eventType)) {
+      const identity = await supabase.from('meetings').select('series_id').eq('id', body.meetingId).maybeSingle();
+      if (identity.error) return json({ ok: false, errorCode: 'SERIES_ROUTING_UNAVAILABLE' }, 503);
+      if (identity.data?.series_id) return json({ ok: true, status: 'skipped', reason: 'SERVER_MANAGED_SERIES' });
+    }
+
     let providerId: string | undefined = body.providerId;
     isAuthOtp = mode === 'auth_otp';
 

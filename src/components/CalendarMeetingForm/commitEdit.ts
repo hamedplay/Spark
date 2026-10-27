@@ -80,7 +80,24 @@ export async function commitCalendarMeetingEdit({
       agendaItems,
     } = snapshot;
 
-    if (baseFields && prefillEditAllIds && prefillEditAllIds.length > 0) {
+    const { data: identity, error: identityError } = await supabase.from('meetings').select('series_id').eq('id', prefillMeetingId).single();
+    if (identityError) throw identityError;
+    const managedSeries = Boolean((identity as any)?.series_id);
+    let seriesRoomId: string | null = null;
+    if (managedSeries && snapshot.isOnline && !snapshot.wasOnline) {
+      const room = await createConferenceRoom(userId, subject);
+      if (!room?.id) throw new Error('خطا در ایجاد اتاق جلسه آنلاین؛ لطفاً دوباره تلاش کنید');
+      seriesRoomId = room.id;
+    }
+    if (managedSeries) {
+      const patch = { ...(baseFields && prefillEditAllIds?.length ? baseFields : updateRecord), participant_user_ids: selectedParticipantIds, ...(seriesRoomId ? { conference_room_id: seriesRoomId } : {}) };
+      const { error } = await (supabase as any).rpc('update_meeting_series', {
+        p_ids: prefillEditAllIds?.length ? prefillEditAllIds : [prefillMeetingId],
+        p_patch: patch,
+        p_notify: notifyExistingParticipants,
+      });
+      if (error) throw error;
+    } else if (baseFields && prefillEditAllIds && prefillEditAllIds.length > 0) {
       const { error } = await supabase.from('meetings').update(baseFields).in('id', prefillEditAllIds);
       if (error) throw error;
     } else {
@@ -88,7 +105,7 @@ export async function commitCalendarMeetingEdit({
       if (error) throw error;
     }
 
-    if (snapshot.isOnline && !snapshot.wasOnline) {
+    if (!managedSeries && snapshot.isOnline && !snapshot.wasOnline) {
       const room = await createConferenceRoom(userId, subject);
       if (!room?.id) throw new Error('خطا در ایجاد اتاق جلسه آنلاین؛ لطفاً دوباره تلاش کنید');
       const { error: roomUpdateError } = await supabase
@@ -118,6 +135,11 @@ export async function commitCalendarMeetingEdit({
       if (agendaInsertError) throw new Error('خطا در ذخیره دستور جلسه؛ لطفاً دوباره تلاش کنید');
     }
 
+    if (managedSeries) {
+      setEditDecision(null);
+      onSuccess(subject, true);
+      return;
+    }
     let meetingDiffs: MeetingParticipantDiff[] = [];
     if (prefillEditAllIds && prefillEditAllIds.length > 0) {
       const { data: bulkResult, error: syncError } = await supabase.rpc('sync_meeting_participants_bulk_v2', {

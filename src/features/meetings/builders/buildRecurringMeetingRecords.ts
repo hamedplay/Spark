@@ -38,6 +38,7 @@ export function buildRecurringMeetingRecords(
   const type = input.repeatType;
   const interval = input.repeatInterval;
   const endDate = input.repeatEndDate;
+  if (!Number.isInteger(interval) || interval < 1) throw new Error('فاصله تکرار نامعتبر است');
 
   let endMs: number;
   if (endDate.includes('/') && endDate.split('/').length === 3) {
@@ -70,6 +71,7 @@ export function buildRecurringMeetingRecords(
     while (currentDate.getTime() <= endMs) {
       const jDate = moment(currentDate).format('jYYYY/jMM/jDD');
       records.push({ ...baseWithoutId, request_date: currentDate.toISOString(), request_jalaali_date: jDate, status: 'open' });
+      if (records.length > 599) throw new Error('حداکثر ۶۰۰ نوبت در هر سری قابل ثبت است');
       currentDate = new Date(currentDate.getTime() + 7 * interval * 86400000);
     }
   } else if (type === 'monthly') {
@@ -86,6 +88,7 @@ export function buildRecurringMeetingRecords(
         if (d.getTime() > baseDate.getTime()) {
           const jDate = moment(d).format('jYYYY/jMM/jDD');
           records.push({ ...baseWithoutId, request_date: d.toISOString(), request_jalaali_date: jDate, status: 'open' });
+          if (records.length > 599) throw new Error('حداکثر ۶۰۰ نوبت در هر سری قابل ثبت است');
         }
         mo += interval;
         if (mo >= 12) { y += Math.floor(mo / 12); mo = mo % 12; }
@@ -109,6 +112,7 @@ export function buildRecurringMeetingRecords(
         if (targetDate.getTime() > baseDate.getTime()) {
           const jDate = moment(targetDate).format('jYYYY/jMM/jDD');
           records.push({ ...baseWithoutId, request_date: targetDate.toISOString(), request_jalaali_date: jDate, status: 'open' });
+          if (records.length > 599) throw new Error('حداکثر ۶۰۰ نوبت در هر سری قابل ثبت است');
         }
         mo += interval;
       }

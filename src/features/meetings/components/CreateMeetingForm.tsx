@@ -1,3 +1,4 @@
+import { createMeetingSeries } from '../services/createMeetingSeries';
 import {
   useEffect,
   useRef,
@@ -28,13 +29,11 @@ import {
 import { fetchMeetingPeoplePrefill } from '../repositories/meetingPrefillRepository';
 import {
   createPrimaryMeeting,
-  insertRecurringMeetingBatch,
   updatePrimaryMeeting,
 } from '../repositories/meetingPersistenceRepository';
 import { buildMeetingPersistenceRecord } from '../builders/buildMeetingPersistenceRecord';
 import {
   buildRecurringMeetingRecords,
-  type RecurringMeetingBaseRecord,
 } from '../builders/buildRecurringMeetingRecords';
 import { insertMeetingParticipantSnapshots } from '../repositories/meetingParticipantsRepository';
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
@@ -127,6 +126,7 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
   const [showAddExternal, setShowAddExternal] = useState(false);
 
   // Repeat
+  const seriesOperationRef = useRef(crypto.randomUUID());
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatType, setRepeatType] = useState<'weekly' | 'monthly'>('weekly');
   const [repeatInterval, setRepeatInterval] = useState(1);
@@ -397,23 +397,27 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
 
         toast.success('جلسه ویرایش شد');
       } else {
-        const meetingData = await createPrimaryMeeting(meetingRecord);
+        let meetingData: { id: string } | null;
+        if (repeatEnabled) {
+          if (!repeatEndDate) throw new Error('پایان بازه تکرار را مشخص کنید');
+          const records = buildRecurringMeetingRecords({ baseRecord: meetingRecord, repeatType, repeatInterval, repeatEndDate, repeatWeekday, repeatMonthlyMode, repeatMonthlyWeekday });
+          const ids = await createMeetingSeries(seriesOperationRef.current, [meetingRecord, ...records], agendaEnabled ? agendaItems : [], repeatType === 'weekly' ? `هر ${repeatInterval} هفته` : `هر ${repeatInterval} ماه`);
+          meetingData = { id: ids[0] };
+        } else {
+          meetingData = await createPrimaryMeeting(meetingRecord);
 
-        if (selectedParticipants.length > 0 && meetingData) {
-          await insertMeetingParticipantSnapshots(
-            meetingData.id,
-            selectedParticipants
-          );
+          if (selectedParticipants.length > 0 && meetingData) {
+            await insertMeetingParticipantSnapshots(
+              meetingData.id,
+              selectedParticipants
+            );
+          }
+
+          if (agendaEnabled && agendaItems.length > 0 && meetingData) {
+            await insertMeetingAgendaItems(meetingData.id, agendaItems);
+          }
+
         }
-
-        if (repeatEnabled && meetingData && repeatEndDate) {
-          await createRepeatMeetings(meetingData.id, meetingRecord);
-        }
-
-        if (agendaEnabled && agendaItems.length > 0 && meetingData) {
-          await insertMeetingAgendaItems(meetingData.id, agendaItems);
-        }
-
         logAudit({ module: 'meetings', action: 'meeting_created', entity_name: subject, entity_id: meetingData?.id, details: `جلسه جدید "${subject}" ثبت شد`, severity: 'info' });
 
         toast.success('درخواست جلسه ثبت شد');
@@ -434,31 +438,8 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
     finally { setLoading(false); }
   };
 
-  // ---- Repeat meeting creation (fixed) ----
-  const createRepeatMeetings = async (
-    _originalId: string,
-    baseRecord: RecurringMeetingBaseRecord
-  ) => {
-    void _originalId;
-
-    const repeatMeetings = buildRecurringMeetingRecords({
-      baseRecord,
-      repeatType,
-      repeatInterval,
-      repeatEndDate,
-      repeatWeekday,
-      repeatMonthlyMode,
-      repeatMonthlyWeekday,
-    });
-
-    if (repeatMeetings.length > 0) {
-      const repeatError = await insertRecurringMeetingBatch(repeatMeetings);
-      if (repeatError) { console.error('Repeat insert error:', repeatError); toast.error('خطا در ایجاد جلسات تکراری: ' + repeatError.message); }
-      else toast.success(`${repeatMeetings.length} جلسه تکراری ایجاد شد`);
-    }
-  };
-
   const resetForm = () => {
+    seriesOperationRef.current = crypto.randomUUID();
     setSubject(''); setRequestDuration('1 ساعت'); setLocation(''); setRepresentative('');
     setPhone(''); setNotes(''); setPriority('medium'); setStatusType('requested'); setSaveContact(false);
     setRepFromContacts(false);

@@ -36,3 +36,6 @@ verify_jwt = false
 
 [functions.scheduler-dispatch]
 verify_jwt = false
+
+[functions.meeting-notification-worker]
+verify_jwt = false

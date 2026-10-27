@@ -162,7 +162,8 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
               </button>
               <button onClick={async () => {
                 const m = repeatEditDialog.meeting;
-                const { data: allRepeat } = await supabase.from('meetings').select('id').eq('subject', m.subject).eq('user_id', m.user_id || '').gte('request_date', m.request_date);
+                if (!m.series_id) { openEditForm(m); setRepeatEditDialog(null); return; }
+                const { data: allRepeat } = await supabase.from('meetings').select('id').eq('series_id', m.series_id).eq('user_id', m.user_id || '').gte('request_date', m.request_date);
                 if (allRepeat && allRepeat.length > 0) {
                   const ids = allRepeat.map((r: any) => r.id);
                   openEditForm({ ...m, id: m.id, _editAllIds: ids } as any);
@@ -175,12 +176,13 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
                 </div>
                 <div>
                   <p className="font-semibold text-gray-800 dark:text-white text-sm">این و جلسات بعدی</p>
-                  <p className="text-xs text-gray-400 mt-0.5">از این جلسه به بعد تغییر می‌کنند</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{repeatEditDialog.meeting.series_id ? 'از این جلسه به بعد تغییر می‌کنند' : 'سری قدیمی: فقط همین نوبت قابل انتخاب است'}</p>
                 </div>
               </button>
               <button onClick={async () => {
                 const m = repeatEditDialog.meeting;
-                const { data: allRepeat } = await supabase.from('meetings').select('id').eq('subject', m.subject).eq('user_id', m.user_id || '');
+                if (!m.series_id) { openEditForm(m); setRepeatEditDialog(null); return; }
+                const { data: allRepeat } = await supabase.from('meetings').select('id').eq('series_id', m.series_id).eq('user_id', m.user_id || '');
                 if (allRepeat && allRepeat.length > 0) openEditForm({ ...m, id: m.id, _editAllIds: allRepeat.map((r: any) => r.id) } as any);
                 setRepeatEditDialog(null);
               }}
@@ -190,7 +192,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
                 </div>
                 <div>
                   <p className="font-semibold text-gray-800 dark:text-white text-sm">همه جلسات</p>
-                  <p className="text-xs text-gray-400 mt-0.5">تمام جلسات تکراری تغییر می‌کنند</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{repeatEditDialog.meeting.series_id ? 'تمام جلسات تکراری تغییر می‌کنند' : 'سری قدیمی: فقط همین نوبت قابل انتخاب است'}</p>
                 </div>
               </button>
               <button onClick={() => setRepeatEditDialog(null)} className="w-full py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">انصراف</button>

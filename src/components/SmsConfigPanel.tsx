@@ -1,3 +1,4 @@
+import { RecurringMeetingPolicy } from './SmsConfig/RecurringMeetingPolicy';
 import { useState } from 'react';
 import { MessageSquare, Globe, Group as GroupIcon, FileText, FlaskConical, ChartBar as BarChart2, Clock3 } from 'lucide-react';
 
@@ -39,7 +40,7 @@ export function SmsConfigPanel() {
       {tab === 'groups'     && <GroupsTab />}
       {tab === 'templates'  && <TemplatesTab />}
       {tab === 'test'       && <TestTab />}
-      {tab === 'schedule'   && <SmsDeliveryPolicyTab />}
+      {tab === 'schedule'   && <div className="space-y-4"><RecurringMeetingPolicy /><SmsDeliveryPolicyTab /></div>}
       {tab === 'reports'    && <ReportsTab />}
     </div>
   );

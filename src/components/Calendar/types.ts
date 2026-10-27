@@ -20,6 +20,7 @@ export interface MeetingData {
   calendar_id?: string | null;
   external_participants?: string[] | null;
   participant_user_ids?: string[] | null;
+  series_id?: string | null;
   repeat_type?: string | null;
   repeat_interval?: number | null;
   repeat_end_date?: string | null;

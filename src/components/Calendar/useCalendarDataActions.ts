@@ -72,7 +72,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         { data: exclusionRows, error: exclusionError },
       ] = await Promise.all([
         supabase.from('meetings')
-          .select('id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
+          .select('id,series_id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
           .neq('status', 'closed')
           .gte('request_date', queryFrom)
           .lte('request_date', queryTo)
@@ -426,6 +426,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
 
       // Helper: send cancel notification to all participants/observers and external guests.
       const sendCancelNotifications = async (m: MeetingData) => {
+        if (m.series_id) return; // Managed series notifications are committed by DB triggers.
         try {
           const pIds = (m.participant_user_ids || []) as string[];
           const notifyIds = [...pIds, ...((m.notify_users || []) as string[])].filter(uid => uid !== user.id);
@@ -514,17 +515,8 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         }
 
         if (deleteRepeating) {
-          // Notify participants of each repeating meeting before bulk delete
-          const { data: repeatingMeetings } = await supabase
-            .from('meetings')
-            .select('id,subject,participant_user_ids,notify_users,external_participants,external_informees,request_date,start_time,end_time')
-            .eq('user_id', user.id)
-            .eq('subject', meeting.subject)
-            .neq('repeat_type', 'none');
-          if (repeatingMeetings?.length) {
-            await Promise.all(repeatingMeetings.map(m => sendCancelNotifications(m as MeetingData)));
-          }
-          const { error } = await supabase.from('meetings').delete().eq('user_id', user.id).eq('subject', meeting.subject).neq('repeat_type', 'none');
+          if (!meeting.series_id) throw new Error('این سری قدیمی شناسه مشترک ندارد؛ برای جلوگیری از حذف اشتباه، هر نوبت را جداگانه حذف کنید');
+          const { error } = await supabase.from('meetings').delete().eq('user_id', user.id).eq('series_id', meeting.series_id);
           if (error) throw error;
         } else {
           await sendCancelNotifications(meeting);

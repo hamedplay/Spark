@@ -25,39 +25,22 @@ test('adding an attendee with the same Tehran calendar day does not change the m
   assert.deepEqual(computeScopedMeetingChangeSet(before, after, true).importantFields, []);
 });
 
-test('creation dispatches every audience for every actual inserted occurrence', async () => {
+test('recurring creation submits one atomic series command without per-occurrence browser dispatch', async () => {
   const source = read('src/components/CalendarMeetingForm.tsx');
-  const start = source.indexOf('      const internalSmsResults: SmsDispatchResult[] = [];', source.indexOf('let notificationMeetings'));
-  const end = source.indexOf('      if (saveContact', start);
-  const notifications: any[] = [];
-  const sms: any[][] = [];
-  const meetings = [
-    { id: 'first', request_jalaali_date: '1405/08/07' },
-    { id: 'second', request_jalaali_date: '1405/08/14' },
-    { id: 'third', request_jalaali_date: '1405/08/21' },
-  ];
-  const run = evaluate(`async function run() { ${source.slice(start, end)} }`, {
-    notificationMeetings: meetings, userId: 'owner', subject: 'test', senderName: 'Owner',
-    smsPlaceholders: { location_part: '' }, agendaSummary: '', meetingTimeStr: '07:00-08:00',
-    participantIds: ['participant'], observerIds: ['observer'], participantNameMap: {},
-    sendSms: true, selectedExternal: ['External'], selectedExternalInformees: ['Informee'], contacts: [],
-    getMeetingTemplateKey: () => 'meeting_created',
-    insertNotification: async (payload: any) => { notifications.push(payload); return { status: 'sent' }; },
-    sendSmsToExternals: async (...args: any[]) => { sms.push(args); return { ok: true, sent: 1, skipped: 0 }; },
-    showSmsSummary: (internal: any[], external: any) => { assert.equal(internal.length, 6); assert.equal(external.sent, 6); },
-  }, 'run');
+  const start = source.indexOf('        if (!repeatEndDate) throw new Error');
+  const end = source.indexOf('      } else {', start);
+  const calls: any[][] = [];
+  const repeatRecords = Array.from({length:51},(_,n)=>({request_date:`date-${n}`}));
+  const run = evaluate(`async function run() { ${source.slice(start,end)} }`, {
+    repeatEndDate:'1406/12/29',record:{subject:'test'},repeatType:'weekly',repeatInterval:1,repeatWeekday:3,
+    repeatMonthlyMode:'specific',repeatMonthlyNth:1,repeatMonthlyNthWeekday:0,
+    buildCalendarRepeatRecords:()=>repeatRecords,seriesOperationRef:{current:'stable-operation'},
+    meetingDateStr:'1405/08/05',agendaEnabled:false,agendaItems:[],
+    createMeetingSeries:async(...args:any[])=>{calls.push(args);return Array.from({length:52},(_,n)=>String(n));},
+    toast:{success(){}},
+  },'run');
   await run();
-  assert.equal(notifications.length, 9);
-  assert.equal(sms.length, 6);
-  assert.equal(new Set([...notifications.map(n => n.eventKey), ...sms.map(s => s[7])]).size, 15);
-  for (const meeting of meetings) {
-    const events = notifications.filter(n => n.meetingId === meeting.id);
-    assert.deepEqual(events.map(n => n.userId), ['owner', 'participant', 'observer']);
-    assert.ok(events.every(n => n.placeholders.meeting_date === meeting.request_jalaali_date));
-    const external = sms.filter(s => s[6] === meeting.id);
-    assert.deepEqual(external.map(s => s[5]), ['invite', 'informee_invite']);
-    assert.ok(external.every(s => s[4].meeting_date === meeting.request_jalaali_date));
-  }
+  assert.equal(calls.length,1);assert.equal(calls[0][0],'stable-operation');assert.equal(calls[0][1].length,52);assert.match(calls[0][3],/سه‌شنبه/);
 });
 
 for (const importantChange of [false, true]) {
@@ -71,7 +54,7 @@ for (const importantChange of [false, true]) {
       from: () => ({
         update: () => ({ in: async () => ({}), eq: async () => ({}) }),
         delete: () => ({ eq: async () => ({}) }),
-        select: () => ({ in: async () => ({ data: rpcDiffs.map(d => ({ id: d.meeting_id, subject: 'test', request_date: before.request_date, start_time: '07:00', end_time: '08:00' })) }) }),
+        select: () => ({ eq: () => ({single:async()=>({data:{series_id:null}})}), in: async () => ({ data: rpcDiffs.map(d => ({ id: d.meeting_id, subject: 'test', request_date: before.request_date, start_time: '07:00', end_time: '08:00' })) }) }),
       }),
       rpc: async () => ({ data: rpcDiffs }),
     };
@@ -111,26 +94,25 @@ for (const importantChange of [false, true]) {
 }
 
 
-test('repeat creation returns saved identifiers and dates used for dispatch', async () => {
+test('calendar repeat builder only computes records; persistence belongs to the atomic series command', () => {
   const source = read('src/components/CalendarMeetingForm/services.ts');
-  const saved = [
-    { id: 'saved-repeat-1', request_jalaali_date: '1405/08/14', participant_user_ids: ['participant'] },
-    { id: 'saved-repeat-2', request_jalaali_date: '1405/08/21', participant_user_ids: ['participant'] },
-  ];
-  const create = evaluate(source.slice(source.indexOf('export async function createRepeatMeetings')).replace('export async', 'async'), {
-    moment,
-    toast: { success() {}, error(message: string) { assert.fail(message); } },
-    supabase: { from: () => ({
-      insert: () => ({ select: async (columns: string) => {
-        assert.ok(columns.includes('request_jalaali_date'));
-        return { data: saved };
-      } }),
-      upsert: async () => ({}),
-    }) },
-  }, 'createRepeatMeetings');
-  const result = await create({
-    baseRecord: { request_date: '2026-11-04T20:30:00.000Z', user_id: 'owner' },
-    type: 'weekly', interval: 1, endDate: '1405/08/21', repeatWeekday: 5,
-  });
-  assert.deepEqual(result, saved.map(({ id, request_jalaali_date }) => ({ id, request_jalaali_date })));
+  const build = evaluate(source.slice(source.indexOf('export function buildCalendarRepeatRecords')).replace('export function','function'), { moment }, 'buildCalendarRepeatRecords');
+  const result = build({baseRecord:{request_date:'2026-10-28T20:30:00.000Z',user_id:'owner'},type:'weekly',interval:1,endDate:'1405/08/21',repeatWeekday:5});
+  assert.equal(result.length,2);assert.deepEqual(result.map((r:any)=>r.request_jalaali_date),['1405/08/14','1405/08/21']);
+  assert.ok(result.every((r:any)=>!r.id));
+  assert.throws(()=>build({interval:0}),/فاصله تکرار/);
+});
+
+test('managed series editing submits membership and fields in one server command without legacy re-dispatch', async () => {
+  let source=read('src/components/CalendarMeetingForm/commitEdit.ts');
+  source=source.replace(/^import[\s\S]*?;\n/gm,'').replace('export async function','async function').replaceAll('import.meta.env?.DEV','false');
+  const calls:any[]=[];let successful=false;
+  const commit=evaluate(source,{
+    supabase:{from:()=>({select:()=>({eq:()=>({single:async()=>({data:{series_id:'series'}})})}),delete:()=>({eq:async()=>({})})}),rpc:async(name:string,args:any)=>{calls.push({name,args});return{};}},
+    toast:{error(message:string){assert.fail(message);}},
+    insertNotification(){assert.fail('legacy notification must not run');},
+  },'commitCalendarMeetingEdit');
+  await commit({snapshot:{operationId:'operation',updateRecord:{subject:'Updated'},baseFields:null,isOnline:false,wasOnline:false,agendaEnabled:false,agendaItems:[],selectedParticipantIds:['retained','new']},notifyExistingParticipants:true,userId:'owner',prefillMeetingId:'occurrence',prefillEditAllIds:null,subject:'Updated',contacts:[],commitLockRef:{current:false},setCommitting(){},setEditDecision(){},onSuccess(){successful=true;}});
+  assert.equal(successful,true);assert.equal(calls.length,1);assert.equal(calls[0].name,'update_meeting_series');
+  assert.deepEqual(calls[0].args.p_patch,{subject:'Updated',participant_user_ids:['retained','new']});
 });

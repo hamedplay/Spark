@@ -146,7 +146,7 @@ interface RepeatOptions {
   repeatMonthlyNthWeekday: number;
 }
 
-export async function createRepeatMeetings({
+export function buildCalendarRepeatRecords({
   baseRecord,
   type,
   interval,
@@ -155,7 +155,8 @@ export async function createRepeatMeetings({
   repeatMonthlyMode,
   repeatMonthlyNth,
   repeatMonthlyNthWeekday,
-}: RepeatOptions): Promise<{ id: string; request_jalaali_date: string }[]> {
+}: RepeatOptions): any[] {
+  if (!Number.isInteger(interval) || interval < 1) throw new Error('فاصله تکرار نامعتبر است');
   if (!endDate) return [];
   let endMs: number;
   if (endDate.includes('/') && endDate.split('/').length === 3) {
@@ -183,6 +184,7 @@ export async function createRepeatMeetings({
       const { id: _id, ...recordWithoutId } = baseRecord;
       void _id;
       repeatMeetings.push({ ...recordWithoutId, request_date: current.toISOString(), request_jalaali_date: jalaliDate });
+      if (repeatMeetings.length > 599) throw new Error('حداکثر ۶۰۰ نوبت در هر سری قابل ثبت است');
       current = new Date(current.getTime() + 7 * interval * 86400000);
     }
   } else {
@@ -230,54 +232,10 @@ export async function createRepeatMeetings({
         const { id: _id, ...recordWithoutId } = baseRecord;
         void _id;
         repeatMeetings.push({ ...recordWithoutId, request_date: date.toISOString(), request_jalaali_date: jalaliDate });
+        if (repeatMeetings.length > 599) throw new Error('حداکثر ۶۰۰ نوبت در هر سری قابل ثبت است');
       }
     }
   }
 
-  if (repeatMeetings.length === 0) return [];
-  const { data: inserted, error: repeatError } = await supabase
-    .from('meetings')
-    .insert(repeatMeetings)
-    .select('id, participant_user_ids, request_jalaali_date');
-  if (repeatError) {
-    console.error('Repeat insert error:', repeatError);
-    toast.error('خطا در ایجاد جلسات تکراری: ' + repeatError.message);
-    return [];
-  }
-
-  const inboxRows: { meeting_id: string; user_id: string; status: string }[] = [];
-  for (const row of inserted || []) {
-    const participantIds = Array.from(new Set((row.participant_user_ids || []) as string[]));
-    for (const participantId of participantIds) {
-      if (participantId !== baseRecord.user_id) {
-        inboxRows.push({ meeting_id: row.id, user_id: participantId, status: 'pending' });
-      }
-    }
-  }
-
-  if (inboxRows.length > 0) {
-    const { error: inboxError } = await supabase
-      .from('meeting_inbox')
-      .upsert(inboxRows, {
-        onConflict: 'meeting_id,user_id',
-        ignoreDuplicates: true,
-      });
-
-    if (inboxError) {
-      console.error('Repeat inbox insert error:', inboxError);
-      const insertedIds = (inserted || []).map(row => row.id);
-      if (insertedIds.length > 0) {
-        const { error: rollbackError } = await supabase
-          .from('meetings')
-          .delete()
-          .in('id', insertedIds);
-        if (rollbackError) console.error('Repeat meeting rollback error:', rollbackError);
-      }
-      toast.error('جلسات تکراری ایجاد نشدند چون ساخت دعوت‌ها ناموفق بود: ' + inboxError.message);
-      return [];
-    }
-  }
-
-  toast.success(`${repeatMeetings.length} جلسه تکراری ایجاد شد`);
-  return (inserted || []).map(row => ({ id: row.id, request_jalaali_date: row.request_jalaali_date }));
+  return repeatMeetings;
 }

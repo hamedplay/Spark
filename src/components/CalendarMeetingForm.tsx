@@ -1,3 +1,4 @@
+import { createMeetingSeries } from '../features/meetings/services/createMeetingSeries';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
@@ -15,7 +16,7 @@ import { CalendarMeetingFormView } from './CalendarMeetingForm/CalendarMeetingFo
 import { commitCalendarMeetingEdit } from './CalendarMeetingForm/commitEdit';
 import {
   createConferenceRoom,
-  createRepeatMeetings,
+  buildCalendarRepeatRecords,
   sendSmsToExternals,
   showSmsSummary,
 } from './CalendarMeetingForm/services';
@@ -30,6 +31,7 @@ export type { CommitSnapshot } from './CalendarMeetingForm/types';
 
 export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendars = [] }: CalendarMeetingFormProps) {
   const [loading, setLoading] = useState(false);
+  const seriesOperationRef = useRef(crypto.randomUUID());
   const creationRecoveryErrorRef = useRef<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -573,178 +575,180 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         return;
       }
 
-      const { data: meeting, error: meetingError } = await supabase.from('meetings').insert([record]).select().single();
-      if (meetingError) throw meetingError;
-      if (!meeting) throw new Error('جلسه ثبت نشد؛ لطفاً دوباره تلاش کنید');
-      await saveNewMeetingDetails({
-        saveParticipants: async () => {
-          if (participantDisplayItems.length === 0) return;
-          const { error } = await supabase.from('participants').insert(
-            participantDisplayItems.map(p => ({ meeting_id: meeting.id, name: p.name })),
-          );
-          if (error) throw new Error('خطا در ثبت شرکت‌کنندگان: ' + error.message);
-        },
-        saveAgenda: async () => {
-          if (!agendaEnabled || agendaItems.length === 0) return;
-          const { error } = await supabase.from('meeting_agenda_items').insert(
-            agendaItems.map((item, idx) => ({
-              meeting_id: meeting.id,
-              title: item.title,
-              presenter: item.presenter || null,
-              duration_minutes: item.duration_minutes || null,
-              description: ('description' in item ? String((item as Record<string, unknown>).description ?? '') : '') || null,
-              sort_order: idx,
-            })),
-          );
-          if (error) throw new Error('خطا در ثبت دستور جلسه: ' + error.message);
-        },
-        rollback: async () => {
-          // Only the meeting just created by this submission is eligible for cleanup.
-          // Inbox has an ON DELETE SET NULL FK, so remove its invitations first.
-          const { error: inboxError } = await supabase.from('meeting_inbox')
-            .delete().eq('meeting_id', meeting.id);
-          if (inboxError) throw inboxError;
-          const { data: deleted, error } = await supabase.from('meetings')
-            .delete().eq('id', meeting.id).select('id');
-          if (error) throw error;
-          if (!deleted?.some(row => row.id === meeting.id)) {
-            throw new Error('حذف جلسه ناقص تأیید نشد');
-          }
-        },
-        meetingId: meeting.id,
-      });
-      // meetings_sync_inbox_from_participants creates invitations in the same
-      // database transaction as the meeting. Do not insert them again here.
-
-      let notificationMeetings = [{ id: meeting.id, request_jalaali_date: meetingDateStr }];
-      if (repeatEnabled && meeting && repeatEndDate) {
-        const repeatDates = await createRepeatMeetings({
-          baseRecord: record,
-          type: repeatType,
-          interval: repeatInterval,
-          endDate: repeatEndDate,
-          repeatWeekday,
-          repeatMonthlyMode,
-          repeatMonthlyNth,
-          repeatMonthlyNthWeekday,
+      if (repeatEnabled) {
+        if (!repeatEndDate) throw new Error('پایان بازه تکرار را مشخص کنید');
+        const repeatRecords = buildCalendarRepeatRecords({ baseRecord: record, type: repeatType, interval: repeatInterval,
+          endDate: repeatEndDate, repeatWeekday, repeatMonthlyMode, repeatMonthlyNth, repeatMonthlyNthWeekday });
+        const weekdays = ['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه'];
+        const pattern = repeatType === 'weekly'
+          ? `هر ${repeatInterval} هفته، ${weekdays[repeatWeekday]}`
+          : `هر ${repeatInterval} ماه${repeatMonthlyMode === 'nth' ? `، ${repeatMonthlyNth === -1 ? 'آخرین' : repeatMonthlyNth} ${weekdays[repeatMonthlyNthWeekday]}` : ''}`;
+        const ids = await createMeetingSeries(seriesOperationRef.current, [{ ...record, request_jalaali_date: meetingDateStr }, ...repeatRecords],
+          agendaEnabled ? agendaItems.map(({ title, presenter, duration_minutes, description }) => ({ title, presenter, duration_minutes, description })) : [], pattern);
+        toast.success(`${ids.length} نوبت ثبت شد؛ اطلاع‌رسانی سری طبق تنظیمات در صف قرار گرفت`);
+      } else {
+        const { data: meeting, error: meetingError } = await supabase.from('meetings').insert([record]).select().single();
+        if (meetingError) throw meetingError;
+        if (!meeting) throw new Error('جلسه ثبت نشد؛ لطفاً دوباره تلاش کنید');
+        await saveNewMeetingDetails({
+          saveParticipants: async () => {
+            if (participantDisplayItems.length === 0) return;
+            const { error } = await supabase.from('participants').insert(
+              participantDisplayItems.map(p => ({ meeting_id: meeting.id, name: p.name })),
+            );
+            if (error) throw new Error('خطا در ثبت شرکت‌کنندگان: ' + error.message);
+          },
+          saveAgenda: async () => {
+            if (!agendaEnabled || agendaItems.length === 0) return;
+            const { error } = await supabase.from('meeting_agenda_items').insert(
+              agendaItems.map((item, idx) => ({
+                meeting_id: meeting.id,
+                title: item.title,
+                presenter: item.presenter || null,
+                duration_minutes: item.duration_minutes || null,
+                description: ('description' in item ? String((item as Record<string, unknown>).description ?? '') : '') || null,
+                sort_order: idx,
+              })),
+            );
+            if (error) throw new Error('خطا در ثبت دستور جلسه: ' + error.message);
+          },
+          rollback: async () => {
+            // Only the meeting just created by this submission is eligible for cleanup.
+            // Inbox has an ON DELETE SET NULL FK, so remove its invitations first.
+            const { error: inboxError } = await supabase.from('meeting_inbox')
+              .delete().eq('meeting_id', meeting.id);
+            if (inboxError) throw inboxError;
+            const { data: deleted, error } = await supabase.from('meetings')
+              .delete().eq('id', meeting.id).select('id');
+            if (error) throw error;
+            if (!deleted?.some(row => row.id === meeting.id)) {
+              throw new Error('حذف جلسه ناقص تأیید نشد');
+            }
+          },
+          meetingId: meeting.id,
         });
-        notificationMeetings = [...notificationMeetings, ...repeatDates];
-      }
+        // meetings_sync_inbox_from_participants creates invitations in the same
+        // database transaction as the meeting. Do not insert them again here.
 
-      const internalSmsResults: SmsDispatchResult[] = [];
-      let externalSmsResult: ExternalSmsResult | null = null;
-      let externalInformeeSmsResult: ExternalSmsResult | null = null;
-      const mergeSmsResults = (previous: ExternalSmsResult | null, result: ExternalSmsResult): ExternalSmsResult => ({
-        ok: (previous?.ok ?? true) && result.ok,
-        sent: (previous?.sent ?? 0) + result.sent,
-        skipped: (previous?.skipped ?? 0) + result.skipped,
-        error: previous?.error || result.error,
-      });
-      for (const occurrence of notificationMeetings) {
-        const occurrenceDate = occurrence.request_jalaali_date;
-        const occurrencePlaceholders = { ...smsPlaceholders, meeting_date: occurrenceDate };
-        await insertNotification({
-          userId,
-          category: 'meeting',
-          eventType: getMeetingTemplateKey('creator', 'created'),
-          fallbackTitle: 'جلسه ثبت شد',
-          fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}${agendaSummary}`,
-          placeholders: { ...occurrencePlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` },
-          senderId: userId,
-          senderName,
-          actionUrl: 'calendar',
-          meetingId: occurrence.id,
-          eventKey: `create:${occurrence.id}:${userId}:creator`,
+        let notificationMeetings = [{ id: meeting.id, request_jalaali_date: meetingDateStr }];
+
+
+        const internalSmsResults: SmsDispatchResult[] = [];
+        let externalSmsResult: ExternalSmsResult | null = null;
+        let externalInformeeSmsResult: ExternalSmsResult | null = null;
+        const mergeSmsResults = (previous: ExternalSmsResult | null, result: ExternalSmsResult): ExternalSmsResult => ({
+          ok: (previous?.ok ?? true) && result.ok,
+          sent: (previous?.sent ?? 0) + result.sent,
+          skipped: (previous?.skipped ?? 0) + result.skipped,
+          error: previous?.error || result.error,
         });
-
-        if (participantIds.length) {
-          const results = await Promise.all(participantIds.map(uid => insertNotification({
-            userId: uid,
+        for (const occurrence of notificationMeetings) {
+          const occurrenceDate = occurrence.request_jalaali_date;
+          const occurrencePlaceholders = { ...smsPlaceholders, meeting_date: occurrenceDate };
+          await insertNotification({
+            userId,
             category: 'meeting',
-            eventType: 'invite',
-            audience: 'participants',
-            fallbackTitle: 'دعوت به جلسه',
-            fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${occurrenceDate ? ` در ${occurrenceDate}` : ''}${agendaSummary}`,
-            placeholders: { ...occurrencePlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' },
+            eventType: getMeetingTemplateKey('creator', 'created'),
+            fallbackTitle: 'جلسه ثبت شد',
+            fallbackMessage: `جلسه "${subject}" ثبت شد — ${meetingTimeStr}${agendaSummary}`,
+            placeholders: { ...occurrencePlaceholders, full_name: senderName, recipient_greeting: `${senderName} گرامی` },
             senderId: userId,
             senderName,
             actionUrl: 'calendar',
             meetingId: occurrence.id,
-            eventKey: `create:${occurrence.id}:${uid}:participants`,
-          })));
-          internalSmsResults.push(...results);
-        }
-        if (observerIds.length) {
-          const results = await Promise.all(observerIds.map(uid => insertNotification({
-            userId: uid,
-            category: 'meeting',
-            eventType: 'invite',
-            audience: 'observers',
-            fallbackTitle: 'اطلاع از جلسه',
-            fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${occurrenceDate ? ` در ${occurrenceDate}` : ''}${agendaSummary}`,
-            placeholders: { ...occurrencePlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' },
-            senderId: userId,
-            senderName,
-            actionUrl: 'calendar',
-            meetingId: occurrence.id,
-            eventKey: `create:${occurrence.id}:${uid}:observers`,
-          })));
-          internalSmsResults.push(...results);
+            eventKey: `create:${occurrence.id}:${userId}:creator`,
+          });
+
+          if (participantIds.length) {
+            const results = await Promise.all(participantIds.map(uid => insertNotification({
+              userId: uid,
+              category: 'meeting',
+              eventType: 'invite',
+              audience: 'participants',
+              fallbackTitle: 'دعوت به جلسه',
+              fallbackMessage: `شما به جلسه "${subject}" دعوت شدید — ${meetingTimeStr}${occurrenceDate ? ` در ${occurrenceDate}` : ''}${agendaSummary}`,
+              placeholders: { ...occurrencePlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' },
+              senderId: userId,
+              senderName,
+              actionUrl: 'calendar',
+              meetingId: occurrence.id,
+              eventKey: `create:${occurrence.id}:${uid}:participants`,
+            })));
+            internalSmsResults.push(...results);
+          }
+          if (observerIds.length) {
+            const results = await Promise.all(observerIds.map(uid => insertNotification({
+              userId: uid,
+              category: 'meeting',
+              eventType: 'invite',
+              audience: 'observers',
+              fallbackTitle: 'اطلاع از جلسه',
+              fallbackMessage: `شما به عنوان مطلع جلسه "${subject}" ثبت شده‌اید — ${meetingTimeStr}${occurrenceDate ? ` در ${occurrenceDate}` : ''}${agendaSummary}`,
+              placeholders: { ...occurrencePlaceholders, full_name: participantNameMap[uid] || '', recipient_greeting: participantNameMap[uid] ? `${participantNameMap[uid]} گرامی` : 'همکار گرامی' },
+              senderId: userId,
+              senderName,
+              actionUrl: 'calendar',
+              meetingId: occurrence.id,
+              eventKey: `create:${occurrence.id}:${uid}:observers`,
+            })));
+            internalSmsResults.push(...results);
+          }
+
+          if (sendSms && selectedExternal.length > 0) {
+            const meetingDatesText = occurrenceDate;
+            const externalSmsPlaceholders = {
+              ...occurrencePlaceholders,
+              meeting_date: meetingDatesText,
+            };
+            const dateLabel = 'تاریخ';
+            const fallbackSms = `دعوت به جلسه: «${subject}» | ${dateLabel}: ${meetingDatesText} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
+            const result = await sendSmsToExternals(
+              selectedExternal,
+              contacts,
+              fallbackSms,
+              userId,
+              externalSmsPlaceholders,
+              'invite',
+              occurrence.id,
+              `create:${occurrence.id}:external:invite`,
+            );
+            externalSmsResult = mergeSmsResults(externalSmsResult, result);
+          }
+
+          if (selectedExternalInformees.length > 0) {
+            const meetingDatesText = occurrenceDate;
+            const informeePlaceholders = {
+              ...occurrencePlaceholders,
+              meeting_date: meetingDatesText,
+            };
+            const dateLabel = 'تاریخ';
+            const fallbackSms = `جهت اطلاع شما جلسه «${subject}» | ${dateLabel}: ${meetingDatesText} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
+            const result = await sendSmsToExternals(
+              selectedExternalInformees,
+              contacts,
+              fallbackSms,
+              userId,
+              informeePlaceholders,
+              'informee_invite',
+              occurrence.id,
+              `create:${occurrence.id}:external-informee:invite`,
+            );
+            externalInformeeSmsResult = mergeSmsResults(externalInformeeSmsResult, result);
+          }
+
         }
 
-        if (sendSms && selectedExternal.length > 0) {
-          const meetingDatesText = occurrenceDate;
-          const externalSmsPlaceholders = {
-            ...occurrencePlaceholders,
-            meeting_date: meetingDatesText,
-          };
-          const dateLabel = 'تاریخ';
-          const fallbackSms = `دعوت به جلسه: «${subject}» | ${dateLabel}: ${meetingDatesText} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
-          const result = await sendSmsToExternals(
-            selectedExternal,
-            contacts,
-            fallbackSms,
-            userId,
-            externalSmsPlaceholders,
-            'invite',
-            occurrence.id,
-            `create:${occurrence.id}:external:invite`,
-          );
-          externalSmsResult = mergeSmsResults(externalSmsResult, result);
-        }
-
-        if (selectedExternalInformees.length > 0) {
-          const meetingDatesText = occurrenceDate;
-          const informeePlaceholders = {
-            ...occurrencePlaceholders,
-            meeting_date: meetingDatesText,
-          };
-          const dateLabel = 'تاریخ';
-          const fallbackSms = `جهت اطلاع شما جلسه «${subject}» | ${dateLabel}: ${meetingDatesText} | ساعت: ${meetingTimeStr}${smsPlaceholders.location_part}`;
-          const result = await sendSmsToExternals(
-            selectedExternalInformees,
-            contacts,
-            fallbackSms,
-            userId,
-            informeePlaceholders,
-            'informee_invite',
-            occurrence.id,
-            `create:${occurrence.id}:external-informee:invite`,
-          );
-          externalInformeeSmsResult = mergeSmsResults(externalInformeeSmsResult, result);
-        }
+        const combinedExternalSmsResult = externalSmsResult || externalInformeeSmsResult
+          ? {
+              ok: (externalSmsResult?.ok ?? true) && (externalInformeeSmsResult?.ok ?? true),
+              sent: (externalSmsResult?.sent ?? 0) + (externalInformeeSmsResult?.sent ?? 0),
+              skipped: (externalSmsResult?.skipped ?? 0) + (externalInformeeSmsResult?.skipped ?? 0),
+              error: externalSmsResult?.error || externalInformeeSmsResult?.error,
+            }
+          : null;
+        showSmsSummary(internalSmsResults, combinedExternalSmsResult);
 
       }
-
-      const combinedExternalSmsResult = externalSmsResult || externalInformeeSmsResult
-        ? {
-            ok: (externalSmsResult?.ok ?? true) && (externalInformeeSmsResult?.ok ?? true),
-            sent: (externalSmsResult?.sent ?? 0) + (externalInformeeSmsResult?.sent ?? 0),
-            skipped: (externalSmsResult?.skipped ?? 0) + (externalInformeeSmsResult?.skipped ?? 0),
-            error: externalSmsResult?.error || externalInformeeSmsResult?.error,
-          }
-        : null;
-      showSmsSummary(internalSmsResults, combinedExternalSmsResult);
 
       if (saveContact && representative?.trim() && phone?.trim()) {
         const { error: contactError } = await supabase
