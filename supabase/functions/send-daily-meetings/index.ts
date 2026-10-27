@@ -270,8 +270,7 @@ Deno.serve(async (req: Request) => {
       .select("id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,notify_users,members_only,meeting_manager,is_online")
       .neq("status", "closed")
       .eq("status_type", "scheduled")
-      .gte("request_date", tehranNow.startOfDayUtc)
-      .lte("request_date", tehranNow.endOfDayUtc)
+      .eq("request_local_date", tehranNow.date)
       .order("start_time", { ascending: true, nullsFirst: false });
 
     if (meetingsErr) {

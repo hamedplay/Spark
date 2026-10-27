@@ -1,5 +1,6 @@
 export type MeetingPersistenceStatus =
   | 'open'
+  | 'archived'
   | 'closed';
 
 export type MeetingPersistenceRepeatType =

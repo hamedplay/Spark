@@ -7,6 +7,7 @@ export type Database = {
           id: string;
           subject: string;
           request_date: string;
+          request_local_date: string | null;
           duration: string;
           location: string;
           representative: string;

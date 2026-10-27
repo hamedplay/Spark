@@ -91,7 +91,7 @@ test('builds the legacy manual-request record', () => {
   });
 });
 
-test('builds a closed calendar-scheduled record with a time-range duration', () => {
+test('scheduled calendar records remain visible and eligible for server reminders', () => {
   const input = createInput({
     isSchedulingFromCalendar: true,
     startTime: '09:00',
@@ -99,7 +99,7 @@ test('builds a closed calendar-scheduled record with a time-range duration', () 
   });
   const result = buildMeetingPersistenceRecord(input);
 
-  assert.equal(result.status, 'closed');
+  assert.equal(result.status, 'archived');
   assert.equal(result.duration, '09:00 - 10:30');
   assert.equal(result.start_time, '09:00');
   assert.equal(result.end_time, '10:30');
@@ -112,7 +112,7 @@ test('builds a closed calendar-scheduled record with a time-range duration', () 
   assert.equal(result.representative, 'Ali');
   assert.equal(result.phone, '09120000000');
   assert.equal(result.priority, 'medium');
-  assert.equal(result.status_type, 'requested');
+  assert.equal(result.status_type, 'scheduled');
   assert.equal(result.user_id, 'owner-1');
   assert.deepEqual(result.notify_users, ['owner-1', 'notify-1']);
   assert.deepEqual(result.participant_user_ids, ['participant-1']);
@@ -141,7 +141,7 @@ test('falls back to request duration when the calendar time pair is incomplete',
   });
   const result = buildMeetingPersistenceRecord(input);
 
-  assert.equal(result.status, 'closed');
+  assert.equal(result.status, 'open');
   assert.equal(result.duration, '1 ساعت');
   assert.ok(!('start_time' in result));
   assert.ok(!('end_time' in result));

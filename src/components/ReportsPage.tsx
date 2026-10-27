@@ -213,7 +213,7 @@ export function ReportsPage() {
       const since = moment().subtract(monthsBack, 'months').toISOString();
 
       const [{ data: meetings }, { data: tasks }] = await Promise.all([
-        supabase.from('meetings').select('*, participants(id), actions(id,status)').gte('request_date', since),
+        supabase.from('meetings').select('*, participants(id), actions(id,status)').gte('request_local_date', moment().subtract(monthsBack, 'months').format('YYYY-MM-DD')),
         supabase.from('tasks').select('*').gte('created_at', since),
       ]);
 

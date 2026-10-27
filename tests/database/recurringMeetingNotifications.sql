@@ -86,7 +86,12 @@ end $$;
 -- Claim/lease/ack SQL path, without invoking the provider.
 update private.recurring_notification_policy set reminder_sms=true;
 update private.meeting_notification_jobs set status='pending' where series_id=(select operation_id from series_test_input) and event_type='series_reminder';
-create temp table claimed_meeting_jobs as select public.claim_meeting_notification_jobs(100) j;
+-- The connected database can already contain unrelated cancellation jobs.
+-- The worker claims globally; assertions and acknowledgements belong only to
+-- this rolled-back fixture's series, never to pre-existing work.
+create temp table claimed_meeting_jobs as
+select j from public.claim_meeting_notification_jobs(100) as claimed(j)
+where j->>'series_id'=(select operation_id::text from series_test_input);
 do $$ declare row jsonb; begin
  assert (select count(*) from claimed_meeting_jobs)=12,'claim returns expected due recipients';
  for row in select j from claimed_meeting_jobs loop

@@ -64,8 +64,8 @@ function createBaseRecord(
     phone: '+1-555-0100',
     notes: null,
     priority: 'normal',
-    status: 'closed',
-    status_type: 'internal',
+    status: 'archived',
+    status_type: 'scheduled',
     user_id: 'user-1',
     notify_users: ['user-2'],
     participant_user_ids: ['user-3'],
@@ -132,7 +132,8 @@ test('generates weekly Saturday records in legacy order', () => {
   assert.deepEqual(actualRequestDates, expectedRequestDates);
 
   for (const record of result) {
-    assert.equal(record.status, 'open');
+    assert.equal(record.status, 'archived');
+    assert.equal(record.status_type, 'scheduled');
     assert.equal('id' in record, false);
     assert.equal(record.subject, 'Weekly standup');
     assert.deepEqual(record.notify_users, ['user-2']);
@@ -155,7 +156,7 @@ test('generates weekly Saturday records in legacy order', () => {
 
   assert.equal(
     input.baseRecord.status,
-    'closed',
+    'archived',
     'base record was mutated'
   );
   assert.equal(

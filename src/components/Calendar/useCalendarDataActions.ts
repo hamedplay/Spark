@@ -64,15 +64,11 @@ export function useCalendarDataActions(scope: Record<string, any>) {
       const daysInEndMonth = getJalaaliMonthDays(endJy, normalEndJm);
       const rangeEnd = jalaaliToDate(endJy, normalEndJm, daysInEndMonth);
 
-      // request_date is stored as Tehran midnight expressed in UTC (UTC = Tehran date - 1 day + 20:30).
-      // Example: Tehran June 22 midnight = 2026-06-21T20:30:00Z.
-      // To capture all Tehran-day meetings we subtract 1 day from range start and add 1 day to range end,
-      // then use plain YYYY-MM-DD string comparison (which sorts correctly for ISO strings).
+      // Compare typed Tehran calendar days, including both legacy timestamps
+      // and date-only records, without padding the range or comparing text.
       const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const dayBefore = new Date(rangeStart.getTime() - 86400000);
-      const dayAfter  = new Date(rangeEnd.getTime()  + 86400000);
-      const queryFrom = fmt(dayBefore);
-      const queryTo   = fmt(dayAfter);
+      const queryFrom = fmt(rangeStart);
+      const queryTo   = fmt(rangeEnd);
       console.log('[CalendarPage] fetchMeetings query range:', queryFrom, '→', queryTo, '(jy/jm:', baseJy, baseJm + ')');
 
       const [
@@ -84,8 +80,8 @@ export function useCalendarDataActions(scope: Record<string, any>) {
         supabase.from('meetings')
           .select('id,series_id,subject,request_date,start_time,end_time,duration,location,representative,phone,notes,priority,status,status_type,created_at,user_id,calendar_id,external_participants,participant_user_ids,repeat_type,repeat_interval,repeat_end_date,repeat_weekday,reminder_minutes,notify_users,members_only,meeting_manager,is_online,conference_room_id')
           .neq('status', 'closed')
-          .gte('request_date', queryFrom)
-          .lte('request_date', queryTo)
+          .gte('request_local_date', queryFrom)
+          .lte('request_local_date', queryTo)
           .order('start_time', { ascending: true }),
         supabase.from('meeting_inbox')
           .select('meeting_id, status')

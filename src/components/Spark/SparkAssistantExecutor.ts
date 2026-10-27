@@ -1,5 +1,6 @@
 import moment from 'moment-jalaali';
 import { supabase } from '../../lib/supabase';
+import { meetingLocalDate } from '../../features/meetings/meetingLocalDate';
 import { jalaliDayRange, jalaliToGregorianIso } from '../../lib/sparkDateUtils';
 import type {
   ParsedCommand,
@@ -104,18 +105,19 @@ async function execQueryMeetings(cmd: ParsedCommand, userId: string): Promise<st
 async function execListMeetingsOnDate(cmd: ParsedCommand, userId: string): Promise<string> {
   const dateString = cmd.queryDate || cmd.date;
   const jalaliString = dateString || moment().format('jYYYY/jMM/jDD');
-  const [rangeStart, rangeEnd] = jalaliDayRange(jalaliString);
+  const [rangeStart] = jalaliDayRange(jalaliString);
   if (!rangeStart) return `📭 تاریخ «${jalaliString}» معتبر نیست.`;
+  const localDay = meetingLocalDate(rangeStart);
 
   const [{ data: owned }, { data: participating }, { data: notified }] = await Promise.all([
     supabase.from('meetings').select('id, subject, start_time, location')
-      .eq('user_id', userId).gte('request_date', rangeStart).lt('request_date', rangeEnd).order('start_time', { ascending: true }),
+      .eq('user_id', userId).eq('request_local_date', localDay).order('start_time', { ascending: true }),
     supabase.from('meetings').select('id, subject, start_time, location')
       .filter('participant_user_ids', 'cs', `{"${userId}"}`).neq('user_id', userId)
-      .gte('request_date', rangeStart).lt('request_date', rangeEnd).order('start_time', { ascending: true }),
+      .eq('request_local_date', localDay).order('start_time', { ascending: true }),
     supabase.from('meetings').select('id, subject, start_time, location')
       .filter('notify_users', 'cs', `{"${userId}"}`).neq('user_id', userId)
-      .gte('request_date', rangeStart).lt('request_date', rangeEnd).order('start_time', { ascending: true }),
+      .eq('request_local_date', localDay).order('start_time', { ascending: true }),
   ]);
 
   const meetingMap = new Map<string, any>();

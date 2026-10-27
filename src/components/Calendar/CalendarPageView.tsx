@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react';
 import { ChevronRight, Calendar, RefreshCw, X, Plus, Users, CalendarPlus } from 'lucide-react';
 import { CalendarViews } from './CalendarViews';
 import { supabase } from '../../lib/supabase';
+import { meetingLocalDate } from '../../features/meetings/meetingLocalDate';
 import { MEETING_VIDEO_CONFERENCE_ENABLED } from '../CalendarMeetingForm/services';
 import { MeetingInboxButton } from '../MeetingInboxButton';
 import { JALAALI_MONTHS, VIEW_OPTIONS, parseRequestDateToDateStr } from './utils';
@@ -164,7 +165,7 @@ export function CalendarPageView({ model }: { model: Record<string, any> }) {
               <button onClick={async () => {
                 const m = repeatEditDialog.meeting;
                 if (!m.series_id) { openEditForm(m); setRepeatEditDialog(null); return; }
-                const { data: allRepeat } = await supabase.from('meetings').select('id').eq('series_id', m.series_id).eq('user_id', m.user_id || '').gte('request_date', m.request_date);
+                const { data: allRepeat } = await supabase.from('meetings').select('id').eq('series_id', m.series_id).eq('user_id', m.user_id || '').gte('request_local_date', meetingLocalDate(m.request_date));
                 if (allRepeat && allRepeat.length > 0) {
                   const ids = allRepeat.map((r: any) => r.id);
                   openEditForm({ ...m, id: m.id, _editAllIds: ids } as any);

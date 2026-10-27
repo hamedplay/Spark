@@ -67,11 +67,13 @@ export function buildMeetingPersistenceRecord(
     priority: input.priority,
 
     status:
-      input.isSchedulingFromCalendar
-        ? 'closed'
+      input.isSchedulingFromCalendar && input.startTime && input.endTime
+        ? 'archived'
         : 'open',
 
-    status_type: input.statusType,
+    status_type: input.isSchedulingFromCalendar && input.startTime && input.endTime
+      ? 'scheduled'
+      : input.statusType,
     user_id: input.userId,
 
     notify_users: Array.from(
