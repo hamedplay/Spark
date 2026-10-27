@@ -35,7 +35,7 @@ function SparkBrand({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="spark-reference-brand">
       <div className="spark-reference-brand-mark">
-        <img src="/logo_spark.png" alt="Spark" />
+        <img src="/logo-ui.webp" alt="Spark" />
         <span className="spark-reference-brand-halo" aria-hidden="true" />
       </div>
       <div className="spark-reference-wordmark" dir="ltr">Spark</div>

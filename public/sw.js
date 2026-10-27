@@ -1,11 +1,12 @@
-const STATIC_CACHE = 'spark-static-v9';
-const RUNTIME_CACHE = 'spark-runtime-v9';
+const STATIC_CACHE = 'spark-static-v10';
+const RUNTIME_CACHE = 'spark-runtime-v10';
 
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/logo_spark.png',
+  '/logo-ui.webp',
   '/photo-1600880292203-757bb62b4baf.jpg',
   '/icons/icon-512x512.png',
   '/fonts/Vazirmatn-Regular.woff2',

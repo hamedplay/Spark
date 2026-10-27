@@ -36,7 +36,7 @@ export function SplashScreen({ onDone }: Props) {
         className="flex flex-col items-center gap-4"
       >
         <img
-          src="/logo_spark.png"
+          src="/logo-ui.webp"
           alt="Spark"
           className="w-32 h-32 object-contain drop-shadow-xl"
           style={{

@@ -107,7 +107,7 @@ export function Layout({
         >
           <div className="w-full max-w-sm mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-4 flex items-center gap-2 sm:gap-3 pointer-events-auto min-w-0">
             <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0">
-              <img src="/logo_spark.png" alt="Spark" width={40} height={40} decoding="async" className="w-full h-full object-contain" />
+              <img src="/logo-ui.webp" alt="Spark" width={40} height={40} decoding="async" className="w-full h-full object-contain" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-800 dark:text-white">نصب اپلیکیشن</p>

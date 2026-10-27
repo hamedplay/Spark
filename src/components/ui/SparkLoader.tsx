@@ -32,7 +32,7 @@ export function SparkLoader({
         <div className="spark-loader__core">
           <div className="spark-loader__logo-wrap">
             <img
-              src="/logo_spark.png"
+              src="/logo-ui.webp"
               alt="Spark"
               width={70}
               height={70}
