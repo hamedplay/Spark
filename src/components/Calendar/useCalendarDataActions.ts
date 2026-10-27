@@ -1,5 +1,5 @@
 import { mergeLiveSelection } from '../../shared/realtime/mergeLiveSelection';
-import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { useLiveData } from '../../shared/realtime/useLiveData';
 import { buildCalendarGoogleEventUrl, openGoogleCalendarWindow } from './googleCalendarExport';
 import { buildRevertedMeetingTiming } from '../../features/meetings/builders/buildRevertedMeetingTiming';
 // @ts-nocheck
@@ -11,7 +11,17 @@ import { MeetingData, CalendarEntry } from './types';
 import { toJalaali, jalaaliToDate, getJalaaliMonthDays, parseRequestDateToDateStr } from './utils';
 
 export function useCalendarDataActions(scope: Record<string, any>) {
-  const liveRefreshRef = useLiveData(LIVE_DATA.meetings, async () => { if (!scope.currentUserId && !scope.providedUserId) return; await Promise.all([fetchMeetings(), fetchCalendars(), fetchAllDayEvents()]); });
+  const readerUserId = scope.currentUserId ?? scope.providedUserId;
+  // The shared reader owns initial loading, reconnects and subsequent invalidation.
+  // Register only once the month is known; don't also fetch from a mount/month effect.
+  const liveRefreshRef = useLiveData(
+    ['meetings','meeting_inbox','participants','shared_meetings','meeting_agenda_items','meeting_calendar_exclusions','actions','calendars','calendar_subscriptions'],
+    async () => { await fetchMeetings(); },
+    !!readerUserId && !!scope.currentJy && !!scope.currentJm, undefined,
+    `${readerUserId}:${scope.currentJy}:${scope.currentJm}`,
+  );
+  useLiveData(['calendars','calendar_subscriptions'], async () => { await fetchCalendars(); }, !!readerUserId, undefined, readerUserId || '');
+  useLiveData(['all_day_events'], async () => { await fetchAllDayEvents(); }, !!readerUserId, undefined, readerUserId || '');
   const {
     allDayDragEnd, allDayDragStart, allDayEvents, buildMeetingPlaceholders, calendarForm, calendars,
     currentJm, currentJy, currentUserId, deleteMeetingDialog, dragMovedRef, editingCalendar,
@@ -152,29 +162,11 @@ export function useCalendarDataActions(scope: Record<string, any>) {
   // Keep ref in sync so real-time callbacks always call latest version
   useEffect(() => { fetchMeetingsRef.current = () => fetchMeetings(); }, [fetchMeetings]);
 
-  useEffect(() => {
-    const userId = currentUserId ?? providedUserId;
-    if (!userId) return;
-    const channel = supabase
-      .channel(`calendar-owner-delegate-${userId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => {
-        fetchMeetingsRef.current();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [currentUserId, providedUserId]);
-
-  // Re-fetch when visible month changes
-  useEffect(() => {
-    if (currentJy && currentJm) fetchMeetings(currentJy, currentJm);
-  }, [currentJy, currentJm]);
-
   const fetchAllDayEvents = useCallback(async () => {
     const { data } = await supabase.from('all_day_events').select('*');
     if (data) setAllDayEvents(data as any);
   }, []);
 
-  useEffect(() => { fetchAllDayEvents(); }, [fetchAllDayEvents]);
 
   const getAllDayEventsForDay = useCallback((jy: number, jm: number, jd: number) =>
     allDayEvents.filter(e => e.date_jy === jy && e.date_jm === jm && e.date_jd === jd),

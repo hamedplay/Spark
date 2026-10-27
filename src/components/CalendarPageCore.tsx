@@ -507,21 +507,6 @@ export function CalendarPage({
     setSidebarJy(now.jy); setSidebarJm(now.jm);
     if (providedUserId) setCurrentUserId(providedUserId);
     else void fetchCurrentUser();
-    void fetchCalendars();
-
-    const channel = supabase
-      .channel(`calendar-realtime-${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => { console.log('[CalendarPage] realtime: meetings change'); fetchMeetingsRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_inbox' }, () => fetchMeetingsRef.current())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendars' }, () => { console.log('[CalendarPage] realtime: calendars change'); fetchCalendars(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_subscriptions' }, () => fetchCalendars())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'all_day_events' }, () => fetchAllDayEvents())
-      .subscribe();
-
-    return () => {
-      console.log('[CalendarPage] UNMOUNT');
-      supabase.removeChannel(channel);
-    };
   }, []);
 
   useEffect(() => {
