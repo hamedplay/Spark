@@ -88,8 +88,8 @@ export function CalendarPage({
   const [showSubscriptionsModal, setShowSubscriptionsModal] = useState(false);
   const [subscriptionsCalendar, setSubscriptionsCalendar] = useState<CalendarEntry | null>(null);
   const [subscriptions, setSubscriptions] = useState<CalendarSubscription[]>([]);
-  const [orgUsersEnabled, setOrgUsersEnabled] = useState(false);
-  const { usersById, allUsers, loading: orgUsersLoading } = useOrgUsers(currentUserId, orgUsersEnabled);
+  // Zoomed cards render participant names before any modal is opened, in every view.
+  const { usersById, allUsers, loading: orgUsersLoading } = useOrgUsers(currentUserId);
   const resolveName = useCallback((uid: string) =>
     resolveUserDisplay(usersById, uid, undefined, orgUsersLoading),
   [usersById, orgUsersLoading]);
@@ -122,19 +122,6 @@ export function CalendarPage({
   const [activePendingSchedule, setActivePendingSchedule] = useState<PendingSchedule | null>(null);
 
   const [expandedMeetingId, setExpandedMeetingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (
-      showCalendarList ||
-      showSubscriptionsModal ||
-      showMeetingForm ||
-      detailMeeting !== null ||
-      previewMeeting !== null ||
-      expandedMeetingId !== null
-    ) {
-      setOrgUsersEnabled(true);
-    }
-  }, [showCalendarList, showSubscriptionsModal, showMeetingForm, detailMeeting, previewMeeting, expandedMeetingId]);
 
   // Move meeting drag
   const [dragMoveMeeting, setDragMoveMeeting] = useState<MeetingData | null>(null);
