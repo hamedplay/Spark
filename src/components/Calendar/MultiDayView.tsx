@@ -1,3 +1,4 @@
+import { DragSelectionLabel } from './DragSelectionLabel';
 import { useMobileWeekZoom } from './useMobileWeekZoom';
 import { weekZoomPixels, mobileZoomDayCount } from './weekZoom';
 import React, { useEffect, useMemo } from 'react';
@@ -390,9 +391,9 @@ export function MultiDayView(input: CalendarViewProps) {
                           const end = Math.max(p.dragStartSlot!, p.dragEndSlot!) + 1;
                           return (
                             <div
-                              className="pointer-events-none absolute left-0.5 right-0.5 z-20 rounded-md border border-violet-500 bg-violet-500/15"
+                              className="pointer-events-none absolute left-0.5 right-0.5 z-30 rounded-md border border-violet-500 bg-violet-500/15"
                               style={{ top: weekZoomPixels(start * p.slotHeight, p.mobileWeekZoom), height: weekZoomPixels((end - start) * p.slotHeight, p.mobileWeekZoom) }}
-                            />
+                            ><DragSelectionLabel startSlot={p.dragStartSlot!} endSlot={p.dragEndSlot!} /></div>
                           );
                         })()}
                       </div>

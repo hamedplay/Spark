@@ -1,3 +1,4 @@
+import { DragSelectionLabel } from './DragSelectionLabel';
 import React from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -206,7 +207,7 @@ export function WeekView(p: CalendarViewProps) {
                       {isDragging && dragStartSlot !== null && dragEndSlot !== null && dragDate && dragDate.jy === d.jy && dragDate.jm === d.jm && dragDate.jd === d.jd && (() => {
                         const s = Math.min(dragStartSlot, dragEndSlot);
                         const e = Math.max(dragStartSlot, dragEndSlot) + 1;
-                        return <div className="pointer-events-none absolute left-0.5 right-0.5 z-5 rounded-md border border-violet-500 bg-violet-500/15" style={{ top: `${s * slotHeight}px`, height: `${(e - s) * slotHeight}px` }} />;
+                        return <div className="pointer-events-none absolute left-0.5 right-0.5 z-30 rounded-md border border-violet-500 bg-violet-500/15" style={{ top: `${s * slotHeight}px`, height: `${(e - s) * slotHeight}px` }}><DragSelectionLabel startSlot={dragStartSlot} endSlot={dragEndSlot} /></div>;
                       })()}
                     </div>
                   );

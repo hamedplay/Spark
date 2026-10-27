@@ -1,3 +1,4 @@
+import { DragSelectionLabel } from './DragSelectionLabel';
 import React from 'react';
 import { X, Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -153,8 +154,8 @@ export function DayView(p: CalendarViewProps) {
                 const s = Math.min(dragStartSlot, dragEndSlot);
                 const e = Math.max(dragStartSlot, dragEndSlot) + 1;
                 return (
-                  <div className="pointer-events-none absolute left-1 right-1 z-5 rounded-lg border border-violet-500 bg-violet-500/15" style={{ top: `${s * slotHeight}px`, height: `${(e - s) * slotHeight}px` }}>
-                    <div className="px-2 py-0.5 text-xs font-bold text-violet-700 dark:text-violet-300">{minutesToTime(s * 30)} - {minutesToTime(e * 30)}</div>
+                  <div className="pointer-events-none absolute left-1 right-1 z-30 rounded-lg border border-violet-500 bg-violet-500/15" style={{ top: `${s * slotHeight}px`, height: `${(e - s) * slotHeight}px` }}>
+                    <DragSelectionLabel startSlot={dragStartSlot} endSlot={dragEndSlot} />
                   </div>
                 );
               })()}
