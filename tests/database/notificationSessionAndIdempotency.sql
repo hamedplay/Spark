@@ -208,9 +208,8 @@ FROM notification_security_meetings;
 INSERT INTO public.meeting_inbox(meeting_id,user_id,status)
 SELECT meeting_id,(SELECT user_id FROM notification_security_users WHERE n=1),'pending' FROM notification_security_meetings WHERE n=1
 ON CONFLICT(meeting_id,user_id) DO UPDATE SET status='pending';
--- Exercise this existing definer chain as owner with a FULL fixture JWT.
--- Its public invoker wrapper currently lacks the required private EXECUTE grant;
--- that independent pre-existing browser ACL issue is outside this migration.
+-- The owner-delegation dependency now supports the actual authenticated route.
+SET LOCAL ROLE authenticated;
 DO $test$
 DECLARE r jsonb;
 BEGIN

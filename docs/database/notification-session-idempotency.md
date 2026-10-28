@@ -50,19 +50,19 @@ inbox entries, meetings and settings changes roll back.
 - Revocation, temporary lock, suspension, idle expiry, absolute expiry, epoch mismatch,
   and MFA restriction deny new writes, otherwise valid retries and ownership conflicts.
 - Anonymous access is rejected.
-- Actual authenticated invitation-delegation RPC calls still insert their template
-  notification. The owner-delegation function's definer chain is tested as the migration
-  owner with a FULL fixture JWT; both template notifications are asserted in the database.
+- Actual authenticated invitation-delegation and owner-delegation RPC calls insert their
+  template notifications; both notifications are asserted in the database. The owner route
+  became available after the subsequent client-route migration described below.
 
-### Independent existing limitation discovered during validation
+### Owner-delegation limitation found during validation, subsequently resolved
 
-public.assign_meeting_owner_delegate(uuid,uuid) is SECURITY INVOKER and callable by
-authenticated, but private.assign_meeting_owner_delegate(uuid,uuid) grants EXECUTE only
-to postgres. An actual authenticated browser-wrapper call therefore fails with 42501
-before its body. Inspection confirmed this ACL was already present before this repair.
-The invitation-delegation helper does grant authenticated EXECUTE and its browser route
-passed. The owner-delegation ACL is outside these two notification fixes and was left
-unchanged; the test explicitly labels its owner-only chain verification.
+During the notification repair, public.assign_meeting_owner_delegate(uuid,uuid) was
+SECURITY INVOKER and callable by authenticated, but its private implementation granted
+EXECUTE only to postgres. Its authenticated browser call failed with 42501 before the
+body. That independent ACL issue was left unchanged in the notification migration.
+It is now resolved by migration 20261028054407, documented in
+[the client-route repair](owner-delegation-mesh-client-routes.md); this regression suite now
+uses the actual authenticated owner route rather than an owner-only verification.
 
 To execute the suite as the migration owner on a migrated non-production database:
 
