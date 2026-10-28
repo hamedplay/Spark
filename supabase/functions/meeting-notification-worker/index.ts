@@ -1,4 +1,6 @@
 import { processMeetingNotificationJobs } from './processJobs.ts';
+import { handleSendSms } from '../send-sms/handler.ts';
+import { invokeSmsHandler } from './invokeSmsHandler.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2.112.3';
 
 // JWT is intentionally disabled at the gateway: the DB scheduler authenticates
@@ -13,6 +15,6 @@ Deno.serve(async req => {
   if (verified.data !== true) return new Response('forbidden', { status: 403 });
   const { data: jobs, error } = await client.rpc('claim_meeting_notification_jobs', { p_limit: 25 });
   if (error) return Response.json({ error: 'claim_failed' }, { status: 500 });
-  const results = await processMeetingNotificationJobs(client, jobs || []);
+  const results = await processMeetingNotificationJobs(client, jobs || [], body => invokeSmsHandler(handleSendSms, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, body));
   return Response.json({ processed: results.length, uncertain: results.filter((r: any) => r.status === 'uncertain').length, recording_failed: results.filter((r: any) => !r.recorded).length });
 });

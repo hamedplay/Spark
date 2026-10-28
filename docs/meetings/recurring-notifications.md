@@ -133,3 +133,42 @@ where jobid=(select jobid from cron.job where jobname='spark-recurring-meeting-n
 order by start_time desc limit 10;
 ```
 Inspect `uncertain` deliveries against provider receipts before any manual retry.
+
+## Split-node SMS transport
+
+Recurring jobs now execute the exported `send-sms/handler.ts` directly inside the
+Application worker. Dispatch and external modes also use that same handler for
+provider sending. This preserves authentication, FULL-session checks for browser
+callers, group/provider rules, templates, timing and the dispatch ledger. Browser
+calls still enter through `send-sms/index.ts`; series events remain service-only.
+
+Previously these calls used `client.functions.invoke` or a recursive HTTP call
+through `SUPABASE_URL`. Spark renders that URL as the Database gateway, while
+Functions are deployed on the Application node. The Database package explicitly
+removes the Functions service, so that path cannot deliver in the split topology.
+No service key is sent to a URL derived from a browser request by the new path.
+
+Deploy **both** updated functions, including their relative dependencies (the
+worker now imports the shared SMS handler). A frontend-only update does not
+update Functions or scheduler configuration. The Vault endpoint/token setup above
+is still required on the actual target environment; this code change cannot infer
+the address of a moved server. Existing uncertain jobs must not be reset.
+
+The connected non-production database still reports `MEETING_WORKER_NOT_CONFIGURED`
+and four pending historical jobs. Those were not activated to send to real people.
+Production sending is unverified until the target Functions and scheduler are
+configured there. Tests cover local transport, internal/external provider routing,
+summary templates, receipts, duplicate identity and unknown outcomes without any
+provider request to a real recipient.
+
+Split-node validation: 36 targeted Node tests passed, the production build passed,
+and the database delivery-readiness rollback suite passed. Both connected test
+Functions were redeployed at version 2. No lint, real-recipient SMS, migration or
+policy/default change was performed for this transport-only repair.
+
+Repository portability note: concurrent commit `416f9eeda04f9c044335b0ec3df3c12d3f67fcc8`
+removed the migration directory. That unrelated deletion is preserved here. The
+SQL helper and scheduler definitions mentioned above remain in Git history and
+in the connected database; a fresh database cannot receive them from the current
+migration directory. Restore a verified migration/baseline source before moving
+to an empty database. The transport repair itself changes no database schema.

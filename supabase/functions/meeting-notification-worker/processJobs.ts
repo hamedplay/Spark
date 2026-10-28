@@ -1,6 +1,6 @@
 import { loadSmsDeliveryPolicy, evaluateSmsDeliveryPolicy } from '../_shared/smsDeliveryPolicy.ts';
 
-export async function processMeetingNotificationJobs(client: any, jobs: any[], dependencies = { loadPolicy: loadSmsDeliveryPolicy, evaluatePolicy: evaluateSmsDeliveryPolicy }) {
+export async function processMeetingNotificationJobs(client: any, jobs: any[], sendSms: (body: Record<string, unknown>) => Promise<any>, dependencies = { loadPolicy: loadSmsDeliveryPolicy, evaluatePolicy: evaluateSmsDeliveryPolicy }) {
   return await Promise.all((jobs || []).map(async (job: any) => {
     let status = 'uncertain'; let reason: string | null = null;
     try {
@@ -13,7 +13,7 @@ export async function processMeetingNotificationJobs(client: any, jobs: any[], d
       const body = { mode: job.recipient_id ? 'dispatch' : 'external', targetUserId: job.recipient_id,
         mobiles: job.target_phone ? [job.target_phone] : undefined, category: 'meeting', eventType: job.event_type,
         audience: job.audience, context: { ...job.context, sms_policy_deferred_delivery: true }, eventKey: job.event_key, triggeredByUserId: job.actor_id };
-      const response = await client.functions.invoke('send-sms', { body, signal: AbortSignal.timeout(35_000) });
+      const response = await sendSms(body);
       if (response.error) reason = 'DELIVERY_OUTCOME_UNKNOWN';
       else if (response.data?.status === 'sent' || response.data?.sent > 0) status = 'sent';
       else if (response.data?.reason === 'DUPLICATE_SMS_DISPATCH' && response.data?.existingStatus === 'sent') status = 'sent';

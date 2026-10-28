@@ -10,6 +10,7 @@ type ModeContext = {
   body: Record<string, any>;
   caller: Caller;
   json: JsonResponder;
+  sendRequest?: (url: string, init: RequestInit) => Promise<Response>;
 };
 
 type DispatchLogSeed = {
@@ -102,7 +103,7 @@ async function finishLog(supabase: SmsClient, logId: string | null, patch: Recor
   await supabase.from("sms_dispatch_logs").update(patch).eq("id", logId);
 }
 
-export async function handleDispatchMode({ supabase, body, caller, json }: ModeContext): Promise<Response> {
+export async function handleDispatchMode({ supabase, body, caller, json, sendRequest = fetch }: ModeContext): Promise<Response> {
   const targetUserId: string = body.targetUserId || "";
   const category: string = body.category || "";
   const eventType: string = body.eventType || "";
@@ -295,7 +296,7 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
 
   let result: any;
   try {
-    const innerResp = await fetch(
+    const innerResp = await sendRequest(
       `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
       {
         method: "POST",
@@ -353,7 +354,7 @@ export async function handleDispatchMode({ supabase, body, caller, json }: ModeC
   });
 }
 
-export async function handleExternalMode({ supabase, body, caller, json, isAuthOtp }: ModeContext & { isAuthOtp: boolean }): Promise<Response> {
+export async function handleExternalMode({ supabase, body, caller, json, isAuthOtp, sendRequest = fetch }: ModeContext & { isAuthOtp: boolean }): Promise<Response> {
   const rawMobiles: string[] = body.mobiles || [];
   const triggeredByUserId: string | null = body.triggeredByUserId ?? caller.userId ?? null;
   const dbTriggeredBy = triggeredByUserId === "service" ? null : triggeredByUserId;
@@ -528,7 +529,7 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
 
   let result: any;
   try {
-    const innerResp = await fetch(
+    const innerResp = await sendRequest(
       `${Deno.env.get("SUPABASE_URL")!}/functions/v1/send-sms`,
       {
         method: "POST",

@@ -9,36 +9,36 @@ function fixture(result: any) {
 }
 test('series job uses stable dispatch identity and fenced completion',async()=>{
  const f=fixture({data:{status:'sent'},error:null});
- await processMeetingNotificationJobs(f.client,[job],immediate);
+ await processMeetingNotificationJobs(f.client,[job],(body)=>f.client.functions.invoke('send-sms',{body}),immediate);
  assert.equal(f.calls[0].args.body.eventKey,'unique-event');
  assert.equal(f.calls[0].args.body.context.sms_policy_deferred_delivery,true);
  assert.deepEqual(f.calls[1].args,{p_id:'job',p_lease:'lease',p_status:'sent',p_error:null});
 });
 test('unknown network outcome is terminal uncertain, never blindly requeued',async()=>{
  const f=fixture(new Error('timeout'));
- await processMeetingNotificationJobs(f.client,[job],immediate);
+ await processMeetingNotificationJobs(f.client,[job],(body)=>f.client.functions.invoke('send-sms',{body}),immediate);
  assert.equal(f.calls[1].args.p_status,'uncertain');
  assert.equal(f.calls.filter(c=>c.name==='send-sms').length,1);
 });
 test('SMS delivery window postpones the unsent job without invoking provider',async()=>{
  const f=fixture({});
  const next=new Date('2026-10-28T05:30:00Z');
- await processMeetingNotificationJobs(f.client,[job],{...immediate,evaluatePolicy:()=>({sendNow:false,nextAllowedAt:next}) as any});
+ await processMeetingNotificationJobs(f.client,[job],(body)=>f.client.functions.invoke('send-sms',{body}),{...immediate,evaluatePolicy:()=>({sendNow:false,nextAllowedAt:next}) as any});
  assert.equal(f.calls.length,1);assert.equal(f.calls[0].name,'postpone_meeting_notification_job');assert.equal(f.calls[0].args.p_available_at,next.toISOString());
 });
 test('external recipient is dispatched individually with the same event deduplication key',async()=>{
  const f=fixture({data:{sent:1},error:null});
- await processMeetingNotificationJobs(f.client,[{...job,recipient_id:null,target_phone:'09000000000',audience:'external'}],immediate);
+ await processMeetingNotificationJobs(f.client,[{...job,recipient_id:null,target_phone:'09000000000',audience:'external'}],(body)=>f.client.functions.invoke('send-sms',{body}),immediate);
  assert.equal(f.calls[0].args.body.mode,'external');assert.deepEqual(f.calls[0].args.body.mobiles,['09000000000']);assert.equal(f.calls[1].args.p_status,'sent');
 });
 test('disabled provider rule is skipped; recording failures are visible',async()=>{
  const f=fixture({data:{status:'skipped',reason:'NO_RULE'},error:null});
- await processMeetingNotificationJobs(f.client,[job],immediate);
+ await processMeetingNotificationJobs(f.client,[job],(body)=>f.client.functions.invoke('send-sms',{body}),immediate);
  assert.equal(f.calls[1].args.p_status,'skipped');
 });
 test('provider transport failure stays uncertain even when send-sms returned HTTP success',async()=>{
  const f=fixture({data:{ok:false,status:'failed',errorCode:'PROVIDER_TRANSPORT_ERROR'},error:null});
- await processMeetingNotificationJobs(f.client,[job],immediate);
+ await processMeetingNotificationJobs(f.client,[job],(body)=>f.client.functions.invoke('send-sms',{body}),immediate);
  assert.equal(f.calls[1].args.p_status,'uncertain');
  assert.equal(f.calls[1].args.p_error,'DELIVERY_OUTCOME_UNKNOWN');
  assert.equal(f.calls.filter(c=>c.name==='send-sms').length,1);
@@ -46,14 +46,14 @@ test('provider transport failure stays uncertain even when send-sms returned HTT
 test('duplicate pending ledger is unknown and must not be treated as an ordinary skip',async()=>{
  for(const existingStatus of ['pending','processing','uncertain']){
   const f=fixture({data:{status:'skipped',reason:'DUPLICATE_SMS_DISPATCH',existingStatus},error:null});
-  await processMeetingNotificationJobs(f.client,[job],immediate);
+  await processMeetingNotificationJobs(f.client,[job],(body)=>f.client.functions.invoke('send-sms',{body}),immediate);
   assert.equal(f.calls[1].args.p_status,'uncertain');
   assert.equal(f.calls.filter(c=>c.name==='send-sms').length,1);
  }
 });
 test('duplicate confirmed sent ledger is acknowledged without another provider dispatch',async()=>{
  const f=fixture({data:{status:'skipped',reason:'DUPLICATE_SMS_DISPATCH',existingStatus:'sent'},error:null});
- await processMeetingNotificationJobs(f.client,[job],immediate);
+ await processMeetingNotificationJobs(f.client,[job],(body)=>f.client.functions.invoke('send-sms',{body}),immediate);
  assert.equal(f.calls[1].args.p_status,'sent');
  assert.equal(f.calls.filter(c=>c.name==='send-sms').length,1);
 });
