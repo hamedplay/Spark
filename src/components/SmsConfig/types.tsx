@@ -110,6 +110,7 @@ export const DELIVERY_STATUS: Record<number, { label: string; color: string }> =
 };
 
 export const SAMPLE_VALUES: Record<string, string> = {
+  formal_recipient_greeting: 'جناب آقای محمدی', series_weekdays: 'شنبه‌ها', recurrence_frequency: 'هفتگی',
   summary: 'دعوت به جلسات تکراری هیئت مدیره؛ ۴ نوبت',
   series_start_date: '۱۴۰۵/۰۸/۰۷', series_end_date: '۱۴۰۵/۰۸/۲۸',
   occurrence_count: '۴', series_pattern: 'هر هفته پنجشنبه',

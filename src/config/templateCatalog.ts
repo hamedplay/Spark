@@ -137,6 +137,9 @@ export interface TemplatePlaceholder {
 }
 
 export const TEMPLATE_PLACEHOLDERS: TemplatePlaceholder[] = [
+  { key: 'formal_recipient_greeting', label: 'خطاب رسمی مخاطب طبق پروفایل', example: 'جناب آقای محمدی' },
+  { key: 'series_weekdays', label: 'روزهای واقعی برگزاری سری', example: 'شنبه‌ها' },
+  { key: 'recurrence_frequency', label: 'دوره تکرار', example: 'هفتگی' },
   { key: 'series_start_date', label: 'تاریخ اولین نوبت مرتبط', example: '۱۴۰۵/۰۸/۰۷' },
   { key: 'series_end_date', label: 'تاریخ آخرین نوبت مرتبط', example: '۱۴۰۵/۰۸/۲۸' },
   { key: 'occurrence_count', label: 'تعداد نوبت‌های مرتبط', example: '۴' },
@@ -425,10 +428,10 @@ export interface TemplateEventDefinition {
 }
 
 export const TEMPLATE_EVENTS: TemplateEventDefinition[] = [
-  { key: 'series_invite', category: 'meeting', label: 'دعوت خلاصه جلسات تکراری', supportedChannels: ['sms', 'notification'], audiences: ['all','creator','participants','observers','external'], requiredPlaceholders: [], optionalPlaceholders: ['summary','series_start_date','series_end_date','occurrence_count','series_pattern','meeting_time','location_part','meeting_subject','meeting_date','start_time','end_time','location','recipient_greeting','full_name'] },
-  { key: 'series_change', category: 'meeting', label: 'تغییر جلسات تکراری', supportedChannels: ['sms', 'notification'], audiences: ['all','creator','participants','observers','external'], requiredPlaceholders: [], optionalPlaceholders: ['summary','series_start_date','series_end_date','occurrence_count','series_pattern','meeting_time','location_part','meeting_subject','meeting_date','start_time','end_time','location','recipient_greeting','full_name'] },
-  { key: 'series_cancel', category: 'meeting', label: 'لغو جلسات تکراری', supportedChannels: ['sms', 'notification'], audiences: ['all','creator','participants','observers','external'], requiredPlaceholders: [], optionalPlaceholders: ['summary','series_start_date','series_end_date','occurrence_count','series_pattern','meeting_time','location_part','meeting_subject','meeting_date','start_time','end_time','location','recipient_greeting','full_name'] },
-  { key: 'series_reminder', category: 'meeting', label: 'یادآوری نوبت جلسه تکراری', supportedChannels: ['sms', 'notification'], audiences: ['all','creator','participants','observers','external'], requiredPlaceholders: [], optionalPlaceholders: ['summary','series_start_date','series_end_date','occurrence_count','series_pattern','meeting_time','location_part','meeting_subject','meeting_date','start_time','end_time','location','recipient_greeting','full_name'] },
+  { key: 'series_invite', category: 'meeting', label: 'دعوت خلاصه جلسات تکراری', supportedChannels: ['sms', 'notification'], audiences: ['all','creator','participants','observers','external'], requiredPlaceholders: [], optionalPlaceholders: ['formal_recipient_greeting','series_weekdays','recurrence_frequency','summary','series_start_date','series_end_date','occurrence_count','series_pattern','meeting_time','location_part','meeting_subject','meeting_date','start_time','end_time','location','recipient_greeting','full_name'] },
+  { key: 'series_change', category: 'meeting', label: 'تغییر جلسات تکراری', supportedChannels: ['sms', 'notification'], audiences: ['all','creator','participants','observers','external'], requiredPlaceholders: [], optionalPlaceholders: ['formal_recipient_greeting','series_weekdays','recurrence_frequency','summary','series_start_date','series_end_date','occurrence_count','series_pattern','meeting_time','location_part','meeting_subject','meeting_date','start_time','end_time','location','recipient_greeting','full_name'] },
+  { key: 'series_cancel', category: 'meeting', label: 'لغو جلسات تکراری', supportedChannels: ['sms', 'notification'], audiences: ['all','creator','participants','observers','external'], requiredPlaceholders: [], optionalPlaceholders: ['formal_recipient_greeting','series_weekdays','recurrence_frequency','summary','series_start_date','series_end_date','occurrence_count','series_pattern','meeting_time','location_part','meeting_subject','meeting_date','start_time','end_time','location','recipient_greeting','full_name'] },
+  { key: 'series_reminder', category: 'meeting', label: 'یادآوری نوبت جلسه تکراری', supportedChannels: ['sms', 'notification'], audiences: ['all','creator','participants','observers','external'], requiredPlaceholders: [], optionalPlaceholders: ['formal_recipient_greeting','series_weekdays','recurrence_frequency','summary','series_start_date','series_end_date','occurrence_count','series_pattern','meeting_time','location_part','meeting_subject','meeting_date','start_time','end_time','location','recipient_greeting','full_name'] },
 
   // Meeting events
   {

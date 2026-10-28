@@ -207,3 +207,26 @@ The admin setup was tested with real authenticated roles, including nonadmin,
 missing session and anon denials, and rolled back. No outbound recipient SMS was
 sent, no policy defaults changed, and no lint was run. Worker configuration on the
 connected test environment was left inactive rather than draining old pending jobs.
+
+## Invitation wording
+
+The invitation SMS and in-app body use the requested formal wording. The SMS
+includes the recipient salutation, subject, actual weekdays, start time, recurrence
+frequency and first/last affected dates. The in-app title is «دعوت به جلسات
+تکرارشونده» and its body includes the scheduled occurrence count and calendar
+confirmation. Change/cancel/reminder templates and delivery policy are unchanged.
+
+`formal_recipient_greeting` uses the stored profile gender (`male`/`female`) for
+«جناب آقای»/«سرکار خانم»; an unknown gender receives a neutral greeting. External
+recipients without a profile use «همکار گرامی». `series_weekdays` derives all distinct
+Tehran weekdays from actual occurrences, including monthly schedules whose dates
+fall on different weekdays. `recurrence_frequency` preserves non-unit intervals
+(e.g. «هر ۲ هفته»). Both editors expose these fields and sample values.
+
+The invitation opens the existing calendar route. This wording update does not
+add series-level accept/decline buttons or a new response workflow. No action
+labels are inserted as inert text links. Existing notifications are not rewritten.
+
+Validation: SQL invitation-copy and template-routing suites passed; targeted
+renderer/catalog/worker tests and the production build passed. No real SMS was
+sent, and scheduler setup was not activated by this copy change.
