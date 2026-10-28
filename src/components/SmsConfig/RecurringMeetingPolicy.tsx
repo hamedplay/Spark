@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 
 type Policy = Record<'invite_in_app' | 'invite_sms' | 'change_in_app' | 'change_sms' | 'reminder_in_app' | 'reminder_sms' | 'external_reminder_sms', boolean>;
-type Runtime = { worker_configured: boolean; cron_active: boolean; scheduler: { dispatch_status: string; last_tick_at: string | null; last_error: string | null } | null; queue: Record<string,number> };
+type Runtime = { worker_configured: boolean; existing_sender_active?: boolean; cron_active: boolean; scheduler: { dispatch_status: string; last_tick_at: string | null; last_error: string | null } | null; queue: Record<string,number> };
 const labels: Record<keyof Policy,string> = {
   invite_in_app: 'دعوت خلاصه سری: اعلان داخلی', invite_sms: 'دعوت خلاصه سری: پیامک',
   change_in_app: 'تغییر مهم و لغو: اعلان داخلی', change_sms: 'تغییر مهم و لغو: پیامک',
@@ -50,7 +50,7 @@ export function RecurringMeetingPolicy() {
     <p className="text-sm text-gray-500">دعوت اولیه یک پیام برای کل سری است. فاصله یادآوری از تنظیم هر جلسه خوانده می‌شود. پیامک افراد خارج سازمان به فعال‌بودن پیامک در خود جلسه نیز وابسته است.</p>
     <p className="text-sm text-gray-500">این سیاست برای سری‌هایی است که با نسخه جدید ساخته شده‌اند؛ نوبت‌های قدیمی بدون پیوند سری، خودکار به هم متصل نمی‌شوند.</p>
     {runtimeError ? <p role="status" className="text-sm text-amber-700 dark:text-amber-300">وضعیت اجرای صف در دسترس نیست؛ آماده‌بودن پردازشگر پیامک تأیید نشده است.</p> : runtime && <div role="status" className="space-y-1 rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-      {!runtime.worker_configured ? <p className="text-red-600 dark:text-red-400">ارسال خودکار راه‌اندازی نشده است. پس از به‌روزرسانی سرویس پیامک سرور، از دکمه زیر استفاده کنید.</p>
+      {runtime.existing_sender_active ? <p>پردازش جلسات تکراری از مسیر ارسال خودکار سامانه فعال است؛ نتیجه هر کانال را در گزارش بررسی کنید.</p> : !runtime.worker_configured ? <p className="text-red-600 dark:text-red-400">پردازش پس‌زمینه تأیید نشده است. ارسال فوری هنگام ثبت و لغو انجام می‌شود؛ برای اجرای بدون مرورگر، زمان‌بند اعلان‌های سرور باید فعال باشد یا از دکمه زیر استفاده کنید.</p>
         : !runtime.cron_active ? <p className="text-red-600 dark:text-red-400">زمان‌بند جلسات تکراری غیرفعال است؛ ارسال خودکار انجام نمی‌شود.</p>
         : <p>پیکربندی زمان‌بند موجود است؛ تأیید تحویل پیامک از گزارش ارسال بررسی می‌شود.</p>}
       <p>در انتظار پردازش: {runtime.queue.pending ?? 0} · در حال پردازش: {runtime.queue.processing ?? 0} · نتیجه نامشخص: {runtime.queue.uncertain ?? 0} · ناموفق: {runtime.queue.failed ?? 0}</p>

@@ -1,3 +1,4 @@
+import { dispatchRecurringMeetingDelivery } from '../services/dispatchRecurringMeetingDelivery';
 import { getMeetingTemplateKey } from '../../../config/templateCatalog';
 import { insertNotification } from '../../../lib/notifications';
 import { supabase } from '../../../lib/supabase';
@@ -94,12 +95,22 @@ export async function deleteMeetingPermanently(
 ): Promise<void> {
   const { data: meetingContext, error: meetingContextError } = await supabase
     .from('meetings')
-    .select('request_date, start_time, end_time')
+    .select('request_date, start_time, end_time, series_id')
     .eq('id', input.meetingId)
     .maybeSingle();
 
   if (meetingContextError) {
     throw meetingContextError;
+  }
+
+  const seriesId = (meetingContext as any)?.series_id;
+  if (seriesId) {
+    const inbox = await supabase.from('meeting_inbox').delete().eq('meeting_id', input.meetingId);
+    if (inbox.error) throw inbox.error;
+    const removed = await supabase.from('meetings').delete().eq('id', input.meetingId);
+    if (removed.error) throw removed.error;
+    await dispatchRecurringMeetingDelivery(seriesId);
+    return;
   }
 
   const participantUserIds =

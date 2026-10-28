@@ -1,3 +1,4 @@
+import { dispatchRecurringMeetingDelivery } from '../../features/meetings/services/dispatchRecurringMeetingDelivery';
 import type { MutableRefObject } from 'react';
 import moment from 'moment-jalaali';
 import toast from 'react-hot-toast';
@@ -136,6 +137,7 @@ export async function commitCalendarMeetingEdit({
     }
 
     if (managedSeries) {
+      await dispatchRecurringMeetingDelivery((identity as any).series_id);
       setEditDecision(null);
       onSuccess(subject, true);
       return;

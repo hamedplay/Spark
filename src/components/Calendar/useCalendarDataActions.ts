@@ -1,3 +1,4 @@
+import { dispatchRecurringMeetingDelivery } from '../../features/meetings/services/dispatchRecurringMeetingDelivery';
 import { mergeLiveSelection } from '../../shared/realtime/mergeLiveSelection';
 import { useLiveData } from '../../shared/realtime/useLiveData';
 import { buildCalendarGoogleEventUrl, openGoogleCalendarWindow } from './googleCalendarExport';
@@ -496,6 +497,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
           const { error: delErr } = await supabase.from('meetings').delete().eq('id', id);
           if (delErr) throw delErr;
 
+          if (meeting.series_id) await dispatchRecurringMeetingDelivery(meeting.series_id);
           toast.success('جلسه حذف شد و درخواست جدید ایجاد گردید');
           setDetailMeeting(null);
           fetchMeetings();
@@ -513,6 +515,7 @@ export function useCalendarDataActions(scope: Record<string, any>) {
           if (error) throw error;
         }
 
+        if (meeting.series_id) await dispatchRecurringMeetingDelivery(meeting.series_id);
         toast.success('جلسه حذف شد');
       } else {
         await removeMeetingFromMyCalendar(id);

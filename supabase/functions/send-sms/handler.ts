@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
+import { runMeetingNotificationBatch } from '../_shared/recurringDelivery.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
 import { isValidPhone, normalizePhone } from "./phone.ts";
@@ -89,6 +89,10 @@ export async function handleSendSms(req: Request): Promise<Response> {
 
     const body = await req.json();
     let mode: string = body.mode || "send";
+    if (mode === 'recurring_delivery') {
+      if (caller.userId === 'service' || typeof body.seriesId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.seriesId)) return json({error:'INVALID_SERIES_REQUEST'},400);
+      return json(await runMeetingNotificationBatch(supabase, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, caller.userId, body.seriesId));
+    }
     if (body.category === 'meeting' && String(body.eventType || '').startsWith('series_') && caller.userId !== 'service') {
       return json({ ok: false, errorCode: 'SERVER_MANAGED_EVENT' }, 403);
     }

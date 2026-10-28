@@ -1,5 +1,5 @@
-import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2.111.0";
+import { deliverBaleNotification } from '../_shared/baleDelivery.ts';
+import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import {
   requireFullAuthAccess,
   deniedResponse,
@@ -75,58 +75,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const { data: cfg, error: cfgErr } = await admin
-    .from("social_channel_configs")
-    .select("bot_token, is_active")
-    .eq("channel", "bale")
-    .maybeSingle();
-
-  if (cfgErr) {
-    console.error("[send-bale-message] config error:", cfgErr.message);
-    return json({ ok: false, error: "خطا در خواندن تنظیمات بله" }, 500);
-  }
-
-  if (!cfg?.is_active) {
-    return json({ ok: true, skipped: true, reason: "بله غیرفعال است" });
-  }
-
-  const botToken = (cfg?.bot_token ?? "").trim();
-  if (!botToken) {
-    return json({ ok: true, skipped: true, reason: "توکن بات تنظیم نشده" });
-  }
-
-  // Resolve both legacy plaintext mappings and new encrypted-only mappings
-  // through a service-role-only database function.
-  const { data: baleChatId, error: mapErr } = await admin.rpc(
-    "get_bale_chat_id_service",
-    { p_user_id: userId },
-  );
-
-  if (mapErr) {
-    console.error("[send-bale-message] mapping lookup error:", mapErr.message);
-    return json({ ok: false, error: "خطا در خواندن مپینگ بله" }, 500);
-  }
-
-  if (!baleChatId) {
-    return json({ ok: true, skipped: true, reason: "کاربر به بله متصل نیست" });
-  }
-
-  try {
-    const res = await fetch(`https://tapi.bale.ai/bot${botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: baleChatId, text }),
-    });
-
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => "");
-      console.warn("[send-bale-message] Bale API HTTP %s: %s", res.status, errBody.slice(0, 200));
-      return json({ ok: false, error: `Bale API HTTP ${res.status}` });
-    }
-
-    return json({ ok: true });
-  } catch (e: any) {
-    console.error("[send-bale-message] network error:", e?.message);
-    return json({ ok: false, error: "خطای شبکه هنگام ارسال به بله" }, 502);
-  }
+  const result = await deliverBaleNotification(admin, userId, text);
+  return json({ ok: result.status === 'sent' || result.status === 'skipped',
+    skipped: result.status === 'skipped', ...result }, result.status === 'uncertain' ? 502 : 200);
 });

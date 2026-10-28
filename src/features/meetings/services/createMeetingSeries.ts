@@ -1,3 +1,4 @@
+import { dispatchRecurringMeetingDelivery } from './dispatchRecurringMeetingDelivery';
 import { supabase } from '../../../lib/supabase';
 
 type SeriesClient = { rpc(name: string, args: Record<string, unknown>): Promise<{ data: string[] | null; error: { message: string } | null }> };
@@ -8,5 +9,6 @@ export async function createMeetingSeries(operationId: string, records: object[]
   });
   if (error) throw new Error(error.message.includes('OPERATION_CONFLICT') ? 'این درخواست قبلاً با اطلاعات دیگری ثبت شده است؛ پیش از ثبت مجدد، تقویم را بررسی کنید.' : error.message);
   if (!data?.length) throw new Error('ثبت جلسات تکراری تأیید نشد');
+  await dispatchRecurringMeetingDelivery(operationId);
   return data;
 }

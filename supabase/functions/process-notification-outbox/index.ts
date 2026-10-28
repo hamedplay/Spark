@@ -1,3 +1,4 @@
+import { runMeetingNotificationBatch } from '../_shared/recurringDelivery.ts';
 import { createClient } from "npm:@supabase/supabase-js@2.110.2";
 import { deferredSmsFailure } from "../_shared/deferredSmsFailure.ts";
 import { timingSafeCompare } from "../_shared/crypto.ts";
@@ -103,6 +104,17 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // The existing server notification timer also owns recurring delivery.
+    // It does not require an additional worker URL or token in Vault.
+    let recurringResult: unknown;
+    try {
+      const prepared = await supabase.rpc('prepare_meeting_notification_jobs');
+      if (prepared.error) throw prepared.error;
+      recurringResult = await runMeetingNotificationBatch(supabase, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    } catch {
+      console.error('[outbox-worker] recurring delivery unavailable');
+      recurringResult = { error: 'RECURRING_DELIVERY_UNAVAILABLE' };
+    }
     const deferredResult = await processDeferredSmsQueue(supabase);
 
     const { data: claimedRows, error: claimError } = await supabase
@@ -118,7 +130,7 @@ Deno.serve(async (req: Request) => {
 
     if (!claimedRows || claimedRows.length === 0) {
       return new Response(
-        JSON.stringify({ processed: 0, deferred_sms_processed: deferredResult.processed, deferred_sms_failed: deferredResult.failed }),
+        JSON.stringify({ processed: 0, recurring: recurringResult, deferred_sms_processed: deferredResult.processed, deferred_sms_failed: deferredResult.failed }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -450,6 +462,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         processed: claimed.length,
+        recurring: recurringResult,
         notifications: notificationCount,
         sms_sent: smsSentCount,
         failed: failedCount,
