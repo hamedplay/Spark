@@ -49,12 +49,33 @@ minimum). Series request identities are retained separately.
 
 ## Deployment and validation
 
-Apply the new migrations in filename order; do not edit previous migrations.
-Deploy `send-sms` and `meeting-notification-worker`, and publish the frontend.
-The migration creates `meeting_notification_worker_token` and derives
-`meeting_notification_worker_url` from the existing `pwa_push_function_url` Vault
-entry. If that entry is absent, configure the worker's own HTTPS function URL in
-Vault. Cron fails visibly when required worker configuration is missing.
+Apply pending migrations with the repository migration runner; do not edit previous
+migrations. Deploy `send-sms` and `meeting-notification-worker`, and publish the frontend.
+The worker's gateway JWT verification is off because its body verifies the dedicated
+Vault token; `send-sms` retains its gateway and in-function authorization.
+
+After deploying both functions on the actual target environment, configure its own
+HTTPS endpoint as the migration owner. Migration
+`20261028060706_repair_recurring_delivery_snapshots_and_readiness.sql` provides an
+idempotent operator-only helper:
+
+```sql
+select private.configure_meeting_notification_worker(
+  'https://YOUR_API_HOST/functions/v1/meeting-notification-worker'
+);
+```
+
+This generates the dedicated token inside Vault when missing, retains a valid existing
+token, and updates the URL without returning secrets. It is unavailable to browser and
+service-role callers. Run it for the current host after a database move, rather than
+copying old URLs or manually reconstructing secrets. It does not deploy functions or
+configure the SMS provider, group rules or provider credentials.
+
+Configuring the endpoint enables cron to process existing pending jobs. Review that
+queue on the target environment first; do not reset uncertain deliveries for a test.
+The admin panel now shows scheduler configuration, heartbeat and queue status counts.
+Configuration presence alone does not prove provider delivery. Missing setup is shown
+explicitly instead of making a saved policy look like a working sender.
 Do not put a provider key, a service-role JWT or the Vault token in frontend code.
 
 SQL integration tests roll back every fixture and outbound job:
@@ -69,11 +90,38 @@ Node tests cover atomic frontend routing, unchanged legacy editing, recurrence
 builders, worker delivery/defer/unknown outcomes and creation failure handling.
 No real recipient is messaged by tests.
 
-The connected test project's service-role JWT was rejected by PostgREST with
-`PGRST303: JWT issued at future` during the actual HTTP worker probe. The queue
-and cron must not be described as successful external SMS delivery until the
-infrastructure clock/credential issue is resolved. SQL transaction tests and
-mocked worker tests are independent of that environment limitation.
+During an earlier probe this test project returned `PGRST303: JWT issued at future`.
+That error was not reproduced in the current safe HTTP verification probe: after
+deploying both functions, the worker returned 401 without a token and 403 for an
+invalid token. These checks invoke no provider and do not claim delivery jobs.
+The current test environment initially had no deployed Edge Functions, no Vault
+worker configuration and four pending jobs, with MEETING_WORKER_NOT_CONFIGURED.
+Functions were deployed for validation; live queue activation was deliberately not
+performed, and no real recipient was messaged. Production runtime/configuration
+must be verified separately on the actual server.
+
+The same investigation found 242 legacy recurring occurrences without series_id and
+no linked series in the test data. Their titles/timestamps are not a safe identity;
+they were not merged or backfilled. Create new linked series through the atomic RPC
+or supply an explicit, verified mapping for any later legacy migration.
+
+The new delivery-readiness SQL regression checks that claiming a partially invalidated
+series rebuilds summary text and occurrence_count from valid occurrences, preserves
+the original pattern, handles equivalent Tehran date encodings, retains cancellation
+history and never reclaims an uncertain lease. Worker tests also cover uncertain
+provider transport and pending-ledger responses. See
+`tests/database/recurringDeliveryReadiness.sql` and
+`tests/meetings/recurringNotificationWorker.test.ts`.
+
+Validation for this repair: the new delivery-readiness SQL suite plus the existing
+recurring notification, series safety and scheduler-readiness SQL suites passed.
+The 52-occurrence/520-invitation assertions, new-member-only routing, affected
+occurrence changes, cancellation, per-occurrence server reminders and reminder-SMS
+defaults remain covered. All 21 targeted worker/recurrence/dispatch code tests and
+the production build passed. Both deployed test functions are ACTIVE; safe HTTP
+checks returned worker 401/403 and send-sms 401. The four pre-existing pending jobs
+and empty Vault were retained. No delivery to a real recipient was attempted.
+No lint or PR was run/created.
 
 Operational diagnosis (run with privileged database tooling):
 ```sql

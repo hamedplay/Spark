@@ -36,3 +36,24 @@ test('disabled provider rule is skipped; recording failures are visible',async()
  await processMeetingNotificationJobs(f.client,[job],immediate);
  assert.equal(f.calls[1].args.p_status,'skipped');
 });
+test('provider transport failure stays uncertain even when send-sms returned HTTP success',async()=>{
+ const f=fixture({data:{ok:false,status:'failed',errorCode:'PROVIDER_TRANSPORT_ERROR'},error:null});
+ await processMeetingNotificationJobs(f.client,[job],immediate);
+ assert.equal(f.calls[1].args.p_status,'uncertain');
+ assert.equal(f.calls[1].args.p_error,'DELIVERY_OUTCOME_UNKNOWN');
+ assert.equal(f.calls.filter(c=>c.name==='send-sms').length,1);
+});
+test('duplicate pending ledger is unknown and must not be treated as an ordinary skip',async()=>{
+ for(const existingStatus of ['pending','processing','uncertain']){
+  const f=fixture({data:{status:'skipped',reason:'DUPLICATE_SMS_DISPATCH',existingStatus},error:null});
+  await processMeetingNotificationJobs(f.client,[job],immediate);
+  assert.equal(f.calls[1].args.p_status,'uncertain');
+  assert.equal(f.calls.filter(c=>c.name==='send-sms').length,1);
+ }
+});
+test('duplicate confirmed sent ledger is acknowledged without another provider dispatch',async()=>{
+ const f=fixture({data:{status:'skipped',reason:'DUPLICATE_SMS_DISPATCH',existingStatus:'sent'},error:null});
+ await processMeetingNotificationJobs(f.client,[job],immediate);
+ assert.equal(f.calls[1].args.p_status,'sent');
+ assert.equal(f.calls.filter(c=>c.name==='send-sms').length,1);
+});

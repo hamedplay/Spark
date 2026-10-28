@@ -16,6 +16,9 @@ export async function processMeetingNotificationJobs(client: any, jobs: any[], d
       const response = await client.functions.invoke('send-sms', { body, signal: AbortSignal.timeout(35_000) });
       if (response.error) reason = 'DELIVERY_OUTCOME_UNKNOWN';
       else if (response.data?.status === 'sent' || response.data?.sent > 0) status = 'sent';
+      else if (response.data?.reason === 'DUPLICATE_SMS_DISPATCH' && response.data?.existingStatus === 'sent') status = 'sent';
+      else if (response.data?.reason === 'DUPLICATE_SMS_DISPATCH' && ['pending', 'processing', 'uncertain'].includes(response.data?.existingStatus)) reason = 'DELIVERY_OUTCOME_UNKNOWN';
+      else if (['PROVIDER_TRANSPORT_ERROR', 'DELIVERY_OUTCOME_UNKNOWN'].includes(response.data?.errorCode)) reason = 'DELIVERY_OUTCOME_UNKNOWN';
       else if (response.data?.status === 'skipped') { status = 'skipped'; reason = response.data.reason ?? null; }
       else if (response.data?.reason === 'SMS_DEFERRED_BY_POLICY' || response.data?.deferred) status = 'sent'; // ownership transferred to existing delivery queue
       else { status = 'failed'; reason = response.data?.errorCode ?? response.data?.error ?? 'SMS_FAILED'; }
