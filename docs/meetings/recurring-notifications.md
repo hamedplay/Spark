@@ -54,8 +54,15 @@ migrations. Deploy `send-sms` and `meeting-notification-worker`, and publish the
 The worker's gateway JWT verification is off because its body verifies the dedicated
 Vault token; `send-sms` retains its gateway and in-function authorization.
 
-After deploying both functions on the actual target environment, configure its own
-HTTPS endpoint as the migration owner. Migration
+After deploying both functions and applying the current migration on the target,
+open Settings → SMS → Delivery schedule → Recurring meetings and choose
+«راه‌اندازی ارسال خودکار در این سامانه». This FULL-session admin command registers
+the current HTTPS origin, retains the dedicated Vault token and enables the minute
+cron. It activates existing pending work and does not retry uncertain jobs. After
+a server/database move, use the same action at the new origin. It does not deploy
+Functions or prove provider delivery.
+
+Operators can alternatively configure the HTTPS endpoint as the migration owner. Migration
 `20261028060706_repair_recurring_delivery_snapshots_and_readiness.sql` provides an
 idempotent operator-only helper:
 
@@ -172,3 +179,31 @@ SQL helper and scheduler definitions mentioned above remain in Git history and
 in the connected database; a fresh database cannot receive them from the current
 migration directory. Restore a verified migration/baseline source before moving
 to an empty database. The transport repair itself changes no database schema.
+
+## Editable recurring templates and runtime setup
+
+Migration `20261028080847_wire_recurring_templates_and_admin_delivery_setup.sql`
+adds four in-app templates and replaces only old shipped summary-only/empty SMS
+bodies with editable defaults. Existing customized SMS bodies and inactive flags
+are preserved. The server now selects an active audience-specific in-app template,
+then the active `all` fallback, and stores its rendered title/body and template ID.
+Disabling the applicable in-app templates suppresses that channel while SMS policy
+continues independently. Historical notifications are not rewritten.
+
+New context fields: `series_start_date`, `series_end_date`, `occurrence_count`,
+`series_pattern`, `meeting_time`, `location_part`. The affected occurrence set
+controls range/count; reminders still use a single occurrence. Pending historical
+jobs also receive the new fields, including cancellation snapshots. Existing
+`summary` templates remain valid; both template editors now expose the series
+fields and previews. The actual subject reported by the user was absent from the
+connected test database, so that database cannot establish the production queue's
+state or actual provider delivery.
+
+Validation: four rollback SQL suites passed (template routing/setup, recurring
+notifications, series safety, delivery readiness); 40 targeted Node tests and the
+production build passed. All four live database SMS templates rendered successfully
+against context produced by the live SQL helper without invoking a provider.
+The admin setup was tested with real authenticated roles, including nonadmin,
+missing session and anon denials, and rolled back. No outbound recipient SMS was
+sent, no policy defaults changed, and no lint was run. Worker configuration on the
+connected test environment was left inactive rather than draining old pending jobs.

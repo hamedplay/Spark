@@ -110,6 +110,9 @@ export const DELIVERY_STATUS: Record<number, { label: string; color: string }> =
 };
 
 export const SAMPLE_VALUES: Record<string, string> = {
+  summary: 'دعوت به جلسات تکراری هیئت مدیره؛ ۴ نوبت',
+  series_start_date: '۱۴۰۵/۰۸/۰۷', series_end_date: '۱۴۰۵/۰۸/۲۸',
+  occurrence_count: '۴', series_pattern: 'هر هفته پنجشنبه',
   meeting_subject: 'جلسه هماهنگی پروژه',
   meeting_date: '۱۵/۳/۱۴۰۵',
   meeting_time: '۰۹:۰۰-۱۰:۰۰',

@@ -35,17 +35,31 @@ export function RecurringMeetingPolicy() {
     } catch { toast.error('ذخیره سیاست اطلاع‌رسانی ناموفق بود'); }
     finally {setBusy(false);}
   }
+  async function configureDelivery() {
+    setBusy(true);
+    try {
+      const {data,error}=await (supabase as any).rpc('configure_recurring_notification_delivery',{p_origin:window.location.origin});
+      if(error) throw error;
+      setRuntime(data); setRuntimeError(false);
+      toast.success('ارسال خودکار برای آدرس فعلی سامانه راه‌اندازی شد؛ نتیجه ارسال را در گزارش پیامک بررسی کنید');
+    } catch { toast.error('راه‌اندازی ارسال ممکن نشد؛ اتصال HTTPS، دسترسی مدیر و نصب Migration جدید را بررسی کنید'); }
+    finally {setBusy(false);}
+  }
   return <section className="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700" dir="rtl">
     <h4 className="font-bold dark:text-white">اطلاع‌رسانی جلسات تکراری</h4>
     <p className="text-sm text-gray-500">دعوت اولیه یک پیام برای کل سری است. فاصله یادآوری از تنظیم هر جلسه خوانده می‌شود. پیامک افراد خارج سازمان به فعال‌بودن پیامک در خود جلسه نیز وابسته است.</p>
     <p className="text-sm text-gray-500">این سیاست برای سری‌هایی است که با نسخه جدید ساخته شده‌اند؛ نوبت‌های قدیمی بدون پیوند سری، خودکار به هم متصل نمی‌شوند.</p>
     {runtimeError ? <p role="status" className="text-sm text-amber-700 dark:text-amber-300">وضعیت اجرای صف در دسترس نیست؛ آماده‌بودن پردازشگر پیامک تأیید نشده است.</p> : runtime && <div role="status" className="space-y-1 rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-      {!runtime.worker_configured ? <p className="text-red-600 dark:text-red-400">پردازشگر پیامک تنظیم نشده است. Worker و send-sms باید روی سرور Deploy و آدرس HTTPS و توکن اختصاصی Worker در Vault تنظیم شوند.</p>
+      {!runtime.worker_configured ? <p className="text-red-600 dark:text-red-400">ارسال خودکار راه‌اندازی نشده است. پس از به‌روزرسانی سرویس پیامک سرور، از دکمه زیر استفاده کنید.</p>
         : !runtime.cron_active ? <p className="text-red-600 dark:text-red-400">زمان‌بند جلسات تکراری غیرفعال است؛ ارسال خودکار انجام نمی‌شود.</p>
         : <p>پیکربندی زمان‌بند موجود است؛ تأیید تحویل پیامک از گزارش ارسال بررسی می‌شود.</p>}
       <p>در انتظار پردازش: {runtime.queue.pending ?? 0} · در حال پردازش: {runtime.queue.processing ?? 0} · نتیجه نامشخص: {runtime.queue.uncertain ?? 0} · ناموفق: {runtime.queue.failed ?? 0}</p>
       {(runtime.queue.uncertain ?? 0)>0 && <p>موارد با نتیجه نامشخص خودکار دوباره ارسال نمی‌شوند؛ ابتدا رسید سرویس‌دهنده بررسی شود.</p>}
       {runtime.scheduler?.last_tick_at && <p>آخرین اجرای زمان‌بند: {new Date(runtime.scheduler.last_tick_at).toLocaleString('fa-IR',{timeZone:'Asia/Tehran'})}</p>}
+    </div>}
+    {policy && <div className="space-y-2 text-sm">
+      <p className="text-gray-500">راه‌اندازی، آدرس همین سامانه را ثبت می‌کند و پردازش پیامک‌های در انتظار را فعال می‌کند. پس از جابه‌جایی سرور نیز از همین گزینه استفاده کنید؛ موارد با نتیجه نامشخص دوباره ارسال نمی‌شوند.</p>
+      <button type="button" disabled={busy} onClick={configureDelivery} className="rounded-lg border border-violet-600 px-4 py-2 text-violet-700 dark:text-violet-300 disabled:opacity-50">راه‌اندازی ارسال خودکار در این سامانه</button>
     </div>}
     {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : !policy ? <p>در حال دریافت تنظیمات…</p> : <>
       <div className="grid gap-3 sm:grid-cols-2">{(Object.keys(labels) as (keyof Policy)[]).map(key=><label key={key} className="flex items-center gap-2 text-sm dark:text-gray-200"><input type="checkbox" checked={policy[key]} disabled={busy} onChange={e=>setPolicy({...policy,[key]:e.target.checked})}/>{labels[key]}</label>)}</div>
