@@ -91,10 +91,13 @@ application_functions_health() {
   local container="$1" response
   [[ "$(docker inspect --format '{{.State.Running}}' "$container")" == true ]] || return 1
   # OPTIONS boots the SMS handler but cannot authenticate or drain a send queue.
+  # Universal installs use APP_DOMAIN as an internal IP compatibility value.
+  # Probe the local host-agnostic Nginx route, like application_frontend_health,
+  # without assuming public DNS or a certificate for that IP.
   response="$(curl --noproxy '*' -fsS --request OPTIONS --connect-timeout 5 --max-time 10 \
     --retry 4 --retry-connrefused --retry-delay 1 --retry-max-time 30 --dump-header - \
-    --resolve "${APP_DOMAIN}:443:127.0.0.1" \
-    "https://${APP_DOMAIN}/functions/v1/send-sms" --output /dev/null)" || return 1
+    -H 'Host: spark.local' \
+    'http://127.0.0.1/functions/v1/send-sms' --output /dev/null)" || return 1
   grep -Eiq '^access-control-allow-headers:.*x-meeting-worker-token' <<<"$response"
 }
 

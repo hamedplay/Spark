@@ -12,6 +12,12 @@ unauthenticated OPTIONS request, which cannot send messages. On failure,
 it restores the previous Functions, frontend and source. Database migrations,
 runtime images, other workers, schedulers and Offline App updates remain separate.
 
+The Functions startup probe uses the local host-agnostic Nginx HTTP route at
+`127.0.0.1`, just like the active frontend health check. Universal installation
+sets `APP_DOMAIN` to an internal compatibility IP; that value must not be treated
+as a public HTTPS hostname with a matching certificate. The probe sends no
+credentials and does not disable TLS verification or alter public TLS settings.
+
 Existing servers must first use **Manager → Update Manager — Internet**, exit
 and reopen `spark` to load this updater. Pulling the repository alone does not
 replace the installed Manager modules. The sender-only script below remains a
