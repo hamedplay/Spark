@@ -183,8 +183,8 @@ install_step_7() {
 source "${SCRIPT_DIR}/lib/same-origin.sh"
 
 # Application updates are a separate layer. Load this after the legacy update
-# module so app-update cannot mutate PostgreSQL, Supabase runtime, Functions,
-# workers, schedulers or the Manager control plane.
+# module. Internet App deploys frontend + Functions; database migrations, runtime
+# images, other workers, schedulers and the Manager control plane stay separate.
 source "${SCRIPT_DIR}/lib/application.sh"
 source "${SCRIPT_DIR}/lib/application-maintenance.sh"
 

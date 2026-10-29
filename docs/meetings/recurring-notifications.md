@@ -2,6 +2,21 @@
 
 ## Current sender deployment
 
+Spark Manager's **Application → Update Internet App** now deploys the frontend,
+all Edge Functions and the Spark router from the same fetched `origin/main`
+commit on every run, including when the commit has not changed. It discovers the
+existing runtime's actual bind mount, preserves its Deno configuration, stages a
+complete replacement Functions tree without version/file comparisons, and
+restarts only that existing runtime. It cold-starts `send-sms` with an
+unauthenticated OPTIONS request, which cannot send messages. On failure,
+it restores the previous Functions, frontend and source. Database migrations,
+runtime images, other workers, schedulers and Offline App updates remain separate.
+
+Existing servers must first use **Manager → Update Manager — Internet**, exit
+and reopen `spark` to load this updater. Pulling the repository alone does not
+replace the installed Manager modules. The sender-only script below remains a
+manual repair option, rather than a required step after Internet App updates.
+
 The database cron now posts `mode: recurring_delivery` to the existing `send-sms`
 entrypoint with its dedicated Vault token. The sender verifies that token through
 the service-only verifier and permits it only for the server queue-drain mode.
