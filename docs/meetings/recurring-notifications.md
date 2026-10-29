@@ -27,6 +27,18 @@ On the Application server, from the repository checkout, run:
 sudo bash deploy/spark-cli/apply-recurring-sms-runtime.sh
 ```
 
+If the script was copied outside the checkout, pass the complete, updated Spark
+source directory explicitly:
+
+```sh
+sudo bash /root/apply-recurring-sms-runtime.sh --source-root /path/to/Spark
+```
+
+Without that option it checks its repository-relative path, the working directory
+and `/opt/spark`. A missing source tree or a sender without scheduler authentication
+stops the script before Docker changes or backups. Downloading only this script
+does not provide the sender source or its dependencies.
+
 The script discovers the existing Edge Runtime bind mount (or accepts a container
 name argument), backs up and copies the router and complete `send-sms` dependency tree, and
 restarts only that existing runtime. It restores source files if copying or restart

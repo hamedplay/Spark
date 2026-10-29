@@ -4,7 +4,40 @@
 # apply database SQL, edit credentials or install a separate worker/timer.
 set -euo pipefail
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then exec sudo -- bash "$0" "$@"; fi
-source_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+source_root=""
+if [[ ${1:-} == --source-root ]]; then
+  if [[ $# -lt 2 || -z ${2:-} ]]; then
+    echo 'Usage: bash apply-recurring-sms-runtime.sh [--source-root /path/to/Spark] [CONTAINER]' >&2
+    exit 1
+  fi
+  source_root="$2"
+  shift 2
+fi
+if [[ $# -gt 1 ]]; then
+  echo 'Usage: bash apply-recurring-sms-runtime.sh [--source-root /path/to/Spark] [CONTAINER]' >&2
+  exit 1
+fi
+has_source_tree() {
+  [[ -f "$1/supabase/functions/send-sms/index.ts" &&
+     -f "$1/supabase/functions/send-sms/handler.ts" &&
+     -f "$1/deploy/spark-cli/edge-main/index.ts" ]]
+}
+if [[ -z "$source_root" ]]; then
+  for candidate in "$(dirname -- "${BASH_SOURCE[0]}")/../.." "$PWD" /opt/spark; do
+    if has_source_tree "$candidate"; then source_root="$candidate"; break; fi
+  done
+fi
+if [[ -z "$source_root" ]] || ! has_source_tree "$source_root"; then
+  echo 'Spark source tree not found; nothing changed. Pass --source-root /path/to/Spark.' >&2
+  echo 'The complete current Spark source is required; the downloaded script alone is insufficient.' >&2
+  exit 1
+fi
+source_root="$(cd -- "$source_root" && pwd -P)"
+if ! grep -Fq 'SCHEDULER_MODE_ONLY' "$source_root/supabase/functions/send-sms/handler.ts"; then
+  echo 'Source send-sms lacks recurring scheduler authentication; update the Spark source first. Nothing changed.' >&2
+  exit 1
+fi
+echo "Spark source: $source_root"
 runtime_container="${1:-}"
 if [[ -z "$runtime_container" ]]; then
   mapfile -t candidates < <(docker ps --format '{{.ID}} {{.Image}} {{.Names}}' |
