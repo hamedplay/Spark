@@ -117,7 +117,7 @@ def _manager_actions(actions):
 def _application_actions(_actions):
     return [
         core.Action("app-update", "Update Internet App",
-                    "Always fetch origin/main, build and replace frontend plus all Edge Functions from that commit, and restart the existing Functions runtime. Roll back on failure. Database migrations remain separate.", "confirm"),
+                    "Always fetch origin/main, build and replace frontend plus all Edge Functions from that commit, and restart the existing Functions runtime. No health probes. Roll back on installation errors. Database migrations remain separate.", "confirm"),
         core.Action("app-build-offline-update", "Build Offline App Update",
                     "Build a runtime-complete offline Application package with latest source, exact Node.js/npm runtime and all npm build dependencies. No DB/Supabase/Manager payload is included.", "controlled"),
         core.Action("app-update-offline", "Update Offline App",

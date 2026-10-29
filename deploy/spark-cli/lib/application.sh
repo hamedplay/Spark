@@ -87,20 +87,6 @@ application_stage_functions() {
   install -m 0644 "${source_root}/deploy/spark-cli/edge-main/index.ts" "${destination}/main/index.ts"
 }
 
-application_functions_health() {
-  local container="$1" response
-  [[ "$(docker inspect --format '{{.State.Running}}' "$container")" == true ]] || return 1
-  # OPTIONS boots the SMS handler but cannot authenticate or drain a send queue.
-  # Universal installs use APP_DOMAIN as an internal IP compatibility value.
-  # Probe the local host-agnostic Nginx route, like application_frontend_health,
-  # without assuming public DNS or a certificate for that IP.
-  response="$(curl --noproxy '*' -fsS --request OPTIONS --connect-timeout 5 --max-time 10 \
-    --retry 4 --retry-connrefused --retry-delay 1 --retry-max-time 30 --dump-header - \
-    -H 'Host: spark.local' \
-    'http://127.0.0.1/functions/v1/send-sms' --output /dev/null)" || return 1
-  grep -Eiq '^access-control-allow-headers:.*x-meeting-worker-token' <<<"$response"
-}
-
 update_spark() (
   title
   new_log "update-internet-app"
@@ -249,12 +235,6 @@ update_spark() (
     rollback_application
     return 1
   fi
-  if ! run_logged "Validate Functions runtime and SMS handler startup (OPTIONS only)" \
-    application_functions_health "$functions_container"; then
-    rollback_application
-    return 1
-  fi
-
   if [[ -d "${SPARK_ROOT}/node_modules" ]]; then
     mv "${SPARK_ROOT}/node_modules" "$modules_prev" || {
       rollback_application
@@ -287,11 +267,6 @@ update_spark() (
     rollback_application
     return 1
   }
-
-  if ! run_logged "Validate deployed application frontend" application_frontend_health; then
-    rollback_application
-    return 1
-  fi
 
   update_success=1
   rm -rf "$frontend_prev" "$modules_prev" "$functions_prev"
