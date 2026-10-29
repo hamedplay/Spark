@@ -8,7 +8,7 @@ import { evaluateSmsDeliveryPolicy, loadSmsDeliveryPolicy, queueDeferredSms } fr
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey, X-Meeting-Worker-Token",
 };
 
 function adminClient() {
@@ -65,7 +65,22 @@ export async function handleSendSms(req: Request): Promise<Response> {
     });
 
   // ── Authentication ──────────────────────────────────────────────────────────
-  const authResult = await authenticate(req.headers.get("Authorization"));
+  // The database cron uses a dedicated Vault token for this mode only.
+  // Ordinary sends still require the existing user/service authentication.
+  const schedulerToken = req.headers.get('X-Meeting-Worker-Token');
+  let schedulerCaller = false;
+  let authResult: Awaited<ReturnType<typeof authenticate>>;
+  if (schedulerToken) {
+    try {
+      const verified = await adminClient().rpc('verify_meeting_worker_token', { p_candidate: schedulerToken });
+      if (verified.error) return json({ ok: false, errorCode: 'SCHEDULER_VERIFICATION_UNAVAILABLE' }, 503);
+      if (verified.data !== true) return json({ ok: false, errorCode: 'INVALID_SCHEDULER_TOKEN' }, 403);
+      schedulerCaller = true;
+      authResult = { userId: 'service', isAdmin: true };
+    } catch { return json({ ok: false, errorCode: 'SCHEDULER_VERIFICATION_UNAVAILABLE' }, 503); }
+  } else {
+    authResult = await authenticate(req.headers.get("Authorization"));
+  }
   if (typeof authResult === "string") {
     return json({ ok: false, error: "Unauthorized", errorCode: authResult }, 401);
   }
@@ -89,7 +104,13 @@ export async function handleSendSms(req: Request): Promise<Response> {
 
     const body = await req.json();
     let mode: string = body.mode || "send";
+    if (schedulerCaller && mode !== 'recurring_delivery') return json({ ok: false, errorCode: 'SCHEDULER_MODE_ONLY' }, 403);
     if (mode === 'recurring_delivery') {
+      if (schedulerCaller) {
+        const prepared = await supabase.rpc('prepare_meeting_notification_jobs');
+        if (prepared.error) return json({ ok: false, errorCode: 'RECURRING_PREPARE_FAILED' }, 503);
+        return json(await runMeetingNotificationBatch(supabase, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!));
+      }
       if (caller.userId === 'service' || typeof body.seriesId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.seriesId)) return json({error:'INVALID_SERIES_REQUEST'},400);
       return json(await runMeetingNotificationBatch(supabase, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, caller.userId, body.seriesId));
     }

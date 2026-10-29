@@ -39,3 +39,7 @@ verify_jwt = false
 
 [functions.meeting-notification-worker]
 verify_jwt = false
+
+# The handler validates user/service credentials or the restricted Vault cron token.
+[functions.send-sms]
+verify_jwt = false

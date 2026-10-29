@@ -32,13 +32,22 @@ Deno.serve(async (req: Request) => {
   }
 
   const url = new URL(req.url);
-  const pathParts = url.pathname.split("/");
-  const serviceName = pathParts[1];
+  // Nginx can strip /functions/v1/, while a direct gateway/cron request can
+  // retain it. Both routes must resolve the same deployed function directory.
+  const pathParts = url.pathname.split("/").filter(Boolean);
+  const serviceName = pathParts[0] === 'functions' && pathParts[1] === 'v1'
+    ? pathParts[2] : pathParts[0];
 
   if (!serviceName) {
     return new Response(JSON.stringify({ msg: "missing function name in request" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (!/^[a-zA-Z0-9_-]+$/.test(serviceName)) {
+    return new Response(JSON.stringify({ msg: 'invalid function name' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' },
     });
   }
 

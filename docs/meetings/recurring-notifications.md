@@ -1,5 +1,43 @@
 # Recurring meeting delivery
 
+## Current sender deployment
+
+The database cron now posts `mode: recurring_delivery` to the existing `send-sms`
+entrypoint with its dedicated Vault token. The sender verifies that token through
+the service-only verifier and permits it only for the server queue-drain mode.
+Browser requests retain their user/FULL-session checks and actor/series scoping.
+The gateway JWT check is off for `send-sms` because its handler authenticates all
+calls, including the non-JWT database scheduler token. Existing Vault URLs ending
+in `/meeting-notification-worker` are normalized to `/send-sms`; the token is not
+rotated or returned. No separate recurring worker entrypoint is required.
+
+Production evidence showed HTTP 500 `InvalidWorkerCreation` / missing entrypoint,
+43 pending jobs and no recorded delivery batch. This was a runtime routing or
+installation failure before delivery; it was not evidence of a provider rejection.
+The old cron destination had remained on the dedicated worker after immediate
+sending had moved to the shared sender. The router also now accepts both
+`/functions/v1/SLUG` and `/SLUG` paths so a retained gateway prefix is not mistaken
+for a function named `functions`. Existing JWT fail-closed behavior is preserved.
+
+Deploy the sender **before** applying migration
+`20261029195736_route_recurring_cron_through_shared_sms.sql` to the target database.
+On the Application server, from the repository checkout, run:
+
+```sh
+sudo bash deploy/spark-cli/apply-recurring-sms-runtime.sh
+```
+
+The script discovers the existing Edge Runtime bind mount (or accepts a container
+name argument), backs up and copies the router and complete `send-sms` dependency tree, and
+restarts only that existing runtime. It restores source files if copying or restart
+fails. It does not apply SQL, change credentials, create timers, send a probe or
+reset delivery states. After the database migration, normal cron ticks can resume
+pending SMS/Bale work through the shared sender. Review the normal queue and
+provider reports for actual delivery. The error's disappearance alone is not a
+provider delivery receipt. No test, lint or real-recipient probe was run for this
+repair. Production runtime changes must be applied on the actual Application node.
+
+
 New series use `meetings.series_id`. Existing occurrences stay unlinked: titles,
 creator names and close creation timestamps are not proof of series identity.
 Calendar bulk edit/delete requires a known series; an old unlinked occurrence
