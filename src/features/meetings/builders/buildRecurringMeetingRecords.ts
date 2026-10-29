@@ -60,19 +60,20 @@ export function buildRecurringMeetingRecords(
   const records: MeetingPersistenceRecord[] = [];
 
   if (type === 'weekly') {
-    const jsDayMap = [6, 0, 1, 2, 3, 4, 5];
-    const targetJsDay = jsDayMap[input.repeatWeekday];
-
+    // The selected date's Saturday-based week anchors the entire series.
+    // The base occurrence is already saved separately; do not repeat it here.
+    const baseWeekday = (baseDate.getDay() + 1) % 7;
     let currentDate = new Date(baseDate);
-    currentDate.setDate(currentDate.getDate() + 1);
-    const diff = (targetJsDay - currentDate.getDay() + 7) % 7;
-    currentDate.setDate(currentDate.getDate() + diff);
+    currentDate.setDate(currentDate.getDate() + input.repeatWeekday - baseWeekday);
+    if (currentDate.getTime() <= baseDate.getTime()) {
+      currentDate.setDate(currentDate.getDate() + 7 * interval);
+    }
 
     while (currentDate.getTime() <= endMs) {
       const jDate = moment(currentDate).format('jYYYY/jMM/jDD');
       records.push({ ...baseWithoutId, request_date: currentDate.toISOString(), request_jalaali_date: jDate });
       if (records.length > 599) throw new Error('حداکثر ۶۰۰ نوبت در هر سری قابل ثبت است');
-      currentDate = new Date(currentDate.getTime() + 7 * interval * 86400000);
+      currentDate.setDate(currentDate.getDate() + 7 * interval);
     }
   } else if (type === 'monthly') {
     const jsDayMap = [6, 0, 1, 2, 3, 4, 5];

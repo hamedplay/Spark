@@ -70,6 +70,15 @@ creator names and close creation timestamps are not proof of series identity.
 Calendar bulk edit/delete requires a known series; an old unlinked occurrence
 can still be edited/deleted individually.
 
+Both creation forms anchor weekly intervals to the selected start date's week,
+with Saturday as the first day. The selected date remains the first occurrence;
+later records do not duplicate it. When the recurring weekday matches that date,
+an interval of two weeks produces offsets 0, 14, 28 days rather than 0, 7, 21.
+A different weekday stays in the same eligible week when still ahead of the
+start date, or moves forward by the configured number of weeks when already
+passed. Weekly steps use calendar dates to retain the local day across clock
+changes. This affects newly generated series; it does not reschedule stored ones.
+
 `create_meeting_series` is an authenticated, FULL-session command. It commits
 all occurrences, inbox invitations, participant snapshots, agenda copies and
 notification events in one transaction. Its caller-generated UUID and request

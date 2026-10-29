@@ -174,18 +174,21 @@ export function buildCalendarRepeatRecords({
   const javascriptDayMap = [6, 0, 1, 2, 3, 4, 5];
 
   if (type === 'weekly') {
-    const targetDay = javascriptDayMap[repeatWeekday];
+    // The selected date's Saturday-based week anchors the entire series.
+    // The base occurrence is already saved separately; do not repeat it here.
+    const baseWeekday = (baseDate.getDay() + 1) % 7;
     let current = new Date(baseDate);
-    current.setDate(current.getDate() + 1);
-    const diff = (targetDay - current.getDay() + 7) % 7;
-    current.setDate(current.getDate() + diff);
+    current.setDate(current.getDate() + repeatWeekday - baseWeekday);
+    if (current.getTime() <= baseDate.getTime()) {
+      current.setDate(current.getDate() + 7 * interval);
+    }
     while (current.getTime() <= endMs) {
       const jalaliDate = moment(current).format('jYYYY/jMM/jDD');
       const { id: _id, ...recordWithoutId } = baseRecord;
       void _id;
       repeatMeetings.push({ ...recordWithoutId, request_date: current.toISOString(), request_jalaali_date: jalaliDate });
       if (repeatMeetings.length > 599) throw new Error('حداکثر ۶۰۰ نوبت در هر سری قابل ثبت است');
-      current = new Date(current.getTime() + 7 * interval * 86400000);
+      current.setDate(current.getDate() + 7 * interval);
     }
   } else {
     const baseJalali = moment(baseDate).format('jYYYY/jMM/jDD').split('/').map(Number);
