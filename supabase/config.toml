@@ -43,3 +43,7 @@ verify_jwt = false
 # The handler validates user/service credentials or the restricted Vault cron token.
 [functions.send-sms]
 verify_jwt = false
+
+# The Push worker authenticates its dedicated Vault token before any queue read.
+[functions.pwa-push-worker]
+verify_jwt = false

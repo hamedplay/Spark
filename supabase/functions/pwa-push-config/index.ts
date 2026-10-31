@@ -1,5 +1,4 @@
-import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2.111.0";
+import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import webpush from "npm:web-push@3.6.7";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
 
@@ -27,7 +26,9 @@ Deno.serve(async (req: Request) => {
   const { data: config, error: configError } = await authResult.userClient!.rpc('get_my_pwa_push_config');
   if (!configError && config?.publicKey) return json(config);
   // Preserve first-install provisioning; never replace existing keys on a read error.
-  if (!configError?.message?.includes('PWA_PUSH_NOT_CONFIGURED')) {
+  const needsInitialization = (!configError && config?.configured === false)
+    || configError?.message?.includes('PWA_PUSH_NOT_CONFIGURED');
+  if (!needsInitialization) {
     console.error('pwa-push-config read failed', configError?.code || 'CONFIG_EMPTY');
     return json({ error: 'VAPID_CONFIG_READ_FAILED', code: configError?.code || 'CONFIG_EMPTY' }, 503);
   }
@@ -54,6 +55,12 @@ Deno.serve(async (req: Request) => {
       p_private_key: privateKey,
     });
     if (setError) return json({ error: "VAPID_CONFIG_WRITE_FAILED" }, 500);
+    // A concurrent initializer may have stored the canonical pair first.
+    const { data: stored, error: storedError } = await service.rpc("get_pwa_vapid_config_service");
+    if (storedError || !stored?.public_key || !stored?.private_key) {
+      return json({ error: "VAPID_CONFIG_READ_FAILED" }, 503);
+    }
+    publicKey = stored.public_key;
   }
 
   return json({ publicKey });

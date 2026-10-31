@@ -10,7 +10,9 @@ environment. Its worker logs show a service-role request failing with PGRST303
 
 Normal public VAPID key reads now use `get_my_pwa_push_config` in the caller's own
 session, without a service-role HTTP hop. The private implementation verifies FULL
-access, returns only `publicKey`, and fails explicitly when server keys are absent.
+access and returns only `publicKey` when configured. Missing/unreadable keys now
+return `configured: false`; the browser uses the authenticated server initializer
+to repair them. See [the console repair](console-realtime-and-push-repair.md).
 The existing service-only private-key APIs remain inaccessible to authenticated
 users. The Edge endpoint uses the same reader and retains first-install provisioning;
 it returns 401 for a missing bearer token rather than disguising it as restricted access.
@@ -23,7 +25,7 @@ after identity changes. Existing create dispatch uses only final selected recipi
 The supplied cancellation was not reproduced against the production database; its
 exact producer and deployed frontend version still require production evidence.
 
-Validation: 16 focused Node tests and the production build pass. The new SQL test
+Validation of the earlier change: 16 focused Node tests and the production build pass. The new SQL test
 checks a real FULL session, expired-session rejection, public-only output and grants
 inside a rolled-back transaction. Migration and Edge version 2 were applied only to
 the connected test project. No real SMS or browser Push delivery is claimed.
@@ -32,4 +34,5 @@ Production rollout requires applying the new migration, publishing the frontend 
 deploying the updated Edge function. Confirm that both VAPID keys already exist.
 The supplied trace also reports `realtime.subscription.subscription_id` missing;
 that indicates a Realtime service/schema compatibility problem in that environment.
-This change does not alter Supabase's internal Realtime schema.
+That earlier change did not alter Supabase's internal Realtime schema. The current
+console repair provides a separate guarded migration for the reported old table.

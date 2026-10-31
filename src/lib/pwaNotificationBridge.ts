@@ -11,9 +11,11 @@ let pushReady = false;
 let pending: Promise<boolean> | null = null;
 let state: BrowserPushState = { status: 'permission-required' };
 const delivered = new Set<string>();
+type PushConfig = { publicKey?: string | null; configured?: boolean };
 // These existing RPCs are absent from the repository's generated database types.
 // Keep their verified signatures local rather than broadening unrelated query types.
 const pushClient = supabase as unknown as {
+  rpc(name: 'get_my_pwa_push_config'): PromiseLike<{ data: PushConfig | null; error: { message?: string } | null }>;
   rpc(name: 'upsert_my_pwa_push_subscription', args: { p_endpoint: string; p_p256dh: string; p_auth_key: string; p_user_agent: string }): PromiseLike<{ data: string | null; error: unknown }>;
   rpc(name: 'disable_my_pwa_push_subscription', args: { p_endpoint: string }): PromiseLike<{ data: unknown; error: unknown }>;
 };
@@ -76,7 +78,15 @@ async function ensurePushSubscription(userId: string): Promise<boolean> {
       const worker = await registration();
       if (!current()) return false;
       if (!worker.pushManager) throw new Error('Push در این مرورگر در دسترس نیست؛ اعلان هنگام بازبودن برنامه فعال است.');
-      const { data, error } = await withTimeout(pushClient.rpc('get_my_pwa_push_config'));
+      let { data, error } = await withTimeout(pushClient.rpc('get_my_pwa_push_config'));
+      if (!current()) return false;
+      if ((!error && data?.configured === false) || error?.message?.includes('PWA_PUSH_NOT_CONFIGURED')) {
+        // Only the authenticated server endpoint can create/repair VAPID keys.
+        const initialized = await withTimeout(supabase.functions.invoke<PushConfig>('pwa-push-config', { body: {} }));
+        if (!current()) return false;
+        data = initialized.data;
+        error = initialized.error;
+      }
       if (!current()) return false;
       if (error || !data?.publicKey) throw new Error(error?.message?.includes('PWA_PUSH_NOT_CONFIGURED')
         ? 'کلید ارسال Push روی سرور تنظیم نشده است؛ اعلان هنگام بازبودن برنامه فعال است.'
