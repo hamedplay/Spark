@@ -18,6 +18,62 @@ validator follows the inspected working Realtime implementation and the official
 tenant subscription migrations. Existing healthy subscription tables are skipped.
 Notification records, meetings and user accounts are not cleared.
 
+## Follow-up for the reported mixed schema on Realtime 2.134.10
+
+The production follow-up returned `REALTIME_TENANT_FUNCTION_MIGRATIONS_REQUIRED`.
+Its catalog showed that `apply_rls` still reads `user_id/email` and returns a
+single `wal_rls`, while `list_changes` and the four-field filter type are newer.
+`wal_column` still has its original five fields. The vendor migration history
+contains only the twelve migrations through `20211202204605`. The running release
+was then confirmed as **2.134.10** from `/app/releases/start_erl.data`.
+
+The first repair deliberately stopped before truncation or table alterations;
+its assumption that the remaining WAL helpers were current did not hold here.
+Keep that migration unchanged. On this affected database, apply
+**`20261031042001_repair_mixed_realtime_v213410_postgres_changes.sql` first**, then
+retry **`20261031035922_repair_console_realtime_subscription_and_push_initialization.sql`**.
+Use the normal migration history mechanism for each successfully applied file.
+A chronological runner must apply this prerequisite explicitly before retrying
+the blocked older migration; do not mark the failed migration as applied.
+
+The new prerequisite accepts only the exact reported legacy table and composite
+type shapes. It clears transient subscriptions, repairs the subscription identity
+and claims/action/select columns, replaces the old `wal_column` with its six-field
+definition, and replaces the known WAL/filter helpers using SQL from the official
+[v2.134.10 tag](https://github.com/supabase/realtime/tree/v2.134.10/lib/realtime/tenants/repo/migrations)
+(commit `ef866244e88428bbd286f3e4ac88eb5e54a41bd4`). This includes SETOF WAL results,
+action/selected-column routing, negate-aware filters and the per-recipient role
+reset. Unknown type dependencies fail atomically: the repair does not use
+`DROP ... CASCADE`. Recreated helpers are executable by the Realtime admin role;
+application roles cannot access the subscription table or these internal helpers.
+Already modern subscription tables skip the entire repair, preserving their
+newer helper implementations and active subscriptions.
+
+After both files commit, restart only the existing Realtime container so clients
+reconnect and register fresh subscriptions:
+
+```sh
+docker restart realtime-dev.supabase-realtime
+```
+
+Then run **Update Internet App** to install the frontend/Push function changes
+described below. Updating the application alone does not apply database SQL.
+The repair leaves `realtime.schema_migrations` and tenant migration counters
+unchanged. Reconcile that vendor migration state before a future Realtime runtime
+upgrade; this targeted Postgres Changes repair does not establish a complete
+vendor migration history.
+
+Validation of the prerequisite: reproduced the supplied legacy schema/functions
+in an isolated PostgreSQL-compatible PGlite instance, reproduced the original
+guard error, applied the new SQL, and checked the runtime's conflict target,
+14-recipient RLS fan-out, negated filters, action routing and hidden-column
+protection. Reapplication preserved subscriptions and function definitions, and
+the older repair's Realtime block then completed. The migration also applied on
+the connected non-production Supabase project, preserving its existing modern
+helpers and 213 pending Push rows. No production database change or live socket
+delivery has been performed from this session. Temporary validation tooling was
+removed; no lint, HTTP health probe or external notification was run.
+
 The authenticated Push reader retains its FULL-session gate and public-key-only
 contract. Missing/unreadable keys now return `{configured: false, publicKey: null}`
 instead of the expected initialization state becoming an HTTP 400. The browser
