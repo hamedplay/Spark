@@ -826,7 +826,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
       if (error) throw error;
       if (data) {
         setContacts(previous => [...previous, data]);
-        setSelectedExternal(previous => [...previous, newExternalName]);
+        setSelectedExternal(previous => [...previous, newExternalName.trim()]);
       }
       setNewExternalName('');
       setNewExternalPhone('');

@@ -360,7 +360,8 @@ export async function handleExternalMode({ supabase, body, caller, json, isAuthO
   const dbTriggeredBy = triggeredByUserId === "service" ? null : triggeredByUserId;
   const category: string = body.category || "meeting";
   const eventType: string = body.eventType || "invite";
-  const audience = "external";
+  const audience = category === "meeting" && eventType.startsWith("series_") && body.audience === "external_observers"
+    ? "external_observers" : "external";
   const meetingId: string | null = typeof body.meetingId === "string" && body.meetingId ? body.meetingId : null;
   const eventKey = normalizedEventKey(body.eventKey);
   const context = objectContext(body.context);

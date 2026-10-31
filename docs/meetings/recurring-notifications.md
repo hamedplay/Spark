@@ -1,5 +1,60 @@
 # Recurring meeting delivery
 
+## Five-audience recurring SMS repair
+
+Migration `20261031051637_repair_recurring_external_audiences_and_templates.sql`
+and the shared sender cover creator, participants, observers, external participants
+and external observers for invitations, changes, cancellations and reminders.
+
+Four active `all` SMS templates already existed. External SMS was blocked by the
+additional `send_sms` check at both enqueue and claim time: the request form always
+writes this legacy flag as false. Both external roles were also collapsed into
+`external`, and the external sender hardcoded that audience even when given a
+different audience. Creating a distinct template alone could not fix this path.
+
+The new migration removes the two legacy gates from recurring delivery. The
+dedicated recurring policy controls all five groups; provider/group rules,
+delivery windows and dispatch identities remain authoritative. Reminder SMS stays
+off by default. The calendar form explains the recurring policy instead of showing
+the ineffective legacy checkbox. Quick contact creation stores the same trimmed
+name in the selection and the contact book.
+
+External observers now use `external_observers`. Contact lookup stays scoped to
+the meeting owner; phones and overlapping roles are deduplicated, with participant
+priority and suppression of internal/external phone overlap. External names are
+stored in event context and retained when claiming refreshes schedule details.
+Existing affected-recipient/occurrence routing and uncertain-delivery protection
+remain in place. Historical skipped, sent and uncertain jobs are not requeued.
+
+Missing role templates are seeded for four events and five audiences in both
+channels: 20 SMS and 20 notification templates. Existing customized or inactive
+role templates are preserved; new templates inherit their `all` fallback's active
+state. Creators receive registration copy and observers informational copy. Both
+editors expose external observers. Contacts without accounts receive SMS;
+in-app notifications and Bale still require registered user IDs. An external
+notification template does not create an account or an external inbox.
+
+On the actual server, run **Update Internet App**, then apply the new migration.
+The app update deploys all existing Functions that bundle the shared sender.
+No additional worker, scheduler or health probe is introduced.
+
+Validation reproduced the old skip with `send_sms=false` in isolated PGlite.
+The patched queue/claim functions and actual SMS dispatch/external modes, with
+mocked transport, produced five correctly addressed/template-rendered SMS requests
+for a two-occurrence series and three registered-user notifications. All 40
+template routes, phone/role deduplication, affected-only cancellation, reminder
+defaults and preservation of customized templates on reapplication were checked.
+The production build passed. No lint or live SMS/Bale/Push was run.
+
+The migration applied on the connected non-production database. Readback confirmed
+four templates per audience/channel, both legacy gates removed, and 20 successful
+notification renders. Read-only resolution against its actual contacts returned
+creator, external participant and external observer. Existing sender consumers
+deployed ACTIVE there: `send-sms` v6, `meeting-notification-worker` v5 and
+`process-notification-outbox` v3. Its four historical pending SMS jobs were retained;
+the scheduler remains unconfigured. Production deployment/provider delivery remain
+unverified from this session. Temporary validation tooling was removed.
+
 ## Current sender deployment
 
 Spark Manager's **Application → Update Internet App** now deploys the frontend,
@@ -100,7 +155,8 @@ Policy: Settings → SMS → Delivery schedule → Recurring meetings. Admin-onl
 control internal invitations, SMS invitations, important changes/cancellations,
 internal reminders, internal-user SMS reminders and external SMS reminders.
 Invitation and important-change channels default on; reminder SMS defaults off.
-External SMS also requires the existing per-meeting external-SMS opt-in.
+Recurring external SMS follows the dedicated recurring policy; the legacy
+per-meeting external-SMS opt-in no longer suppresses recurring recipients.
 Explicit calendar “save without informing” is preserved by an atomic update RPC.
 SMS templates `series_invite/change/cancel/reminder` use `{{summary}}` and remain
 editable in the existing template manager. SMS timing windows still apply.

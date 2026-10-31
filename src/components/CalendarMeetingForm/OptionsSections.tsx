@@ -43,6 +43,7 @@ export function OnlineMeetingSection(props: {
 }
 
 export function SmsOptionsSection(props: {
+  recurring?: boolean;
   sendSms: boolean;
   setSendSms: React.Dispatch<React.SetStateAction<boolean>>;
   saveContact: boolean;
@@ -50,13 +51,13 @@ export function SmsOptionsSection(props: {
   repFromContacts: boolean;
   representative: string;
 }) {
-  const { sendSms, setSendSms, saveContact, setSaveContact, repFromContacts, representative } = props;
+  const { sendSms, setSendSms, saveContact, setSaveContact, repFromContacts, representative, recurring } = props;
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 cursor-pointer">
+      {recurring ? <p className="text-sm text-gray-600 dark:text-gray-300">ارسال پیامک به مخاطبان جلسات تکرارشونده مطابق تنظیمات پیامک سامانه انجام می‌شود.</p> : <label className="flex items-center gap-2 cursor-pointer">
         <input type="checkbox" checked={sendSms} onChange={e=>setSendSms(e.target.checked)} className="w-4 h-4 rounded text-blue-600" />
         <span className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-1.5"><MessageSquare className="w-4 h-4" />ارسال پیامک</span>
-      </label>
+      </label>}
       {!repFromContacts && representative.trim() && (
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={saveContact} onChange={e=>setSaveContact(e.target.checked)} className="w-4 h-4 rounded text-blue-600" />

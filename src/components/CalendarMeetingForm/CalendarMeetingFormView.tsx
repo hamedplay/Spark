@@ -461,6 +461,7 @@ export function CalendarMeetingFormView({
         <OnlineMeetingSection isOnline={isOnline} setIsOnline={setIsOnline} />
 
         <SmsOptionsSection
+          recurring={repeatEnabled}
           sendSms={sendSms}
           setSendSms={setSendSms}
           saveContact={saveContact}
