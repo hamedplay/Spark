@@ -101,3 +101,43 @@ Push/SMS delivery was run. The legacy repair branch has not been executed on the
 production database from this session.
 Both updated Push functions deployed as ACTIVE in the test project. Its worker
 token remains unset and the existing 213 pending Push rows were retained.
+
+## VAPID_CONFIG_WRITE_FAILED follow-up
+
+The supplied POST response now identifies the service-only VAPID write RPC as
+the failing stage. The inspected Vault 0.3.1 `update_secret` implementation
+initializes a local variable by decrypting the existing secret before it writes
+the replacement. Consequently the prior setter cannot overwrite an existing
+unreadable ciphertext, even though the caller supplies a complete new value.
+The production SQLSTATE/ciphertext error was not supplied; the confirmed HTTP
+error alone does not exclude other database write failures.
+
+New migration `20261031045354_repair_unreadable_pwa_vapid_secret_pair.sql`
+replaces only `set_pwa_vapid_config_service(text,text)`. It retains the advisory
+lock and an already complete readable pair. For a missing, partial or unreadable
+pair it deletes only the two named VAPID secrets and recreates both through
+`vault.create_secret`, then verifies their readback. Failure of either write or
+verification rolls the whole call back, restoring the original rows. Private
+keys remain server-side and only `service_role` can execute the setter.
+
+Applying this migration does not itself generate or rotate any keys. The next
+authenticated initializer or existing Push worker supplies the replacement pair
+through its existing RPC call. Apply this standalone migration on the actual
+database and reload the application. The existing frontend detects a changed
+public key and replaces its browser subscription. Preserve Vault's encryption
+key when transferring databases to keep existing VAPID keys readable.
+
+Validation used the inspected setter and Vault create/update SQL in isolated
+PGlite, with a controlled crypto boundary that raises on unreadable ciphertext.
+It reproduced the old failure and verified replacement, healthy-pair preservation,
+unrelated-secret preservation, partial-pair recovery, rollback when the second
+write fails, blank-input rejection and service-only grants. This is a control-flow
+and transaction check, not an end-to-end production encryption or Push delivery
+test. The connected project has DELETE access on `vault.secrets` and no foreign
+keys referencing it. It has no stored VAPID pair and retains 213 pending Push rows.
+
+The Supabase connector's migration confirmation expired on both apply attempts;
+readback confirmed that no migration entry or changed setter was installed there.
+The new SQL remains pending for database deployment. No production database was
+modified. No lint, health probe or live notification was run. Temporary validation
+tooling was removed.
