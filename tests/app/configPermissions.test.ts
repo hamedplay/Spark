@@ -1,3 +1,4 @@
+import { NAV_ITEMS } from '../../src/components/PortalConfig/constants';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
@@ -36,4 +37,28 @@ test('configuration navigation hides inaccessible groups and sections', () => {
 
 test('full access sees all configuration sections', () => {
   assert.deepEqual(getVisibleConfigNavigationItems(nav, false, null), nav);
+});
+
+test('one event center remains in actual configuration navigation', () => {
+  const sections = NAV_ITEMS.flatMap(group => group.sub.map(section => section.key));
+  assert.equal(sections.filter(key => key === 'group_events').length, 1);
+  assert.equal(sections.includes('audit_log'), false);
+  assert.equal(NAV_ITEMS.some(group => group.key === 'audit'), false);
+});
+
+test('legacy audit readers reach the unified center without changing persisted grants', () => {
+  for (const key of ['config_users.group_events', 'config_audit.audit_log']) {
+    const permissions = { config_view: true, [key]: true };
+    assert.equal(canAccessConfigSection('group_events', false, permissions), true);
+    const visible = getVisibleConfigNavigationItems(NAV_ITEMS, false, permissions);
+    assert.deepEqual(visible.map(group => ({ key: group.key, sub: group.sub.map(section => section.key) })),
+      [{ key: 'users', sub: ['group_events'] }]);
+  }
+});
+
+test('consolidation grants no access to ordinary users or unrelated config sections', () => {
+  assert.equal(canAccessConfigSection('group_events', false, { config_view: true }), false);
+  assert.equal(canAccessConfigSection('group_events', false, undefined), false);
+  assert.equal(canAccessConfigSection('users_list', false, { 'config_audit.audit_log': true }), false);
+  assert.equal(canAccessConfigSection('group_events', false, { 'config_users.group_events': false, 'config_audit.audit_log': false }), false);
 });

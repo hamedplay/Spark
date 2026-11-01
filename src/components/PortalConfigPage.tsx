@@ -17,7 +17,6 @@ const SocialNotificationsPanel = lazy(() => import('./SocialNotificationsPanel')
 const DailyReportConfigPanel = lazy(() => import('./DailyReportConfigPanel').then(m => ({ default: m.DailyReportConfigPanel })));
 const SystemMonitoringPage = lazy(() => import('./SystemMonitoringPage').then(m => ({ default: m.SystemMonitoringPage })));
 const MinutesConfigPanel = lazy(() => import('./Minutes/MinutesConfigPanel').then(m => ({ default: m.MinutesConfigPanel })));
-const AuditLogPage = lazy(() => import('./AuditLogPage').then(m => ({ default: m.AuditLogPage })));
 const BackupPanel = lazy(() => import('./BackupPanel').then(m => ({ default: m.BackupPanel })));
 const IceTesterPanel = lazy(() => import('./VideoConference/IceTesterPanel').then(m => ({ default: m.IceTesterPanel })));
 const SecuritySettingsConsole = lazy(() => import('../features/security-settings').then(m => ({ default: m.SecuritySettingsConsole })));
@@ -395,9 +394,6 @@ export function PortalConfigPage({ currentUserId }: Props) {
             </SectionCard>
           </div>
         );
-
-      case 'audit_log':
-        return <AuditLogPage />;
 
       case 'notifications':
         return <NotificationsConfigPanel />;

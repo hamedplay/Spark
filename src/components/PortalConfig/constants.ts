@@ -1,4 +1,4 @@
-import { Settings, Users, Bell, Activity, Lock, Monitor, Bot } from 'lucide-react';
+import { Settings, Users, Bell, Lock, Monitor, Bot } from 'lucide-react';
 
 export const NAV_ITEMS = [
   { key: 'platform', label: 'تنظیمات پلتفرم', icon: Settings, sub: [
@@ -18,9 +18,6 @@ export const NAV_ITEMS = [
     { key: 'security', label: 'امنیت و دسترسی' },
     { key: 'server', label: 'دسترسی سرور' },
     { key: 'backup', label: 'پشتیبان‌گیری و بازگردانی' },
-  ]},
-  { key: 'audit', label: 'رویدادها و رخدادها', icon: Activity, sub: [
-    { key: 'audit_log', label: 'گزارش رخدادها' },
   ]},
   { key: 'notifications', label: 'اعلان‌ها و پیامک', icon: Bell, sub: [
     { key: 'notifications', label: 'اعلان‌ها' },

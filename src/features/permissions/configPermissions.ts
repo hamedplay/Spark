@@ -42,6 +42,12 @@ export function canAccessConfigSection(
 ): boolean {
   if (isAdmin || userPermissions === null) return true;
   if (!userPermissions) return false;
+  // The unified center accepts either existing read permission, matching its RPC.
+  // Keep the old permission key so persisted group grants remain valid.
+  if (sectionKey === 'group_events' || sectionKey === 'audit_log') {
+    return userPermissions['config_users.group_events'] === true
+      || userPermissions['config_audit.audit_log'] === true;
+  }
   const permissionKey = CONFIG_SECTION_PERMISSION[sectionKey];
   return permissionKey ? userPermissions[permissionKey] === true : false;
 }

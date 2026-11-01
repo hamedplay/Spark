@@ -1,7 +1,8 @@
 # User event investigation center
 
-Scope: Configuration → Users → Events (`GroupEventsPanel`). The legacy audit page
-and unrelated application workflows are not redesigned.
+Scope: Configuration → Users → Events (`GroupEventsPanel`). The duplicate legacy audit page and its navigation group are removed.
+Existing legacy read grants continue to open this single center; unrelated
+application workflows are unchanged.
 
 ## Findings and design
 
