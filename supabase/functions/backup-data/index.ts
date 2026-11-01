@@ -1,3 +1,4 @@
+import { recordAccessDenial } from "../_shared/accessDenialAudit.ts";
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
@@ -69,7 +70,10 @@ Deno.serve(async (req: Request) => {
       .select("is_admin")
       .eq("user_id", auth.userId)
       .maybeSingle();
-    if (profile?.is_admin !== true) return json({ error: "ADMIN_REQUIRED" }, 403);
+    if (profile?.is_admin !== true) {
+      await recordAccessDenial(req, auth.userId, "ADMIN_REQUIRED");
+      return json({ error: "ADMIN_REQUIRED" }, 403);
+    }
 
     const body = await req.json() as { table?: string; offset?: number; limit?: number };
     const table = String(body.table || "");

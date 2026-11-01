@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess, deniedResponse } from "../_shared/requireFullAuthAccess.ts";
+import { recordAccessDenial } from "../_shared/accessDenialAudit.ts";
 import { normalizeIranPhone } from "../_shared/phone.ts";
 
 const corsHeaders = {
@@ -51,7 +52,10 @@ Deno.serve(async (req: Request) => {
 
     const { data: callerProfile } = await supabase
       .from("profiles").select("is_admin").eq("user_id", callerUserId).maybeSingle();
-    if (!callerProfile?.is_admin) return json({ error: "Admin access required" }, 403);
+    if (!callerProfile?.is_admin) {
+      await recordAccessDenial(req, callerUserId, "ADMIN_REQUIRED");
+      return json({ error: "Admin access required" }, 403);
+    }
 
     if (req.method === "POST" && action === "create") {
       const { email, password, profile } = await req.json();

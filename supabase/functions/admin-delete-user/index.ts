@@ -1,3 +1,4 @@
+import { recordAccessDenial } from "../_shared/accessDenialAudit.ts";
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import { requireFullAuthAccess } from "../_shared/requireFullAuthAccess.ts";
@@ -55,6 +56,7 @@ Deno.serve(async (req: Request) => {
     callerProfile.is_active !== true ||
     callerProfile.account_status !== "ACTIVE"
   ) {
+    await recordAccessDenial(req, callerUserId, "NOT_ADMIN");
     return json({ ok: false, error: "NOT_ADMIN" }, 403);
   }
 
@@ -87,6 +89,7 @@ Deno.serve(async (req: Request) => {
     (targetProfile.is_admin === true || targetProfile.is_security_admin === true) &&
     callerProfile.is_security_admin !== true
   ) {
+    await recordAccessDenial(req, callerUserId, "PRIVILEGED_TARGET_REQUIRES_SECURITY_ADMIN");
     return json({ ok: false, error: "PRIVILEGED_TARGET_REQUIRES_SECURITY_ADMIN" }, 403);
   }
 
