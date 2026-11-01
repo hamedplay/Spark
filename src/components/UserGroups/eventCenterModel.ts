@@ -63,3 +63,12 @@ const eventTitles: Record<string, string> = {
   recovery_finalization_succeeded: 'تکمیل بازیابی حساب',
 };
 export const eventTitle = (type: string) => eventTitles[type] ?? type;
+
+export function isEventCenterSchemaMissing(error: { code?: string } | null | undefined): boolean {
+  return error?.code === 'PGRST202';
+}
+export function eventCenterErrorMessage(error: { code?: string }): string {
+  if (isEventCenterSchemaMissing(error)) return 'مرکز رخدادها در API این سایت در دسترس نیست. به‌روزرسانی دیتابیس مرکز رخدادها و کش API را بررسی کنید؛ سپس «تلاش دوباره» را بزنید.';
+  if (error.code === '42501') return 'مجوز مشاهدهٔ مرکز رخدادها را ندارید.';
+  return 'دریافت رخدادها ناموفق بود. اتصال و به‌روزرسانی دیتابیس را بررسی کنید.';
+}

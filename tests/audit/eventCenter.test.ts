@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changedFields, exportEvents, isAttentionEvent, type CenterEvent } from '../../src/components/UserGroups/eventCenterModel';
+import { changedFields, exportEvents, isAttentionEvent, isEventCenterSchemaMissing, eventCenterErrorMessage, type CenterEvent } from '../../src/components/UserGroups/eventCenterModel';
 
 test('attention includes denied/failure independently of severity', () => {
   assert.equal(isAttentionEvent({ severity: 'info', result: 'denied' }), true);
@@ -17,4 +17,12 @@ test('export preserves adversarial text as JSON without HTML or spreadsheet exec
   const result = JSON.parse(exportEvents(events));
   assert.equal(result.scope, 'displayed_events');
   assert.deepEqual(result.events, events);
+});
+
+test('missing RPC has explicit guidance and is distinct from authorization/network failures', () => {
+  assert.equal(isEventCenterSchemaMissing({ code: 'PGRST202' }), true);
+  for (const code of ['42501', 'PGRST301', 'PGRST002', '42P01', '']) assert.equal(isEventCenterSchemaMissing({ code }), false);
+  assert.match(eventCenterErrorMessage({ code: 'PGRST202' }), /کش API/);
+  assert.match(eventCenterErrorMessage({ code: '42501' }), /مجوز/);
+  assert.equal(isEventCenterSchemaMissing(null), false);
 });

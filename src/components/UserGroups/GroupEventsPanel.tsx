@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Activity, Search, RefreshCw, Shield, Download, Loader as Loader2, X, ChevronLeft } from 'lucide-react';
 import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { supabase } from '../../lib/supabase';
-import { type CenterEvent, type EventCursor, type EventPage, severityLabels, resultLabels, isAttentionEvent, changedFields, exportEvents, eventTitle } from './eventCenterModel';
+import { type CenterEvent, type EventCursor, type EventPage, severityLabels, resultLabels, isAttentionEvent, changedFields, exportEvents, eventTitle, isEventCenterSchemaMissing, eventCenterErrorMessage } from './eventCenterModel';
 
 const field = 'w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm';
 const button = 'inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-gray-600 px-3 py-2 text-sm disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700';
@@ -26,6 +26,7 @@ export function GroupEventsPanel() {
   const [hasMore, setHasMore] = useState(false);
   const [loadedAt, setLoadedAt] = useState('');
   const sequence = useRef(0);
+  const schemaMissing = useRef(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const filtersKey = JSON.stringify([query, source, severity, result, from, to]);
   const activeFilters = useRef(filtersKey);
@@ -47,7 +48,9 @@ export function GroupEventsPanel() {
         p_source: source || null, p_severity: severity || null, p_result: result || null,
         p_search: query || null, p_before_time: before?.time ?? null, p_before_key: before?.key ?? null, p_limit: 50,
       } as never);
-      if (rpcError) throw new Error(rpcError.code === '42501' ? 'مجوز مشاهدهٔ مرکز رخدادها را ندارید.' : 'دریافت رخدادها ناموفق بود. اتصال و به‌روزرسانی دیتابیس را بررسی کنید.');
+      if (request !== sequence.current || requestFilters !== activeFilters.current) return;
+      schemaMissing.current = isEventCenterSchemaMissing(rpcError);
+      if (rpcError) throw new Error(eventCenterErrorMessage(rpcError));
       if (request !== sequence.current || requestFilters !== activeFilters.current) return;
       const page = data as unknown as EventPage;
       if (!page || !Array.isArray(page.events)) throw new Error('پاسخ مرکز رخدادها معتبر نیست.');
@@ -63,7 +66,7 @@ export function GroupEventsPanel() {
 
   useEffect(() => { void load(); return () => { sequence.current++; }; }, [load]);
   // Keep the investigation stable while an event is open or older pages are loaded.
-  useLiveData(LIVE_DATA.audit, async () => { if (!selected && !loading && events.length <= 50) await load(null, true); });
+  useLiveData(LIVE_DATA.audit, async () => { if (!schemaMissing.current && !selected && !loading && events.length <= 50) await load(null, true); });
   useEffect(() => {
     if (selected) dialog.current?.showModal();
     else dialog.current?.close();
@@ -71,7 +74,7 @@ export function GroupEventsPanel() {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (document.visibilityState === 'visible' && !selected && !loading && events.length <= 50) void load(null, true);
+      if (!schemaMissing.current && document.visibilityState === 'visible' && !selected && !loading && events.length <= 50) void load(null, true);
     }, 30000);
     return () => clearInterval(timer);
   }, [selected, loading, events.length, load]);

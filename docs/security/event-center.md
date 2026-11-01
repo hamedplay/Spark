@@ -88,3 +88,29 @@ Changing GitHub and the copy database does not deploy the production runtime.
   download, cursor requests and no mobile document overflow. No production login
   or live user session was simulated as a successful end-to-end deployment.
 - No lint command is part of validation.
+
+## Deployed frontend reports RPC 404 / PGRST202
+
+The Internet application updater deliberately does not run database migrations.
+The connected copy having the RPC does not prove the self-hosted website has it.
+PGRST202 can mean either missing schema or a stale PostgREST schema cache.
+Inspect and apply only this feature on the database host from an updated checkout:
+
+```sh
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-db.sh --check
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-db.sh --apply
+```
+
+Supply the running Supabase DB container as the final argument if detection is
+ambiguous. `--check` reads history/catalog only. `--apply` takes a transaction lock,
+applies the unchanged canonical migration only when unrecorded and the RPC is
+absent, records its version atomically and requests a PostgREST schema reload.
+When already installed it only verifies dependencies and reloads the cache.
+Inconsistent schema/history fails closed; no blind trigger recreation or history
+repair. No unrelated migration, runtime or credential is changed.
+
+Automatic refresh pauses after a PGRST202 response; manual retry remains available
+and a successful request resumes refresh. Other network/access errors retain their
+existing handling. HTTP 404 alone does not establish the exact underlying cause;
+inspect the response JSON and this script's check output. A production fix is not
+verified until an authenticated request to that site's RPC succeeds.
