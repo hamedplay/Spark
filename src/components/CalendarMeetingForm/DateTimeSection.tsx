@@ -30,7 +30,7 @@ export function DateTimeSection(props: {
   } = props;
 
   const requiresScheduleSelection = !scheduleDate;
-  const manualEditorVisible = showManualDateTime || requiresScheduleSelection;
+  const manualEditorVisible = showManualDateTime || requiresScheduleSelection || !startTime || !endTime;
 
   return (
     <div className="space-y-2">
@@ -69,7 +69,7 @@ export function DateTimeSection(props: {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-700">
           <div>
             <label className="block text-xs text-blue-600 dark:text-blue-400 mb-1">تاریخ (شمسی)</label>
-            <input type="text" value={manualDateStr} onChange={e => {
+            <input type="text" value={manualDateStr || (scheduleDate ? `${scheduleDate.jy}/${String(scheduleDate.jm).padStart(2, '0')}/${String(scheduleDate.jd).padStart(2, '0')}` : '')} onChange={e => {
               setManualDateStr(e.target.value);
               const parts = e.target.value.split('/').map(Number);
               if (parts.length === 3 && parts[0] > 1300 && parts[1] >= 1 && parts[1] <= 12 && parts[2] >= 1) {
@@ -82,12 +82,12 @@ export function DateTimeSection(props: {
           </div>
           <div>
             <label className="block text-xs text-blue-600 dark:text-blue-400 mb-1">ساعت شروع</label>
-            <input type="time" value={manualStartTime} onChange={e => { setManualStartTime(e.target.value); setStartTime(e.target.value); }}
+            <input type="time" required value={manualStartTime || startTime} onChange={e => { setShowManualDateTime(true); setManualStartTime(e.target.value); setStartTime(e.target.value); }}
               className="w-full p-2 border border-blue-300 dark:border-blue-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
           </div>
           <div>
             <label className="block text-xs text-blue-600 dark:text-blue-400 mb-1">ساعت پایان</label>
-            <input type="time" value={manualEndTime} onChange={e => { setManualEndTime(e.target.value); setEndTime(e.target.value); }}
+            <input type="time" required value={manualEndTime || endTime} onChange={e => { setShowManualDateTime(true); setManualEndTime(e.target.value); setEndTime(e.target.value); }}
               className="w-full p-2 border border-blue-300 dark:border-blue-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm" />
           </div>
         </div>

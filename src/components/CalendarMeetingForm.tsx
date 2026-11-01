@@ -14,6 +14,7 @@ import moment from 'moment-jalaali';
 import { ContactEmail, AgendaItem } from '../types';
 import { useOrgUsers, FALLBACK_NAME, LOADING_NAME } from '../lib/useOrgUsers';
 import { CalendarMeetingFormView } from './CalendarMeetingForm/CalendarMeetingFormView';
+import { validateScheduleTimes } from './CalendarMeetingForm/validateScheduleTimes';
 import { commitCalendarMeetingEdit } from './CalendarMeetingForm/commitEdit';
 import {
   createConferenceRoom,
@@ -292,6 +293,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
     if (!userId) { toast.error('لطفا وارد شوید'); return; }
     if (!subject.trim()) { toast.error('موضوع جلسه را وارد کنید'); return; }
     if (!scheduleDate) { toast.error('تاریخ جلسه مشخص نیست'); return; }
+    const timeError = validateScheduleTimes(startTime, endTime);
+    if (timeError) {
+      setShowManualDateTime(true);
+      toast.error(timeError);
+      return;
+    }
     if (orgUsersLoading) { toast.error('اطلاعات سازمانی در حال بارگذاری است؛ لحظاتی دیگر تلاش کنید'); return; }
     const senderName = orgAllUsers.find(u => u.user_id === userId)?.full_name?.trim();
     if (!senderName) { toast.error('اطلاعات سازمانی کاربر کامل نیست؛ امکان ثبت جلسه وجود ندارد.'); return; }
