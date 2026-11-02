@@ -4,11 +4,12 @@ import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { supabase } from '../../lib/supabase';
 import { type CenterEvent, type EventCursor, type EventPage, severityLabels, resultLabels, isAttentionEvent, changedFields, exportEvents, eventTitle, isEventCenterSchemaMissing, eventCenterErrorMessage } from './eventCenterModel';
 
+import { categoryTitle, eventSourceTitle, eventResultTitle, fieldTitle, formatEventValue, metadataRows, eventSummary } from './eventCenterPresentation';
+
 const field = 'w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm';
 const button = 'inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-gray-600 px-3 py-2 text-sm disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700';
 const stamp = (value: string) => new Date(value).toLocaleString('fa-IR', { timeZone: 'Asia/Tehran' });
 const dateValue = (daysAgo: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() - daysAgo * 86400000));
-const stringify = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 
 export function GroupEventsPanel() {
   const [events, setEvents] = useState<CenterEvent[]>([]);
@@ -93,8 +94,8 @@ export function GroupEventsPanel() {
       <div className="flex gap-2"><button type="button" className={button} onClick={download} disabled={!events.length || loading || !!error}><Download size={16} />خروجی موارد نمایش‌داده‌شده</button>
         <button type="button" className={button} onClick={() => void load()} disabled={loading}><RefreshCw size={16} className={loading ? 'animate-spin' : ''} />تازه‌سازی</button></div>
     </div>
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {[[events.length, 'رخداد بارگذاری‌شده'], [attention, 'نیازمند توجه در این فهرست'], [events.filter(e => e.result === 'denied').length, 'دسترسی ردشده در این فهرست'], [new Set(events.map(e => e.actor_user_id).filter(Boolean)).size, 'کاربر در این فهرست']].map(([value, label]) =>
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {[[events.length, 'رخداد بارگذاری‌شده'], [events.filter(e => ['auth.login', 'auth.mfa_code_login'].includes(e.event_type)).length, 'رخداد ورود در این فهرست'], [attention, 'نیازمند توجه در این فهرست'], [events.filter(e => e.result === 'denied').length, 'دسترسی ردشده در این فهرست'], [new Set(events.map(e => e.actor_user_id).filter(Boolean)).size, 'کاربر در این فهرست']].map(([value, label]) =>
         <div key={label} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"><div className="text-2xl font-bold">{value}</div><div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{label}</div></div>)}
     </div>
     <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
@@ -103,7 +104,7 @@ export function GroupEventsPanel() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-xs">از تاریخ (تهران)<input type="date" className={`${field} mt-2`} value={from} onChange={e => setFrom(e.target.value)} /></label>
         <label className="text-xs">تا تاریخ (تهران)<input type="date" className={`${field} mt-2`} value={to} onChange={e => setTo(e.target.value)} /></label>
-        <label className="text-xs">منبع<select className={`${field} mt-2`} value={source} onChange={e => setSource(e.target.value)}><option value="">همه منابع</option><option value="security">امنیتی / سرور</option><option value="application">گزارش فعالیت برنامه</option></select></label>
+        <label className="text-xs">منبع<select className={`${field} mt-2`} value={source} onChange={e => setSource(e.target.value)}><option value="">همه منابع</option><option value="security">امنیتی و احراز هویت</option><option value="application">گزارش فعالیت برنامه</option></select></label>
         <label className="text-xs">شدت<select className={`${field} mt-2`} value={severity} onChange={e => setSeverity(e.target.value)}><option value="">همه سطوح</option>{Object.entries(severityLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label className="text-xs">نتیجه<select className={`${field} mt-2`} value={result} onChange={e => setResult(e.target.value)}><option value="">همه نتایج</option>{Object.entries(resultLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       </div>
@@ -112,10 +113,11 @@ export function GroupEventsPanel() {
     <details className="rounded-2xl border border-gray-200 p-4 text-sm dark:border-gray-700">
       <summary className="cursor-pointer font-semibold">پوشش پایش و سناریوهای بررسی</summary>
       <ul className="mt-3 list-inside list-disc space-y-2 text-xs leading-6 text-gray-600 dark:text-gray-300">
+        <li>ورود، خروج و عملیات ثبت‌شدهٔ سرویس احراز هویت: نمایش از منبع اصلی ثبت؛ تازه‌سازی توکن به‌عنوان ورود جدید شمرده نمی‌شود.</li>
         <li>تغییر نقش مدیر، مدیر امنیت، وضعیت حساب، قفل و روش MFA: ثبت خودکار دیتابیس با مقادیر قبل و بعد.</li>
         <li>تغییر مجوز گروه، ساخت یا حذف گروه و جابه‌جایی اعضا: ثبت خودکار دیتابیس.</li>
         <li>نشست محدود در توابع دارای کنترل مشترک دسترسی؛ تلاش بدون مجوز برای مدیریت کاربر، حذف/بازنشستگی، بکاپ و بازیابی: ثبت سمت سرور پس از انتشار توابع جدید.</li>
-        <li>تکرار رد دسترسی در ۳۰ ثانیه: تجمیع با attempt_count؛ زمان آخرین تلاش در last_seen_at. شدت هشدار به‌تنهایی اثبات حمله نیست.</li>
+        <li>تکرار رد دسترسی در ۳۰ ثانیه: ثبت تعداد و زمان آخرین تلاش در جزئیات. شدت هشدار به‌تنهایی اثبات حمله نیست.</li>
         <li>رخدادهای موجود تنظیمات امنیت، بازیابی حساب و MFA در همین فهرست قابل بررسی‌اند؛ نمایش فقط در صورت ثبت توسط تولیدکنندهٔ مربوط است.</li>
         <li>پوشش کامل درخواست‌های ردشدهٔ REST/RLS، حملات ناشناس و اسکن HTTP به اتصال لاگ پراکسی/WAF و دیتابیس نیاز دارد؛ این مرکز فعلاً آن ورودی‌ها را ندارد.</li>
       </ul>
@@ -126,10 +128,10 @@ export function GroupEventsPanel() {
       <div className="overflow-x-auto"><table className="block w-full text-right text-sm md:table md:min-w-[800px]"><thead className="hidden md:table-header-group bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400"><tr>{['زمان / شدت', 'رخداد / منبع', 'عامل', 'نتیجه', 'بررسی'].map(title => <th key={title} scope="col" className="px-4 py-3">{title}</th>)}</tr></thead>
         <tbody className="block md:table-row-group divide-y divide-gray-100 dark:divide-gray-700">{events.map(event => <tr key={event.event_key} className="grid grid-cols-2 md:table-row hover:bg-gray-50 dark:hover:bg-gray-700/40">
           <td className="px-4 py-4 text-xs"><div>{stamp(event.created_at)}</div><span className={`mt-1 inline-block rounded-full px-2 py-1 ${['error', 'critical'].includes(event.severity) ? 'bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-200' : isAttentionEvent(event) ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'}`}>{severityLabels[event.severity] ?? event.severity}</span></td>
-          <td className="max-w-xs px-4 py-4"><div dir="auto" className="break-words font-medium">{eventTitle(event.event_type)}</div><div dir="auto" className="mt-1 break-all font-mono text-xs text-gray-400">{event.event_type}</div><div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{event.source === 'security' ? 'امنیتی / سرور' : 'فعالیت برنامه'} · {event.category}</div></td>
+          <td className="max-w-xs px-4 py-4"><div dir="auto" className="break-words font-medium">{eventTitle(event.event_type)}</div><div dir="auto" className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{eventSummary(event)}</div><div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{eventSourceTitle(event)} · {categoryTitle(event.category)}</div></td>
           <td className="max-w-[200px] px-4 py-4"><div>{event.actor_name || (event.actor_user_id ? 'کاربر بدون نام' : 'عامل ثبت نشده')}</div><div dir="ltr" className="mt-1 break-all font-mono text-xs text-gray-400">{event.actor_user_id || '—'}</div></td>
-          <td className="px-4 py-4 text-xs">{resultLabels[event.result ?? ''] ?? 'ثبت نشده'}{event.error_code && <div dir="ltr" className="mt-1 max-w-48 break-all font-mono text-red-500">{event.error_code}</div>}</td>
-          <td className="col-span-2 px-4 py-4 md:table-cell"><button className={button} aria-label={`جزئیات ${event.event_type}`} onClick={() => setSelected(event)}>جزئیات<ChevronLeft size={14} /></button></td>
+          <td className="px-4 py-4 text-xs">{eventResultTitle(event)}{event.error_code && <div dir="ltr" className="mt-1 max-w-48 break-all font-mono text-red-500">{event.error_code}</div>}</td>
+          <td className="col-span-2 px-4 py-4 md:table-cell"><button className={button} aria-label={`جزئیات ${eventTitle(event.event_type)}`} onClick={() => setSelected(event)}>جزئیات<ChevronLeft size={14} /></button></td>
         </tr>)}</tbody></table></div>
       {loading && <div role="status" className="flex items-center justify-center gap-2 p-6"><Loader2 className="animate-spin" size={20} />در حال دریافت رخدادها…</div>}
       {!loading && !error && !events.length && <div className="p-12 text-center text-gray-500"><Activity className="mx-auto mb-3" />رخدادی در این بازه و فیلتر یافت نشد.</div>}
@@ -138,14 +140,16 @@ export function GroupEventsPanel() {
     </div>
     <dialog ref={dialog} onCancel={() => setSelected(null)} onClose={() => setSelected(null)} className="m-auto w-[min(900px,95vw)] max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-0 text-gray-800 shadow-2xl backdrop:bg-black/50 dark:bg-gray-900 dark:text-gray-100" dir="rtl" aria-labelledby="event-detail-title">
       {selected && <><div className="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900"><h4 id="event-detail-title" className="font-bold">جزئیات رخداد</h4><button className={button} aria-label="بستن جزئیات" onClick={() => setSelected(null)} autoFocus><X size={18} /></button></div>
-        <div className="space-y-5 p-5"><dl className="grid gap-3 sm:grid-cols-2">{Object.entries({ 'نوع رخداد': selected.event_type, 'زمان': stamp(selected.created_at), 'منبع': selected.source === 'security' ? 'امنیتی / سرور' : 'گزارش فعالیت برنامه (قابل ارسال توسط مرورگر)', 'شدت': severityLabels[selected.severity], 'عامل': selected.actor_name, 'شناسه عامل': selected.actor_user_id, 'کاربر هدف': selected.target_user_id, 'نتیجه': resultLabels[selected.result ?? ''], 'کد خطا': selected.error_code, 'شناسه درخواست': selected.request_id, 'شناسه نشست': selected.session_id, 'IP ثبت‌شده': selected.ip_address, 'هش IP': selected.ip_hash, 'شناسه رخداد': selected.id }).map(([label, value]) => <div key={label} className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800"><dt className="text-xs text-gray-500 dark:text-gray-400">{label}</dt><dd dir="auto" className="mt-1 break-all text-sm">{value || 'ثبت نشده'}</dd></div>)}</dl>
+        <div className="space-y-5 p-5"><dl className="grid gap-3 sm:grid-cols-2">{Object.entries({ 'نوع رخداد': eventTitle(selected.event_type), 'کد فنی رخداد': selected.event_type, 'دسته': categoryTitle(selected.category), 'زمان': stamp(selected.created_at), 'منبع': eventSourceTitle(selected), 'شدت': severityLabels[selected.severity], 'عامل': selected.actor_name, 'شناسه عامل': selected.actor_user_id, 'کاربر هدف': selected.target_user_id, 'نتیجه': eventResultTitle(selected), 'کد خطا': selected.error_code, 'شناسه درخواست': selected.request_id, 'شناسه نشست': selected.session_id, 'IP ثبت‌شده': selected.ip_address, 'هش IP': selected.ip_hash, 'شناسه رخداد': selected.id }).map(([label, value]) => <div key={label} className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800"><dt className="text-xs text-gray-500 dark:text-gray-400">{label}</dt><dd dir="auto" className="mt-1 break-all text-sm">{value || 'ثبت نشده'}</dd></div>)}</dl>
           <div className="flex flex-wrap gap-2">
             {selected.actor_user_id && <button className={button} onClick={() => investigate(selected.actor_user_id!)}>رخدادهای این عامل در بازه</button>}
             {selected.request_id && <button className={button} onClick={() => investigate(selected.request_id!)}>همبستگی با شناسه درخواست</button>}
           </div>
-          {!!changedFields(selected).length && <div><h5 className="mb-2 font-semibold">تغییرات ثبت‌شده</h5><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{['فیلد', 'قبل', 'بعد'].map(label => <th key={label} className="p-2 text-right">{label}</th>)}</tr></thead><tbody>{changedFields(selected).map(change => <tr key={change.key} className="border-t border-gray-200 dark:border-gray-700"><td className="p-2 font-mono">{change.key}</td><td className="p-2"><pre dir="auto" className="max-w-xs whitespace-pre-wrap break-all text-xs">{stringify(change.before)}</pre></td><td className="p-2"><pre dir="auto" className="max-w-xs whitespace-pre-wrap break-all text-xs">{stringify(change.after)}</pre></td></tr>)}</tbody></table></div></div>}
-          <div><h5 className="mb-2 font-semibold">زمینه و جزئیات</h5><pre dir="ltr" className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-gray-50 p-4 text-xs dark:bg-gray-800">{JSON.stringify(selected.metadata, null, 2)}</pre></div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">داده‌ها شواهد ثبت‌شده‌اند؛ رخدادهای قبل از فعال‌سازی ثبت سرور قابل بازسازی نیستند. نمایش این مرکز مجوز حذف شواهد نمی‌دهد.</p>
+          {!!changedFields(selected).length && <div><h5 className="mb-2 font-semibold">تغییرات ثبت‌شده</h5><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{['فیلد', 'قبل', 'بعد'].map(label => <th key={label} className="p-2 text-right">{label}</th>)}</tr></thead><tbody>{changedFields(selected).map(change => <tr key={change.key} className="border-t border-gray-200 dark:border-gray-700"><td className="p-2" title={change.key}>{fieldTitle(change.key)}</td><td className="p-2"><pre dir="auto" className="max-w-xs whitespace-pre-wrap break-all text-xs">{formatEventValue(change.key, change.before)}</pre></td><td className="p-2"><pre dir="auto" className="max-w-xs whitespace-pre-wrap break-all text-xs">{formatEventValue(change.key, change.after)}</pre></td></tr>)}</tbody></table></div></div>}
+          <div><h5 className="mb-2 font-semibold">زمینه و جزئیات</h5><dl className="grid gap-3 sm:grid-cols-2">{metadataRows(selected).map(row => <div key={row.key} className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800"><dt title={row.key} className="text-xs text-gray-500 dark:text-gray-400">{row.label}</dt><dd dir="auto" className="mt-1 whitespace-pre-wrap break-all text-sm">{row.value}</dd></div>)}</dl></div>
+          {selected.metadata?.source === 'auth_service' && <p className="rounded-xl bg-blue-50 p-3 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">این رخداد در سرویس احراز هویت ثبت شده است؛ به‌تنهایی تأیید عبور از مراحل دومرحله‌ای یا داشتن دسترسی کامل Spark نیست.</p>}
+          <details><summary className="cursor-pointer text-sm font-medium">دادهٔ فنی اصلی (برای عیب‌یابی)</summary><pre dir="ltr" className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-gray-50 p-4 text-xs dark:bg-gray-800">{JSON.stringify(selected, null, 2)}</pre></details>
+          <p className="text-xs text-gray-500 dark:text-gray-400">فقط رخدادهای موجود در منابع ثبت نمایش داده می‌شوند؛ اطلاعات ثبت‌نشده بازسازی نمی‌شود. نمایش این مرکز مجوز حذف شواهد نمی‌دهد.</p>
         </div></>}
     </dialog>
   </section>;

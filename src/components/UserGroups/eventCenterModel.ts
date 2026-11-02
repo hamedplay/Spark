@@ -1,3 +1,6 @@
+import { eventTitle, categoryTitle, eventSourceTitle, eventResultTitle, metadataRows } from './eventCenterPresentation';
+export { eventTitle } from './eventCenterPresentation';
+
 export interface CenterEvent {
   event_key: string;
   id: string;
@@ -35,34 +38,11 @@ export function changedFields(event: Pick<CenterEvent, 'before_state' | 'after_s
 }
 export function exportEvents(events: CenterEvent[]) {
   // JSON avoids spreadsheet formula execution and preserves structured evidence.
-  return JSON.stringify({ exported_at: new Date().toISOString(), scope: 'displayed_events', events }, null, 2);
+  return JSON.stringify({ exported_at: new Date().toISOString(), scope: 'displayed_events', events: events.map(event => ({
+    ...event, event_title_fa: eventTitle(event.event_type), category_title_fa: categoryTitle(event.category),
+    source_title_fa: eventSourceTitle(event), result_title_fa: eventResultTitle(event), details_fa: metadataRows(event),
+  })) }, null, 2);
 }
-const eventTitles: Record<string, string> = {
-  'access.denied': 'تلاش برای دسترسی بدون مجوز',
-  'profiles.insert': 'ایجاد حساب و وضعیت دسترسی اولیه',
-  'profiles.update': 'تغییر وضعیت امنیتی یا دسترسی حساب',
-  'profiles.delete': 'حذف پروفایل کاربر',
-  'user_groups.insert': 'ایجاد گروه کاربری',
-  'user_groups.update': 'تغییر مشخصات یا مجوزهای گروه',
-  'user_groups.delete': 'حذف گروه کاربری',
-  'user_group_members.insert': 'افزودن کاربر به گروه',
-  'user_group_members.update': 'تغییر عضویت کاربر در گروه',
-  'user_group_members.delete': 'حذف کاربر از گروه',
-  security_settings_changed: 'تغییر تنظیمات امنیتی',
-  user_group_permissions_updated: 'تغییر مجوزهای گروه',
-  account_unlocked_by_security_admin: 'بازکردن قفل حساب توسط مدیر امنیت',
-  mfa_method_disabled: 'غیرفعال‌کردن روش احراز هویت دومرحله‌ای',
-  mfa_method_selected: 'انتخاب روش احراز هویت دومرحله‌ای',
-  mfa_stepup_grant_issued: 'تأیید احراز هویت برای عملیات حساس',
-  admin_user_delete_requested: 'درخواست حذف کاربر توسط مدیر',
-  admin_user_deleted: 'حذف کاربر توسط مدیر',
-  maintenance_mode_changed: 'تغییر حالت تعمیرات سایت',
-  registration_otp_invalid: 'کد تأیید ثبت‌نام نامعتبر',
-  registration_completed: 'تکمیل ثبت‌نام',
-  password_recovery_otp_requested: 'درخواست کد بازیابی رمز عبور',
-  recovery_finalization_succeeded: 'تکمیل بازیابی حساب',
-};
-export const eventTitle = (type: string) => eventTitles[type] ?? type;
 
 export function isEventCenterSchemaMissing(error: { code?: string } | null | undefined): boolean {
   return error?.code === 'PGRST202';

@@ -18,6 +18,7 @@ The investigation design follows these primary references:
 - [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html): log authorization failures and sensitive changes; avoid secrets; distinguish suspicion from confirmed compromise.
 - [GitHub audit log](https://docs.github.com/en/organizations/keeping-your-organization-secure/managing-security-settings-for-your-organization/reviewing-the-audit-log-for-your-organization): identify actor, action, time, affected resource; filter and export records.
 - [Elastic Timeline](https://www.elastic.co/docs/solutions/security/investigate/timeline): investigate event details and correlate related records.
+- [Supabase Auth Audit Logs](https://supabase.com/docs/guides/auth/audit-logs): retained identity-service events live in `auth.audit_log_entries`.
 - [Supabase PGAudit](https://supabase.com/docs/guides/database/extensions/pgaudit): database statement auditing is a separate log source; avoid global/parameter logging that leaks secrets or generates excessive volume.
 
 ## Architecture
@@ -79,8 +80,9 @@ Changing GitHub and the copy database does not deploy the production runtime.
   A temporary permission stub tests authorized pagination mechanics independently of
   FULL-session evaluation; every fixture and stub rolls back.
 - Standard `npm run build` succeeds. Its root tsc command checks the empty root
-  project; explicit `tsc -p tsconfig.app.json --noEmit` reveals 734 existing errors
-  both before and after this change, with none added by the changed UI/model.
+  project; explicit `tsc -p tsconfig.app.json --noEmit` reports 733 pre-existing errors
+  on both the exact base commit and the Auth-source update, with identical normalized
+  diagnostics and none added by the changed UI/model/presentation modules.
 - Legacy Phase 5 edge-gate/session-issuer suites: 78 pass / 18 fail on both the exact
   base commit and changed tree. No unrelated repairs included.
 - Actual panel rendered in a temporary fixture harness using the real application
@@ -90,28 +92,78 @@ Changing GitHub and the copy database does not deploy the production runtime.
   or live user session was simulated as a successful end-to-end deployment.
 - No lint command is part of validation.
 
-## Deployed frontend reports RPC 404 / PGRST202
+## Authentication source and Persian investigation details
 
-The Internet application updater deliberately does not run database migrations.
-The connected copy having the RPC does not prove the self-hosted website has it.
-PGRST202 can mean either missing schema or a stale PostgREST schema cache.
-Inspect and apply only this feature on the database host from an updated checkout:
+Root cause confirmed against the uploaded export and actual database schema:
+`logout` was browser-reported into `audit_log`. Auth itself already writes `login`
+records into `auth.audit_log_entries`; the center read neither that source nor its
+history. The connected copy has actual retained Auth login rows. Missing retained
+records in another environment cannot be reconstructed or assumed to exist.
+
+New migration `20261102042055_event_center_authentication_logs.sql` extends only
+`private.get_event_center_v1`. The public RPC signature, caller/session/permission
+checks, original row fields and cross-source cursor remain unchanged. Auth rows
+have unique `authentication:<id>` keys, source `security`, and metadata identifying
+`auth_service`. Login/logout, account and MFA audit actions are allowlisted;
+routine token refresh/revocation records are intentionally excluded from this
+investigation feed. Only action, known provider, verified actor UUID (when valid),
+profile display name and a source/scope marker are projected. No arbitrary traits,
+raw payload, account email, credentials, or additional client grants to `auth` are
+exposed. Malformed/missing actor IDs preserve the event without an unsafe UUID cast.
+Auth login success describes identity-service authentication, not completion of
+Spark's own MFA, session or FULL-access gates. Challenge attempts have no invented
+outcome. Client logout reports retain their original unknown outcome and remain
+distinguishable from Auth's server records. No login producer, trigger, auth flow,
+retention policy or historical audit row is rewritten.
+
+Persian titles cover every event type in the supplied export. Categories, known
+field names, enums and common descriptions are localized. JSON-encoded `details`
+are parsed as data into labelled rows; names/IDs and unknown values stay intact.
+A collapsible original-data inspector preserves technical evidence. JSON export
+adds `*_title_fa` and `details_fa` alongside every unchanged original event field;
+its `displayed_events` scope still means only the currently loaded records.
+
+## Deployment and diagnostics
+
+The Internet application updater deliberately does not apply database migrations.
+After deploying the updated frontend, run on the real database host from the
+updated Spark checkout:
 
 ```sh
-sudo bash /opt/spark/deploy/spark-cli/apply-event-center-db.sh --check
-sudo bash /opt/spark/deploy/spark-cli/apply-event-center-db.sh --apply
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-db.sh --check supabase-db
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-db.sh --apply supabase-db
 ```
 
-Supply the running Supabase DB container as the final argument if detection is
-ambiguous. `--check` reads history/catalog only. `--apply` takes a transaction lock,
-applies the unchanged canonical migration only when unrecorded and the RPC is
-absent, records its version atomically and requests a PostgREST schema reload.
-When already installed it only verifies dependencies and reloads the cache.
-Inconsistent schema/history fails closed; no blind trigger recreation or history
-repair. No unrelated migration, runtime or credential is changed.
+The helper now applies only this new Auth-source upgrade. It requires the existing
+base RPC, supports that base even when its old migration history was not recorded,
+and never fabricates historical entries or depends on the removed base migration
+file. It records the new version atomically under a transaction lock, verifies the
+Auth source and requests a PostgREST schema reload. It accepts an explicit DB
+container and recognizes the canonical `supabase-db` name when Docker reports an
+image ID. Multiple candidates fail without selecting an arbitrary database.
+`--check` reports installed source/history and the retained Auth-login count for
+the past seven days, without exposing user data.
 
-Automatic refresh pauses after a PGRST202 response; manual retry remains available
-and a successful request resumes refresh. Other network/access errors retain their
-existing handling. HTTP 404 alone does not establish the exact underlying cause;
-inspect the response JSON and this script's check output. A production fix is not
-verified until an authenticated request to that site's RPC succeeds.
+PGRST202 can indicate a missing RPC or stale PostgREST schema cache. Automatic
+refresh pauses after that response; manual retry remains available. A production
+fix is confirmed only by an authorized request to that site's RPC. The connected
+copy's successful migration is not proof of production deployment.
+
+Additional validation:
+
+- `tests/audit/eventCenterPresentation.test.ts`: localized sample vocabulary,
+  nested JSON parsing, raw-evidence preservation, auth-stage semantics, enum values,
+  unknown/prototype-looking keys and additive export labels.
+- `tests/database/eventCenterAuthentication.sql`: actual rolled-back DB fixtures
+  verify Auth login/logout inclusion, refresh exclusion, payload redaction, bad UUIDs,
+  Persian login search, source/outcome/actor filters, shared-timestamp pagination,
+  denied reads and preserved legacy permission. Temporary permission stubs test
+  page mechanics; the production permission helper is restored by rollback.
+- `tests/audit/eventCenterDeployment.test.mjs`: read-only diagnostics, atomic
+  upgrade generation, image-ID discovery, ambiguous containers and DB failures.
+
+The final Auth-source update passed 32 focused Node tests and both rolled-back
+database suites. The actual panel was also exercised with representative sanitized
+fixtures in a temporary browser harness: Persian titles/details, Auth provenance,
+raw-data disclosure, safe text rendering, additive export, mobile and dark layouts.
+These browser fixtures do not represent a live production login test.

@@ -13,10 +13,13 @@ test('diff preserves false and zero and detects removed fields', () => {
   ]);
 });
 test('export preserves adversarial text as JSON without HTML or spreadsheet execution', () => {
-  const events = [{ event_key: 'application:a', event_type: '=HYPERLINK("bad")', metadata: { details: '<script>alert(1)</script>\nline' } }] as CenterEvent[];
+  const events = [{ event_key: 'application:a', source: 'application', category: 'users', event_type: '=HYPERLINK("bad")', metadata: { details: '<script>alert(1)</script>\nline' } }] as CenterEvent[];
   const result = JSON.parse(exportEvents(events));
   assert.equal(result.scope, 'displayed_events');
-  assert.deepEqual(result.events, events);
+  const { event_title_fa, category_title_fa, source_title_fa, result_title_fa, details_fa, ...raw } = result.events[0];
+  assert.deepEqual(raw, events[0]);
+  assert.equal(source_title_fa, 'گزارش فعالیت برنامه');
+  assert.equal(details_fa[0].value, events[0].metadata.details);
 });
 
 test('missing RPC has explicit guidance and is distinct from authorization/network failures', () => {
