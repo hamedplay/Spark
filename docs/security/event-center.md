@@ -167,3 +167,87 @@ database suites. The actual panel was also exercised with representative sanitiz
 fixtures in a temporary browser harness: Persian titles/details, Auth provenance,
 raw-data disclosure, safe text rendering, additive export, mobile and dark layouts.
 These browser fixtures do not represent a live production login test.
+
+## Client IP and device context
+
+The connected copy confirmed two separate gaps: all 1,286 retained Auth login
+records lacked IP/User-Agent, while 597 `session_security_state` records retained
+device summaries. The event inspector did not interpret the application UA strings.
+Spark's same-origin REST proxy also omitted IP forwarding; other locations appended
+caller-supplied XFF. Gateway login calls do not forward the browser context to Auth.
+The copy currently has no retained `auth.sessions` rows. Matching a login to a user's
+latest session or nearest timestamp would invent evidence and is not used.
+
+New migration `20261102043627_event_center_client_context.sql` adds a private,
+RLS-enabled `event_session_context` table and `record_my_session_context_v1()`.
+The browser makes a best-effort call after the existing bootstrap reports FULL.
+The server independently rechecks the canonical FULL-session evaluator, derives
+the actor and session from verified JWT claims, and accepts no caller IDs, IP or
+UA parameters. It stores only a bounded request UA, a valid IPv4/IPv6 host address,
+the IP source and server observation time. No cookies, authorization headers,
+tokens, URLs or request bodies are copied. A session primary key deduplicates
+refreshes, reloads and tabs without overwriting the first observation. A failure
+does not affect login/access decisions and may retry at the next bootstrap refresh.
+
+The new `session.first_full_access` event means the first **observed FULL request**,
+including existing sessions first observed after deployment. It is separate from
+Auth's original login event and timestamp. This is application instrumentation,
+not comprehensive Auth/HTTP auditing; a client that never calls the writer does
+not produce this additional event. The original Auth audit source remains intact.
+Native Auth IP/UA are displayed when actually retained. Historical missing fields
+are never backfilled. Security events can show initial context only through an
+exact match on **both** session ID and actor ID; older registry device summaries
+are a labelled fallback. Related-session IP/device details are separate from the
+event's own fields because the request context may have changed.
+
+The table and inspector show Persian platform/device/OS/browser descriptions,
+reported versions, IP provenance and expandable raw UA. Known Edge/Opera/Samsung/
+Firefox/iOS signatures take precedence over generic Chrome/WebKit. Unknown UAs,
+reduced Android versions, Windows 10/11 and desktop-mode iPad/Mac ambiguity stay
+explicit; hardware models are not invented. Device strings are descriptive,
+client-declared evidence, not authorization inputs. These limitations follow
+[MDN UA detection](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Browser_detection_using_the_user_agent)
+and [MDN UA reduction](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/User-agent_reduction).
+
+### Self-hosted upgrade
+
+From the updated Spark checkout, configure ingress **before** publishing the new
+frontend so the first session observations include the correct IP source:
+
+```sh
+sudo bash /opt/spark/deploy/spark-cli/apply-event-client-headers.sh --apply
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-db.sh --apply supabase-db
+sudo bash /opt/spark/deploy/spark-cli/apply-event-client-headers.sh --check
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-db.sh --check supabase-db
+```
+
+Then publish the frontend with the normal Spark updater. No Edge deployment is
+required for this addition. The DB helper now applies the Auth-source prerequisite
+and client-context migration in order, each only when absent, in one locked
+transaction. Previous migrations/history are not edited. The new migration is
+already applied on the connected copy; production is a separate environment.
+
+The header helper patches only Supabase upstream locations pointing to the existing
+`127.0.0.1:8000` gateway in `/etc/nginx/sites-available/spark`. It overwrites
+`X-Spark-Client-IP`, `X-Real-IP` and XFF with Nginx `$remote_addr`, retaining routing,
+TLS and other upstreams. It rejects unsupported layouts before writing, saves a
+backup, validates with `nginx -t`, reloads and restores on failure. Checks are
+read-only and repeated applies are idempotent. The same-origin updater invokes the
+same patch. Keep the gateway loopback-only, as in Spark's existing deployment.
+If another proxy/CDN precedes Nginx, its allowlisted real-IP configuration must
+already be correct; otherwise the observed address belongs to that proxy. A
+fallback forwarded header is explicitly labelled for proxy review, not described
+as a verified public address. VPN/NAT addresses do not identify a physical device.
+
+No existing audit rows, raw-IP NULL constraint, Auth flow, permission gate or
+retention job is changed. The new private context records persist independently
+of Auth session deletion; existing retention jobs do not automatically clean this
+new table. Access remains limited to the authorized event-center reader.
+
+Validation includes browser/OS parsing and ambiguity cases, best-effort recorder
+deduplication/retry, header overwrite/idempotence/rollback tests, and
+`tests/database/eventCenterClientContext.sql` against the connected copy. Its
+temporary evaluator/permission stubs isolate writer/projection mechanics and
+are rolled back with every fixture. The existing event-center DB suites also
+pass. Actual panel fixtures cover desktop, 390px mobile, dark mode, raw UA,
+session provenance, dialog closure and absence of horizontal document overflow.

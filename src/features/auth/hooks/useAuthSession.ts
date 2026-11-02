@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../lib/supabase';
 import type { AuthSessionState, AuthAccessState, AccessLevel, ReasonCode, NextStep } from '../types/authSession';
+import { createSessionContextRecorder } from '../services/sessionEventContext';
 
 const JWT_FUTURE_RETRY_WINDOW_MS = 180_000;
 const JWT_FUTURE_MAX_DELAY_MS = 8_000;
@@ -35,6 +36,8 @@ export function useAuthSession(): AuthSessionState {
   const [userPermissions, setUserPermissions] = useState<Record<string, boolean> | null | undefined>(undefined);
 
   const generationRef = useRef(0);
+  const contextRecorder = useRef(createSessionContextRecorder(() =>
+    supabase.rpc('record_my_session_context_v1' as never) as unknown as PromiseLike<{ error: unknown }>));
 
   const resetSessionState = useCallback((next: NextStep = 'login') => {
     setHasSession(false);
@@ -118,6 +121,7 @@ export function useAuthSession(): AuthSessionState {
       }
 
       const fullAccess = state.access_level === 'FULL';
+      void contextRecorder.current(state);
       const adminStatus = fullAccess && state.is_admin === true;
 
       setHasSession(state.has_session);

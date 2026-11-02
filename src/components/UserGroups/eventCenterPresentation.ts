@@ -2,6 +2,7 @@ import type { CenterEvent } from './eventCenterModel';
 
 const eventTitles: Record<string, string> = {
   login: 'ورود به سامانه', logout: 'خروج از سامانه',
+  'session.first_full_access': 'تأیید دسترسی کامل نشست (اولین مشاهده)',
   'auth.login': 'ورود کاربر (احراز هویت)', 'auth.logout': 'خروج کاربر (احراز هویت)',
   'auth.user_signedup': 'ثبت‌نام حساب کاربری', 'auth.user_deleted': 'حذف حساب کاربری',
   'auth.user_modified': 'ویرایش حساب کاربری', 'auth.user_updated_password': 'تغییر رمز عبور',
@@ -61,6 +62,7 @@ const fields: Record<string, string> = {
   attempt_count: 'تعداد تلاش‌های ثبت‌شده', last_seen_at: 'زمان آخرین تلاش', resource: 'مسیر درخواست',
   table: 'موجودیت ثبت‌شده', actor_context: 'نوع عامل', auth_action: 'عملیات احراز هویت',
   auth_provider: 'ارائه‌دهندهٔ احراز هویت', verification_scope: 'دامنهٔ تأیید',
+  ip_source: 'منبع IP', session_context: 'اطلاعات اولیهٔ نشست مرتبط', session_device: 'دستگاه ثبت‌شدهٔ نشست',
   is_admin: 'دسترسی مدیر سامانه', is_security_admin: 'دسترسی مدیر امنیت', is_active: 'فعال‌بودن حساب',
   account_status: 'وضعیت حساب', can_broadcast: 'مجوز ارسال همگانی', is_hidden: 'پنهان‌بودن کاربر',
   mfa_enrollment_required: 'الزام فعال‌سازی دومرحله‌ای', mfa_method: 'روش دومرحله‌ای', locked_until: 'قفل تا زمان',
@@ -68,14 +70,15 @@ const fields: Record<string, string> = {
   permissions: 'مجوزها', group_id: 'شناسهٔ گروه', user_id: 'شناسهٔ کاربر', added_by: 'افزوده‌شده توسط',
 };
 const values: Record<string, Record<string, string>> = {
-  source: { notify_user: 'مطلع جلسه', database_trigger: 'ثبت خودکار دیتابیس', edge_authorization: 'کنترل دسترسی سرور', auth_service: 'سرویس احراز هویت' },
+  source: { notify_user: 'مطلع جلسه', database_trigger: 'ثبت خودکار دیتابیس', edge_authorization: 'کنترل دسترسی سرور', auth_service: 'سرویس احراز هویت', session_access: 'تأیید نشست در سرور' },
+  ip_source: { proxy_header: 'هدر IP پراکسی', forwarded_header: 'هدر فورواردشده (نیازمند بررسی پراکسی)', auth_service: 'سرویس احراز هویت' },
   recovery_route: { unified: 'بازیابی یکپارچهٔ حساب' },
   mfa_method: { totp: 'رمز یک‌بارمصرف نرم‌افزاری', sms: 'پیامک', none: 'بدون روش دومرحله‌ای' },
   mode: { dry_run: 'بررسی آزمایشی (بدون تغییر داده)', execute: 'اجرای تغییرات' },
   entity_name: { meeting_participant: 'شرکت‌کنندهٔ جلسه' },
   actor_context: { service_or_database: 'سرویس یا عملیات دیتابیس', user_session: 'نشست کاربر' },
   table: { profiles: 'پروفایل کاربران', user_groups: 'گروه‌های کاربری', user_group_members: 'عضویت کاربران در گروه‌ها' },
-  verification_scope: { identity_service: 'احراز هویت در سرویس ورود؛ بدون تأیید دسترسی کامل Spark' },
+  verification_scope: { identity_service: 'احراز هویت در سرویس ورود؛ بدون تأیید دسترسی کامل Spark', full_session: 'دسترسی کامل نشست در سرور تأیید شده است' },
   auth_provider: { email: 'ایمیل', phone: 'تلفن', google: 'گوگل', apple: 'اپل', azure: 'مایکروسافت', saml: 'ورود یکپارچه' },
   account_status: { ACTIVE: 'فعال', RETIRED: 'بازنشسته', DISABLED: 'غیرفعال', PENDING: 'در انتظار تأیید' },
   resource: { 'admin-users': 'مدیریت کاربران', 'admin-delete-user': 'حذف کاربر', 'admin-retire-user': 'بازنشستگی کاربر', 'backup-data': 'تهیهٔ پشتیبان', 'restore-backup': 'بازیابی پشتیبان' },

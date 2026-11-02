@@ -137,6 +137,7 @@ spark_same_origin_ensure_nginx() {
   [[ -f "$file" ]] || return 0
 
   if grep -Fq '# SPARK_SAME_ORIGIN_API_ROUTES' "$file"; then
+    bash "$(dirname -- "${BASH_SOURCE[0]}")/../apply-event-client-headers.sh" --apply "$file" || return 1
     return 0
   fi
 
@@ -144,6 +145,10 @@ spark_same_origin_ensure_nginx() {
   cp -a "$file" "$backup" || return 1
 
   if ! spark_same_origin_patch_nginx_file "$file"; then
+    cp -a "$backup" "$file"
+    return 1
+  fi
+  if ! python3 "$(dirname -- "${BASH_SOURCE[0]}")/event-client-headers.py" --apply "$file"; then
     cp -a "$backup" "$file"
     return 1
   fi

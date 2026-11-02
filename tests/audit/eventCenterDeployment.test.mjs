@@ -30,10 +30,11 @@ test('default check is read-only and discovers exactly one Supabase DB', () => {
   assert.match(result.sql, /rpc_present/);
   assert.doesNotMatch(result.sql, /notify|insert into|create or replace/i);
 });
-test('apply upgrades an existing RPC with only the new migration in one locked transaction with history/cache reload', () => {
+test('apply upgrades an existing RPC with the two new migrations in one locked transaction with history/cache reload', () => {
   const result = run(['--apply', 'explicit-db']);
   assert.equal(result.status, 0);
   assert.ok(result.sql.includes(readFileSync('supabase/migrations/20261102042055_event_center_authentication_logs.sql', 'utf8')));
+  assert.ok(result.sql.includes(readFileSync('supabase/migrations/20261102043627_event_center_client_context.sql', 'utf8')));
   assert.match(result.sql, /^begin;/);
   assert.match(result.sql, /pg_advisory_xact_lock/);
   assert.match(result.sql, /\\if :migration_applied/);
@@ -63,4 +64,5 @@ test('upgrade does not depend on the removed base-migration file or invent its h
   assert.equal(result.status, 0);
   assert.doesNotMatch(result.sql, /20261101182857|EVENT_CENTER_HISTORY_DRIFT|create trigger/i);
   assert.match(result.sql, /20261102042055/);
+  assert.match(result.sql, /20261102043627/);
 });
