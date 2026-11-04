@@ -22,6 +22,20 @@ export interface CenterEvent {
   before_state: Record<string, unknown> | null;
   after_state: Record<string, unknown> | null;
 }
+export interface EventCenterSummary {
+  total_events: number;
+  login_events: number;
+  attention_events: number;
+  denied_events: number;
+  unique_actors: number;
+}
+export function parseEventCenterSummary(value: unknown): EventCenterSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const keys = ['total_events', 'login_events', 'attention_events', 'denied_events', 'unique_actors'] as const;
+  if (!keys.every(key => typeof input[key] === 'number' && Number.isSafeInteger(input[key]) && (input[key] as number) >= 0)) return null;
+  return Object.fromEntries(keys.map(key => [key, input[key]])) as unknown as EventCenterSummary;
+}
 export interface EventCursor { time: string; key: string }
 export interface EventPage { events: CenterEvent[]; has_more: boolean; next_cursor: EventCursor | null }
 export const severityLabels: Record<string, string> = { info: 'اطلاع', success: 'موفق', warning: 'هشدار', error: 'خطا', critical: 'بحرانی' };
