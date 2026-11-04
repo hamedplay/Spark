@@ -1,7 +1,8 @@
 import { useMobileNavigation } from '../app/layout/hooks/useMobileNavigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 
+import { PRIMARY_NAVIGATION_ITEMS, MINUTES_NAVIGATION_ITEMS } from '../app/layout/navigationMenu';
 import { logAudit } from '../lib/audit';
 import { useTheme, ACCENT_COLORS } from '../context/ThemeContext';
 import type { LayoutUserPermissions, PageId } from '../app/layout/types';
@@ -39,6 +40,15 @@ export function Layout({
   minutesFollowupAllowed = false,
   minutesFollowupAccessLoading = false,
 }: LayoutProps) {
+  const lastVisit = useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentUserId) { lastVisit.current = null; return; }
+    const key = `${currentUserId}:${activePage}`;
+    if (lastVisit.current === key) return;
+    lastVisit.current = key;
+    const title = [...PRIMARY_NAVIGATION_ITEMS,...MINUTES_NAVIGATION_ITEMS].find(item => item.id === activePage)?.title || (activePage === 'portal-config' ? 'پیکربندی' : activePage);
+    void logAudit({ module: 'navigation', action: 'page_view', entity_name: title, details: `بازدید از صفحهٔ ${title}` });
+  }, [currentUserId,activePage]);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
     return saved !== null ? saved === 'true' : true;

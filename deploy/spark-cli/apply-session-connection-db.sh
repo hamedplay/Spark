@@ -8,8 +8,10 @@ container="${2:-supabase-db}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 if [[ "$mode" == --check ]]; then
   docker exec -i "$container" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
-select version,name from supabase_migrations.schema_migrations where version in ('20261104090809','20261104093610') order by version;
+select version,name from supabase_migrations.schema_migrations where version in ('20261104102315','20261104102551') order by version;
 select to_regprocedure('public.record_my_session_connection_v1(jsonb)') is not null as browser_context_rpc,
+ to_regprocedure('public.get_online_sessions_v1(text)') is not null as online_sessions_rpc,
+ to_regprocedure('public.record_my_login_connection_v1()') is not null as browser_login_rpc,
  to_regprocedure('public.record_session_connection_service_v1(uuid,uuid,jsonb)') is not null as login_context_rpc,
  exists(select from pg_trigger where tgrelid='auth.sessions'::regclass and tgname='spark_remember_session_end') as session_end_trigger,
  exists(select from pg_constraint where conrelid='public.security_audit_events'::regclass and conname='security_audit_events_ip_address_null') as security_ip_privacy_preserved;
@@ -28,12 +30,18 @@ select pg_advisory_xact_lock(hashtextextended('spark.session_connection.upgrade'
 do $$ begin
  if to_regprocedure('private.get_user_session_security_state_impl(uuid)') is null
  or to_regprocedure('public.record_my_session_context_v1()') is null
- or to_regprocedure('private.event_client_ip_v1(text)') is null then
+ or to_regprocedure('private.event_client_ip_v1(text)') is null
+ or to_regprocedure('private.capture_session_connection_v1(uuid,uuid,text,text,jsonb,text)') is null
+ or to_regprocedure('private.request_client_ip_v2(jsonb)') is null
+ or to_regclass('private.session_connection_context') is null then
  raise exception 'SESSION_CONNECTION_PREREQUISITE_MISSING'; end if;
 end $$;
 SQL
-  for name in session_connection_evidence preserve_security_event_ip_privacy; do
-    case "$name" in session_connection_evidence) version=20261104090809 ;; *) version=20261104093610 ;; esac
+  for name in online_session_presence_and_ingress_recovery allow_verified_ingress_session_ip_source; do
+    case "$name" in
+      online_session_presence_and_ingress_recovery) version=20261104102315 ;;
+      allow_verified_ingress_session_ip_source) version=20261104102551 ;;
+    esac
     migration="$script_dir/../../supabase/migrations/${version}_${name}.sql"
     [[ -r "$migration" ]] || { echo 'Session connection migration missing; update the checkout.' >&2; exit 1; }
     printf '%s\n' "select exists(select from supabase_migrations.schema_migrations where version='$version') as applied \gset" '\if :applied' '\else'

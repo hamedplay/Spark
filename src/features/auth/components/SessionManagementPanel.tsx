@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
-import { LogOut, MonitorSmartphone, ShieldX, Trash2, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { LogOut, MonitorSmartphone, ShieldX, Trash2, RefreshCw, X, History } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
 import { describeUserAgent } from '../../../components/UserGroups/eventClientContext';
 import { type SessionInfo, sessionDate, elapsed, sessionPresence, sessionEndReason } from './sessionPresentation';
 
 export function SessionManagementPanel() {
+  const historyDialog = useRef<HTMLDialogElement>(null);
   const [clock, setClock] = useState(Date.now());
   const [serverOffset, setServerOffset] = useState(0);
   const [graceSeconds, setGraceSeconds] = useState(360);
@@ -112,8 +113,57 @@ export function SessionManagementPanel() {
     }
   };
 
-  const visibleSessions = showHistory ? sessions : sessions.filter(session => session.status === 'active');
+  const visibleSessions = sessions.filter(session => session.status === 'active');
+  const historySessions = sessions.filter(session => session.status !== 'active');
+  useEffect(() => {
+    const dialog = historyDialog.current;
+    if (showHistory && dialog && !dialog.open) dialog.showModal();
+    else if (!showHistory && dialog?.open) dialog.close();
+  }, [showHistory]);
   const hasHistoricalSessions = sessions.some((session) => session.session_id !== currentSessionId && session.status !== 'active');
+
+  const renderSession = (s: SessionInfo) => {
+            const now = clock + serverOffset;
+            const presence = sessionPresence(s,now,graceSeconds);
+            const device = describeUserAgent(s.device_summary,s.client_hints);
+            const statusLabel = presence === 'online' ? 'آنلاین (ارتباط اخیر)' : presence === 'offline' ? 'آفلاین · نشست معتبر' : presence === 'unknown' ? 'وضعیت اتصال نامشخص' : s.status === 'revoked' ? 'خارج‌شده / لغوشده' : 'پایان‌یافته';
+            const fields: [string,string][] = [
+              ['سیستم‌عامل',device.os],['مرورگر و نسخه',device.browser],['نوع دستگاه',device.device],
+              [s.observation_kind === 'gateway_login' ? 'IP هنگام ورود' : s.observation_kind === 'browser_login' ? 'IP تأییدشده پس از ورود' : 'IP اولین مشاهدهٔ نشست',s.initial_ip_source === 'trusted_ingress' ? s.initial_ip || 'ثبت نشده' : 'ثبت نشده'],
+              ['آخرین IP تأییدشده',s.last_ip_source === 'trusted_ingress' ? s.last_ip || 'ثبت نشده' : 'ثبت نشده'],
+              ['زمان ورود / ایجاد نشست',sessionDate(s.created_at)],
+              ['آخرین ارتباط نشست',sessionDate(s.last_observed_at)],
+              ['مدت از آخرین ارتباط',elapsed(s.last_observed_at,now)],
+              ['آخرین فعالیت ثبت‌شده',sessionDate(s.last_activity_at)],
+              ['مهلت عدم فعالیت',sessionDate(s.idle_expiry_at)],['پایان اعتبار نشست',sessionDate(s.absolute_expiry_at)],
+            ];
+            if (presence === 'offline' && s.last_observed_at) fields.push(['مدت آفلاین (تقریبی)',elapsed(new Date(Date.parse(s.last_observed_at)+graceSeconds*1000).toISOString(),now)]);
+            if (presence === 'ended') fields.push(['زمان پایان / خروج',sessionDate(s.ended_at)],['مدت گذشته از پایان / خروج',elapsed(s.ended_at,now)],['علت پایان',sessionEndReason(s)]);
+            const architecture = [s.client_hints?.architecture,s.client_hints?.bitness].filter(Boolean).join(' · ');
+            if (architecture) fields.push(['معماری گزارش‌شده',architecture]);
+            return <article key={s.session_id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-start gap-2">
+                  <MonitorSmartphone className="mt-1 h-5 w-5 shrink-0 text-gray-500" />
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-medium text-gray-800 dark:text-white">{device.os} · {device.browser}</p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <span className={`rounded-full px-2 py-1 text-[10px] ${presence === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{statusLabel}</span>
+                      {s.session_id === currentSessionId && <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">همین دستگاه</span>}
+                    </div>
+                  </div>
+                </div>
+                {s.status === 'active' && <button type="button" onClick={() => revokeOne(s.session_id)} disabled={revoking !== null} className="h-10 shrink-0 rounded-xl border border-red-200 px-2.5 text-xs text-red-600 dark:border-red-800 dark:text-red-400">{revoking === s.session_id ? '...' : s.session_id === currentSessionId ? 'خروج' : 'لغو'}</button>}
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-700/30">
+                {fields.map(([label,value]) => <div key={label} className="min-w-0"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd dir="auto" className="mt-1 break-words leading-6 text-gray-800 dark:text-gray-200">{value}</dd></div>)}
+              </dl>
+              {!s.last_ip && <p className="mt-2 text-xs leading-6 text-amber-700 dark:text-amber-400">IP قابل تأیید ثبت نشده است؛ تنظیم هدرهای ورودی سرور یا قدیمی بودن نشست باید بررسی شود.</p>}
+              {device.notes.map(note => <p key={note} className="mt-2 text-xs leading-6 text-gray-500 dark:text-gray-400">{note}</p>)}
+              <details className="mt-3 text-xs text-gray-500 dark:text-gray-400"><summary className="cursor-pointer">شناسهٔ نشست و مشخصات خام مرورگر</summary><p dir="ltr" className="mt-2 break-all leading-6">{s.session_id}<br />{s.device_summary || 'ثبت نشده'}</p></details>
+            </article>;
+
+  };
 
   if (loading) return <div className="py-4 text-center text-sm text-gray-500">در حال بارگذاری...</div>;
   if (error && sessions.length === 0) return <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">{error}</div>;
@@ -158,62 +208,22 @@ export function SessionManagementPanel() {
 
       <p className="text-xs leading-6 text-gray-500 dark:text-gray-400">آنلاین یعنی ارتباط اخیر این نشست با سامانه؛ باز بودن صفحه یا حضور فیزیکی شخص را تضمین نمی‌کند. ساعت‌ها به وقت تهران است.</p>
       {error && <p role="alert" className="text-xs text-red-600">به‌روزرسانی ناموفق بود؛ اطلاعات قبلی نمایش داده می‌شود.</p>}
-      <button type="button" onClick={() => void loadSessions(true)} className="inline-flex items-center gap-1 text-xs text-blue-600"><RefreshCw className="h-3 w-3" />به‌روزرسانی نشست‌ها</button>
-      {hasHistoricalSessions && (
-        <button type="button" onClick={() => setShowHistory(value => !value)}
-          className="text-xs text-blue-600 dark:text-blue-400">
-          {showHistory ? 'نمایش فقط نشست‌های فعال' : 'نمایش سوابق ۳۰ روز اخیر'}
-        </button>
-      )}
+      <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 pb-3 dark:border-gray-700">
+        <button type="button" onClick={() => void loadSessions(true)} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-xs text-blue-600"><RefreshCw className="h-4 w-4" />به‌روزرسانی نشست‌ها</button>
+        {hasHistoricalSessions && <button type="button" aria-haspopup="dialog" aria-expanded={showHistory} onClick={() => setShowHistory(true)} className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-gray-200 px-3 py-2 text-xs text-blue-600 dark:border-gray-700"><History className="h-4 w-4" />نمایش سوابق ۳۰ روز اخیر ({new Intl.NumberFormat('fa-IR').format(historySessions.length)})</button>}
+      </div>
 
       {visibleSessions.length === 0 ? (
         <p className="rounded-xl bg-gray-50 px-3 py-4 text-center text-sm text-gray-500 dark:bg-gray-700/30 dark:text-gray-400">{showHistory ? 'نشستی یافت نشد.' : 'نشست فعالی یافت نشد.'}</p>
       ) : (
         <div className="space-y-2">
-          {visibleSessions.map((s) => {
-            const now = clock + serverOffset;
-            const presence = sessionPresence(s,now,graceSeconds);
-            const device = describeUserAgent(s.device_summary,s.client_hints);
-            const statusLabel = presence === 'online' ? 'آنلاین (ارتباط اخیر)' : presence === 'offline' ? 'آفلاین · نشست معتبر' : presence === 'unknown' ? 'وضعیت اتصال نامشخص' : s.status === 'revoked' ? 'خارج‌شده / لغوشده' : 'پایان‌یافته';
-            const fields: [string,string][] = [
-              ['سیستم‌عامل',device.os],['مرورگر و نسخه',device.browser],['نوع دستگاه',device.device],
-              [s.observation_kind === 'gateway_login' ? 'IP هنگام ورود' : 'IP اولین مشاهدهٔ نشست',s.initial_ip_source === 'trusted_ingress' ? s.initial_ip || 'ثبت نشده' : 'ثبت نشده'],
-              ['آخرین IP اتصال',s.last_ip_source === 'trusted_ingress' ? s.last_ip || 'ثبت نشده' : 'ثبت نشده'],
-              ['زمان ورود / ایجاد نشست',sessionDate(s.created_at)],
-              ['آخرین ارتباط نشست',sessionDate(s.last_observed_at)],
-              ['مدت از آخرین ارتباط',elapsed(s.last_observed_at,now)],
-              ['آخرین فعالیت ثبت‌شده',sessionDate(s.last_activity_at)],
-              ['مهلت عدم فعالیت',sessionDate(s.idle_expiry_at)],['پایان اعتبار نشست',sessionDate(s.absolute_expiry_at)],
-            ];
-            if (presence === 'offline' && s.last_observed_at) fields.push(['مدت آفلاین (تقریبی)',elapsed(new Date(Date.parse(s.last_observed_at)+graceSeconds*1000).toISOString(),now)]);
-            if (presence === 'ended') fields.push(['زمان پایان / خروج',sessionDate(s.ended_at)],['مدت گذشته از پایان / خروج',elapsed(s.ended_at,now)],['علت پایان',sessionEndReason(s)]);
-            const architecture = [s.client_hints?.architecture,s.client_hints?.bitness].filter(Boolean).join(' · ');
-            if (architecture) fields.push(['معماری گزارش‌شده',architecture]);
-            return <article key={s.session_id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 items-start gap-2">
-                  <MonitorSmartphone className="mt-1 h-5 w-5 shrink-0 text-gray-500" />
-                  <div className="min-w-0">
-                    <p className="break-words text-sm font-medium text-gray-800 dark:text-white">{device.os} · {device.browser}</p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      <span className={`rounded-full px-2 py-1 text-[10px] ${presence === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>{statusLabel}</span>
-                      {s.session_id === currentSessionId && <span className="rounded-full bg-blue-100 px-2 py-1 text-[10px] text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">همین دستگاه</span>}
-                    </div>
-                  </div>
-                </div>
-                {s.status === 'active' && <button type="button" onClick={() => revokeOne(s.session_id)} disabled={revoking !== null} className="h-10 shrink-0 rounded-xl border border-red-200 px-2.5 text-xs text-red-600 dark:border-red-800 dark:text-red-400">{revoking === s.session_id ? '...' : s.session_id === currentSessionId ? 'خروج' : 'لغو'}</button>}
-              </div>
-              <dl className="mt-3 grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-700/30">
-                {fields.map(([label,value]) => <div key={label} className="min-w-0"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd dir="auto" className="mt-1 break-words leading-6 text-gray-800 dark:text-gray-200">{value}</dd></div>)}
-              </dl>
-              {!s.last_ip && <p className="mt-2 text-xs leading-6 text-amber-700 dark:text-amber-400">IP قابل تأیید ثبت نشده است؛ تنظیم هدرهای ورودی سرور یا قدیمی بودن نشست باید بررسی شود.</p>}
-              {device.notes.map(note => <p key={note} className="mt-2 text-xs leading-6 text-gray-500 dark:text-gray-400">{note}</p>)}
-              <details className="mt-3 text-xs text-gray-500 dark:text-gray-400"><summary className="cursor-pointer">شناسهٔ نشست و مشخصات خام مرورگر</summary><p dir="ltr" className="mt-2 break-all leading-6">{s.session_id}<br />{s.device_summary || 'ثبت نشده'}</p></details>
-            </article>;
-
-          })}
+          {visibleSessions.map(renderSession)}
         </div>
       )}
+      <dialog ref={historyDialog} onCancel={() => setShowHistory(false)} onClose={() => setShowHistory(false)} aria-labelledby="session-history-title" className="m-auto w-[min(760px,94vw)] max-h-[85dvh] rounded-2xl bg-white p-0 text-gray-800 shadow-xl backdrop:bg-black/50 dark:bg-gray-900 dark:text-gray-100" dir="rtl">
+        <header className="flex items-center justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-700"><h4 id="session-history-title" className="font-bold">سوابق نشست‌های ۳۰ روز اخیر</h4><button type="button" autoFocus aria-label="بستن سوابق نشست‌ها" onClick={() => setShowHistory(false)} className="shrink-0 rounded-lg p-2"><X className="h-5 w-5" /></button></header>
+        <div tabIndex={0} aria-label="فهرست قابل پیمایش سوابق نشست‌ها" className="max-h-[65dvh] space-y-3 overflow-y-auto overscroll-contain p-4">{historySessions.map(renderSession)}</div>
+      </dialog>
     </div>
   );
 }

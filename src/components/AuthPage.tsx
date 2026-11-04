@@ -1,3 +1,4 @@
+import { recordBrowserLoginConnection } from '../features/auth/services/browserLoginConnection';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowLeft,
@@ -317,6 +318,7 @@ export function AuthPage({ onSuccess, initialAuthBootstrap = null }: AuthPagePro
         return;
       }
 
+      await recordBrowserLoginConnection();
       try {
         if (rememberIdentifier) {
           localStorage.setItem('spark_login_identifier', identifier.trim());
@@ -424,6 +426,7 @@ export function AuthPage({ onSuccess, initialAuthBootstrap = null }: AuthPagePro
         refresh_token: result.refresh_token,
       });
       if (error || !data.user) { toast.error('ورود پیامکی در دسترس نیست'); return; }
+      await recordBrowserLoginConnection();
       onSuccess();
     } catch {
       toast.error('ورود پیامکی در دسترس نیست');
@@ -644,10 +647,11 @@ export function AuthPage({ onSuccess, initialAuthBootstrap = null }: AuthPagePro
         return;
       }
       if (result.session?.access_token && result.session?.refresh_token) {
-        await supabase.auth.setSession({
+        const { error: sessionError } = await supabase.auth.setSession({
           access_token: result.session.access_token,
           refresh_token: result.session.refresh_token,
         });
+        if (!sessionError) await recordBrowserLoginConnection();
       }
       setRegistrationForm(EMPTY_REGISTRATION);
       setRegistrationConflicts(EMPTY_REGISTRATION_CONFLICTS);

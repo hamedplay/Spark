@@ -10,7 +10,7 @@ import { eventClientContext } from './eventClientContext';
 import { EventConnectionDetails } from './EventConnectionDetails';
 
 const field = 'w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm';
-const button = 'inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-gray-600 px-3 py-2 text-sm disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700';
+const button = 'shrink-0 whitespace-nowrap inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 dark:border-gray-600 px-3 py-2 text-sm disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700';
 const stamp = (value: string) => new Date(value).toLocaleString('fa-IR', { timeZone: 'Asia/Tehran' });
 const dateValue = (daysAgo: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() - daysAgo * 86400000));
 
@@ -190,7 +190,7 @@ export function GroupEventsPanel() {
     </details>
     {error && <div role="alert" className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-700">{error}<button className="mr-3 underline" onClick={() => void load()}>تلاش دوباره</button></div>}
     <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-      <div className="overflow-x-auto"><table className="block w-full text-right text-sm md:table md:min-w-[1000px]"><thead className="hidden md:table-header-group bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400"><tr>{['زمان / شدت', 'رخداد / منبع', 'عامل', 'اتصال / دستگاه', 'نتیجه', 'بررسی'].map(title => <th key={title} scope="col" className="px-4 py-3">{title}</th>)}</tr></thead>
+      <div className="overflow-x-auto"><table className="block w-full text-right text-sm md:table md:min-w-[1160px]"><thead className="hidden md:table-header-group bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400"><tr>{['زمان / شدت', 'رخداد / منبع', 'عامل', 'اتصال / دستگاه', 'نتیجه', 'بررسی'].map(title => <th key={title} scope="col" className="px-4 py-3 whitespace-nowrap">{title}</th>)}</tr></thead>
         <tbody className="block md:table-row-group divide-y divide-gray-100 dark:divide-gray-700">{events.map(event => { const context = eventClientContext(event); const device = context.current.userAgent ? context.current : context.session; return <tr key={event.event_key} className="grid grid-cols-2 md:table-row hover:bg-gray-50 dark:hover:bg-gray-700/40">
           <td className="px-4 py-4 text-xs"><div>{stamp(event.created_at)}</div><span className={`mt-1 inline-block rounded-full px-2 py-1 ${['error', 'critical'].includes(event.severity) ? 'bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-200' : isAttentionEvent(event) ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'}`}>{severityLabels[event.severity] ?? event.severity}</span></td>
           <td className="max-w-xs px-4 py-4"><div dir="auto" className="break-words font-medium">{eventTitle(event.event_type)}</div><div dir="auto" className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{eventSummary(event)}</div><div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{eventSourceTitle(event)} · {categoryTitle(event.category)}</div></td>

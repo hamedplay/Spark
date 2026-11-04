@@ -1,7 +1,7 @@
 import type { CenterEvent } from './eventCenterModel';
 
 const eventTitles: Record<string, string> = {
-  login: 'ورود به سامانه', logout: 'خروج از سامانه',
+  page_view: 'بازدید از صفحه', login: 'ورود به سامانه', logout: 'خروج از سامانه',
   'session.login_connection': 'اتصال هنگام ورود (پیش از تکمیل دسترسی)',
   'session.first_full_access': 'تأیید دسترسی کامل نشست (اولین مشاهده)',
   'auth.login': 'ورود کاربر (احراز هویت)', 'auth.logout': 'خروج کاربر (احراز هویت)',
@@ -47,6 +47,7 @@ const eventTitles: Record<string, string> = {
   registration_otp_requested: 'درخواست کد تأیید ثبت‌نام',
 };
 const categories: Record<string, string> = {
+  navigation: 'پیمایش سامانه',
   auth: 'ورود، خروج و احراز هویت', access: 'دسترسی و مجوزها', mfa: 'احراز هویت دومرحله‌ای',
   recovery: 'بازیابی حساب', account_lock: 'قفل حساب', session: 'نشست‌ها', settings_change: 'تغییر تنظیمات امنیتی',
   meetings: 'جلسات', calendar: 'تقویم', tasks: 'اقدامات', system_config: 'پیکربندی سامانه',
@@ -64,6 +65,7 @@ const fields: Record<string, string> = {
   table: 'موجودیت ثبت‌شده', actor_context: 'نوع عامل', auth_action: 'عملیات احراز هویت',
   auth_provider: 'ارائه‌دهندهٔ احراز هویت', verification_scope: 'دامنهٔ تأیید',
   reported_ip_address: 'آدرس قدیمی یا سرویس (تأییدنشده)', ip_status: 'اعتبار انتساب IP', client_hints: 'مشخصات تکمیلی نشست (آخرین گزارش، نه زمان رخداد)',
+  ip_observed_at: 'زمان مشاهدهٔ IP', ip_scope: 'مرحلهٔ مشاهدهٔ IP',
   ip_source: 'منبع IP', session_context: 'اطلاعات اولیهٔ نشست مرتبط', session_device: 'دستگاه ثبت‌شدهٔ نشست',
   is_admin: 'دسترسی مدیر سامانه', is_security_admin: 'دسترسی مدیر امنیت', is_active: 'فعال‌بودن حساب',
   account_status: 'وضعیت حساب', can_broadcast: 'مجوز ارسال همگانی', is_hidden: 'پنهان‌بودن کاربر',

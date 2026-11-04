@@ -1,10 +1,11 @@
 import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
-import { Settings, Shield, Globe, Video, Calendar, Server, ChevronDown, ChevronLeft, Plus, Trash2, X, RefreshCw, Wifi, Mail, Image, Palette, Monitor, Menu } from 'lucide-react';
+import { Settings, Shield, Globe, Video, Calendar, Server, ChevronDown, ChevronLeft, Plus, Trash2, X, RefreshCw, Mail, Image, Palette, Monitor, Menu } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { invalidateAuthenticatedRTCConfigCache } from '../lib/authenticatedRtcConfig';
 import { logAudit } from '../lib/audit';
 import toast from 'react-hot-toast';
+const OnlineUsersPanel = lazy(() => import('./PortalConfig/OnlineUsersPanel').then(m => ({ default: m.OnlineUsersPanel })));
 const UserManagementPanel = lazy(() => import('./UserManagementPanel').then(m => ({ default: m.UserManagementPanel })));
 const UserGroupsPanel = lazy(() => import('./UserGroupsPanel').then(m => ({ default: m.UserGroupsPanel })));
 const GroupEventsPanel = lazy(() => import('./UserGroupsPanel').then(m => ({ default: m.GroupEventsPanel })));
@@ -26,17 +27,16 @@ const IdentityRepairCard = lazy(() => import('./PortalConfig/IdentityRepairCard'
 import { NAV_ITEMS, VISIBLE_SECURITY_CONFIG_KEYS } from './PortalConfig/constants';
 import { ConfigField } from './PortalConfig/ConfigField';
 import { SectionCard } from './PortalConfig/SectionCard';
-import type { ConfigEntry, Profile, Props } from './PortalConfig/types';
+import type { ConfigEntry, Props } from './PortalConfig/types';
 import { usePermissions } from '../context/PermissionsContext';
 import { canAccessConfigSection, getFirstVisibleConfigSection, getVisibleConfigNavigationItems } from '../features/permissions';
 
 export function PortalConfigPage({ currentUserId }: Props) {
-  useLiveData([...LIVE_DATA.config, ...LIVE_DATA.people], async () => { if (!uploadingKey) await loadConfigs(); if (activeSection === 'users_online') await loadOnlineUsers(); });
+  useLiveData([...LIVE_DATA.config, ...LIVE_DATA.people], async () => { if (!uploadingKey) await loadConfigs(); });
   const { isAdmin, userPermissions } = usePermissions();
   const [activeSection, setActiveSection] = useState('general');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [configs, setConfigs] = useState<ConfigEntry[]>([]);
-  const [onlineUsers, setOnlineUsers] = useState<Profile[]>([]);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const visibleNavItems = getVisibleConfigNavigationItems(NAV_ITEMS, isAdmin, userPermissions);
   const firstVisibleSection = getFirstVisibleConfigSection(visibleNavItems);
@@ -80,26 +80,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
     setConfigs(rows);
   }, []);
 
-  // Load truly online users (last seen within 3 minutes)
-  const loadOnlineUsers = useCallback(async () => {
-    const threshold = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-    const { data: presenceRows } = await supabase
-      .from('user_presence')
-      .select('user_id, last_seen, is_online')
-      .gte('last_seen', threshold);
-    if (!presenceRows || presenceRows.length === 0) { setOnlineUsers([]); return; }
-    const onlineIds = presenceRows.map(r => r.user_id);
-    const { data: pData } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('user_id', onlineIds);
-    setOnlineUsers((pData || []) as Profile[]);
-  }, []);
-
-  useLiveData(LIVE_DATA.presence, loadOnlineUsers, activeSection === 'users_online');
-
   useEffect(() => { loadConfigs(); }, [loadConfigs]);
-  useEffect(() => { if (activeSection === 'users_online') loadOnlineUsers(); }, [activeSection, loadOnlineUsers]);
 
   const saveConfig = async (id: string, value: string) => {
     const cfg = configs.find(c => c.id === id);
@@ -318,44 +299,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
         return <UserManagementPanel currentUserId={currentUserId} />;
 
       case 'users_online':
-        return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <Wifi className="w-5 h-5 text-green-500" />کاربران آنلاین
-                <span className="text-sm font-normal text-gray-400">({onlineUsers.length} نفر)</span>
-              </h3>
-              <button onClick={loadOnlineUsers} className="p-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 transition-colors"><RefreshCw className="w-4 h-4" /></button>
-            </div>
-            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-xl px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300">
-              کاربرانی نمایش داده می‌شوند که در ۳ دقیقه اخیر فعال بوده‌اند.
-            </div>
-            {onlineUsers.length === 0 ? (
-              <div className="text-center py-16 text-gray-400">
-                <Wifi className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p className="text-sm">در حال حاضر کاربری آنلاین نیست</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {onlineUsers.map(p => (
-                  <div key={p.user_id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-4 flex items-center gap-3">
-                    <div className="relative flex-shrink-0">
-                      <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-bold">
-                        {(p.full_name || p.email || '?')[0].toUpperCase()}
-                      </div>
-                      <span className="absolute bottom-0 left-0 w-3 h-3 rounded-full bg-green-400 border-2 border-white dark:border-gray-800" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-800 dark:text-white text-sm truncate">{p.full_name || '—'}</p>
-                      <p className="text-xs text-gray-400 truncate">{p.email}</p>
-                    </div>
-                    {p.is_admin && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full flex-shrink-0">ادمین</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
+        return <OnlineUsersPanel currentUserId={currentUserId} />;
 
       case 'user_groups':
         return <UserGroupsPanel currentUserId={currentUserId} />;
@@ -559,7 +503,7 @@ export function PortalConfigPage({ currentUserId }: Props) {
               <span className="text-gray-700 dark:text-gray-200 font-medium truncate">{breadcrumb}</span>
             </div>
           </div>
-          {activeSection !== 'group_events' && <button onClick={() => { loadConfigs(); if (activeSection === 'users_online') loadOnlineUsers(); }}
+          {activeSection !== 'group_events' && <button onClick={() => { loadConfigs(); }}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors flex-shrink-0">
             <RefreshCw className="w-4 h-4" />
           </button>}

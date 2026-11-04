@@ -24,8 +24,8 @@ export async function logAudit(payload: AuditPayload): Promise<void> {
       p_details: payload.details ?? null,
       p_severity: payload.severity ?? 'info',
       p_user_agent: navigator.userAgent,
-      p_url: window.location.href,
-      p_referrer: document.referrer || null,
+      p_url: window.location.origin + window.location.pathname,
+      p_referrer: document.referrer ? new URL(document.referrer).origin + new URL(document.referrer).pathname : null,
     } as never);
 
     // Audit logging is best-effort and must never interfere with the action

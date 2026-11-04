@@ -59,3 +59,28 @@ Validate with a new login through the real ingress and compare its known network
 - Real component/browser fixtures exercise 390px/mobile and desktop, versions, IP fields, history, elapsed time, current-session badge and correct revoke target. Fixtures are not live production evidence.
 
 References: [Nginx real IP](https://nginx.org/en/docs/http/ngx_http_realip_module.html), [Windows version hints](https://learn.microsoft.com/en-us/microsoft-edge/web-platform/how-to-detect-win11), [Chrome Client Hints](https://developer.chrome.com/docs/privacy-security/user-agent-client-hints).
+
+## Follow-up: missing login/activity IP and online users
+
+A real rolled-back integration test found the exact FULL-context failure: the pre-existing `event_session_context_ip_source_check` allowed only `proxy_header` and `forwarded_header`, while the newer writer inserted `trusted_ingress`. PostgreSQL rejected the whole statement (23514). The evidence writer's best-effort behavior hid that failure from the interface. New migration `20261104102551_allow_verified_ingress_session_ip_source.sql` extends this allowlist without rewriting historical records. The regression suite now includes the original constraint, rather than an unconstrained approximation.
+
+New migration `20261104102315_online_session_presence_and_ingress_recovery.sql` also fixes two persistence defects: an internal request without canonical IP no longer erases the last verified IP, and a missing initial gateway IP can be completed by an immediate, JWT-bound browser login observation. This records the observation time/phase, accepts no caller IP/user/session parameters and only runs for an Auth session created within two minutes. It does not grant application/MFA access. All three gateway login forms capture through the same browser REST ingress that successfully records logout.
+
+The existing minute-level browser `user_presence` write now captures verified per-session connection evidence through a private trigger after FULL authorization. A missing/broken internal Functions route is therefore not required to learn the browser's current IP. IP observation time is separate from last connection time; the online panel displays an IP only when that exact session's verified observation is recent. Unknown IPs stay unknown. A false recorder result is no longer cached as success.
+
+Page transitions now produce distinct browser-reported `page_view` audit entries, using the page title and server-derived identity/IP; previously no navigation producer existed. URL query/fragment values are excluded from these audit requests. Native Auth logs that lack verified IP remain unmodified, and are never matched to another event by nearest time or a user's latest session.
+
+Configuration → Users → Online users now groups exact sessions per user, shows device/IP/last connection, supports server-side name/IP/device search, refresh pause/resume and copying IP. The read RPC requires the existing FULL-session online-users permission. Individual or all-user revocation preserves the existing security-admin and recent TOTP step-up requirements, refuses self-revocation through this panel, records actor/target/count/reason, and does not delete Auth identities or history. Effective access is revoked immediately; an already-open client leaves via its existing session validation/heartbeat cadence. This is not a claim of immediate remote tab closure.
+
+Profile history now opens in a native dialog with a bounded independently scrollable list, closes on Escape and keeps the main page height unchanged. Active sessions remain on the main profile. Refresh/history actions have distinct spacing. Event details actions are non-shrinking and non-wrapping, and the desktop event table has enough minimum width to keep “جزئیات” intact.
+
+Deploy the frontend and use the updated scoped DB helper:
+
+```sh
+bash deploy/spark-cli/apply-session-connection-db.sh --check supabase-db
+bash deploy/spark-cli/apply-session-connection-db.sh --apply supabase-db
+```
+
+It applies only the two new follow-ups atomically and records only actual executions. The previously installed session-connection objects are checked in the database; the old migration files removed concurrently from main are not restored or required by this helper. Existing migrations are unchanged. The new browser capture/presence and online-user paths use REST RPCs and do not require a new Edge Function deployment. Existing canonical Nginx ingress configuration is still required.
+
+Validation includes a real copy-database regression (failure reproduced, new constraint applied, successful rerun with all fixtures rolled back), isolated SQL with original privacy/source constraints, missing-IP recovery, changing-network IP, no internal overwrite, exact-session event projection, search, permission/TOTP denial, self-protection and audited revocation. Browser fixtures check grouped devices, IP search, correct revoke target after step-up, mobile overflow, bounded history scrolling with unchanged document height, Escape, and desktop event-button layout. No real user was kicked during validation.
