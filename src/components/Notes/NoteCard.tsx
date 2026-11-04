@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, Clock3, UsersRound, Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
+import { Bell, BellPlus, BellRing, CalendarDays, Clock3, UsersRound, Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
 import { quickNoteReminder } from './reminderTime';
 import type { Note } from './types';
 import { ReminderField, type ReminderUser } from './ReminderField';
@@ -74,9 +74,11 @@ export function NoteCard({
           <div className="mb-2 flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-end gap-1 border-b border-slate-100 pb-2 dark:border-slate-800">
               {canEdit && note.status === 'active' && <button type="button"
+                title={note.remind_at ? 'ویرایش یادآوری' : 'تعیین یادآوری'}
+                aria-label={note.remind_at ? 'ویرایش یادآوری' : 'تعیین یادآوری'}
                 onClick={() => onHandleEditNote({ ...note, remind_at: note.remind_at ?? quickNoteReminder(2) })}
-                className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 transition hover:bg-amber-100 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
-                <Bell className="h-3.5 w-3.5" />{note.remind_at ? 'ویرایش یادآوری' : 'تعیین یادآوری'}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 transition hover:bg-amber-100 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
+                {note.remind_at ? <BellRing className="h-3.5 w-3.5" aria-hidden="true" /> : <BellPlus className="h-3.5 w-3.5" aria-hidden="true" />}
               </button>}
               <div className="relative" ref={shareMenuOpen ? shareMenuRef : undefined}>
                 <button
