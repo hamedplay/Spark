@@ -321,3 +321,30 @@ through the actual production ingress can demonstrate the true source address
 received by PostgREST/Auth. Historical Auth audit entries and session-IP claims
 are not retroactively changed; a copy-database test is not a production
 verification.
+
+### 2026-11-04 SQL migration parser repair
+
+The original file `20261104053139_event_center_global_totals_admin_clear_trusted_ip.sql`
+was generated from `pg_get_functiondef` and omitted all **six** final
+semicolons after the function bodies. On a database where it had not been
+applied, it stopped with PostgreSQL `42601` at the second `CREATE FUNCTION`
+(line 42). The historical file is deliberately **unchanged**.
+
+Use the **new, self-contained and tested** migration
+`20261104060819_repair_event_center_global_migration_sql_terminators.sql`.
+It contains the same event-center definitions with six missing statement
+terminators added, so it works on a database where the previous SQL failed.
+The script `deploy/spark-cli/apply-event-center-global-db.sh` now reads and
+registers the **new version** and can be run as `--check` then `--apply`
+with the explicit `supabase-db` container. No event records are deleted
+by applying the migration; the purge procedure remains a separate,
+admin-confirmed action. The replacement was executed on the non-production
+copy and also tested under a rolled-back SQL transaction.
+
+Do not paste or rerun the defective old file. A generic sequential migration
+runner may still encounter the old, invalid file because it is intentionally
+preserved in version control; use the scoped deployment helper for this
+upgrade. Any later generic migration runner needs an explicit, audited
+migration-history reconciliation plan; **do not fabricate old execution
+history** merely to silence it. After deploying to production, verify
+the replacement RPCs and required grants separately.
