@@ -1,4 +1,5 @@
 import { Bell, CalendarDays, Clock3, UsersRound, Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
+import { quickNoteReminder } from './reminderTime';
 import type { Note } from './types';
 import { ReminderField, type ReminderUser } from './ReminderField';
 import { getFileIcon, formatFileSize } from './utils';
@@ -72,6 +73,11 @@ export function NoteCard({
         <>
           <div className="mb-2 flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-end gap-1 border-b border-slate-100 pb-2 dark:border-slate-800">
+              {canEdit && note.status === 'active' && <button type="button"
+                onClick={() => onHandleEditNote({ ...note, remind_at: note.remind_at ?? quickNoteReminder(2) })}
+                className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 transition hover:bg-amber-100 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
+                <Bell className="h-3.5 w-3.5" />{note.remind_at ? 'ویرایش یادآوری' : 'تعیین یادآوری'}
+              </button>}
               <div className="relative" ref={shareMenuOpen ? shareMenuRef : undefined}>
                 <button
                   onClick={() => onSetShareMenuNoteId(v => v === note.id ? null : note.id)}
@@ -126,7 +132,6 @@ export function NoteCard({
                 )}
                 <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" />{new Date(note.created_at).toLocaleDateString('fa-IR')}</span>
                 <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />{new Date(note.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span>
-                {canEdit && note.status === 'active' && <button type="button" onClick={() => onHandleEditNote(note)} className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-1 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" title="تنظیم یادآوری و گیرندگان" aria-label="تنظیم یادآوری و گیرندگان"><Bell className="h-3 w-3" />یادآوری</button>}
                 {!!note.reminder_user_ids?.length && <span className="inline-flex items-center gap-1"><UsersRound className="h-3 w-3" />شما و {note.reminder_user_ids.length.toLocaleString('fa-IR')} نفر دیگر</span>}
                 {note.status === 'archived' && (
                   <span className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">بایگانی</span>

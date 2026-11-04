@@ -26,11 +26,11 @@ export function ReminderField({ value, onChange, disabled = false, recipientIds 
   };
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-500/25 dark:bg-amber-500/5">
-      <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200">
-        <input type="checkbox" checked={Boolean(value)} disabled={disabled}
-          onChange={event => onChange(event.target.checked ? quickNoteReminder(2) : null)} />
-        <Bell className="h-3.5 w-3.5" /> یادآوری
-      </label>
+      <button type="button" disabled={disabled} aria-pressed={Boolean(value)}
+        onClick={() => onChange(value ? null : quickNoteReminder(2))}
+        className="inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+        <Bell className="h-3.5 w-3.5" />{value ? 'حذف یادآوری' : 'تعیین یادآوری'}
+      </button>
       {value && (
         <div className="mt-2 space-y-2">
           <div className="flex flex-wrap gap-2">
