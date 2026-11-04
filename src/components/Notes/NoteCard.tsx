@@ -1,4 +1,4 @@
-import { Bell, Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
+import { Bell, CalendarDays, Clock3, UsersRound, Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
 import type { Note } from './types';
 import { ReminderField, type ReminderUser } from './ReminderField';
 import { getFileIcon, formatFileSize } from './utils';
@@ -9,14 +9,12 @@ interface NoteCardProps {
   usersLoading?: boolean;
   usersError?: boolean;
   colors: { bg: string; border: string; header: string };
-  isExpanded: boolean;
   isEditing: boolean;
   editingNote: Note | null;
   shareMenuOpen: boolean;
   canEdit: boolean;
   canDelete: boolean;
   shareMenuRef: React.RefObject<HTMLDivElement>;
-  onSetExpandedNoteId: React.Dispatch<React.SetStateAction<string | null>>;
   onSetEditingNote: React.Dispatch<React.SetStateAction<Note | null>>;
   onSetEditingNoteId: React.Dispatch<React.SetStateAction<string | null>>;
   onHandleSaveEdit: () => void;
@@ -32,8 +30,8 @@ interface NoteCardProps {
 }
 
 export function NoteCard({
-  note, reminderUsers, usersLoading, usersError, colors, isExpanded, isEditing, editingNote, shareMenuOpen, canEdit, canDelete,
-  shareMenuRef, onSetExpandedNoteId, onSetEditingNote, onSetEditingNoteId, onHandleSaveEdit,
+  note, reminderUsers, usersLoading, usersError, colors, isEditing, editingNote, shareMenuOpen, canEdit, canDelete,
+  shareMenuRef, onSetEditingNote, onSetEditingNoteId, onHandleSaveEdit,
   onHandleEditNote, onHandleArchiveNote, onSetDeleteConfirmId, onSetAssignNote, onSetAssignSearch,
   onSetShareMenuNoteId, onHandleShareImage, onHandleShareText, onHandleFileClick,
 }: NoteCardProps) {
@@ -56,7 +54,7 @@ export function NoteCard({
             rows={4}
             className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-700 outline-none transition focus:border-violet-300 focus:ring-2 focus:ring-violet-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
-          <ReminderField value={editingNote?.remind_at ?? null} disabled={note.status === 'archived'}
+          <ReminderField noteId={note.id} ownerId={note.user_id} value={editingNote?.remind_at ?? null} disabled={note.status === 'archived'}
             recipientIds={editingNote?.reminder_user_ids ?? []}
             onRecipientsChange={ids => onSetEditingNote(prev => prev ? { ...prev, reminder_user_ids: ids } : null)}
             users={reminderUsers} usersLoading={usersLoading} usersError={usersError}
@@ -73,25 +71,7 @@ export function NoteCard({
       ) : (
         <>
           <div className="mb-2 flex flex-col gap-2">
-            <div className="order-2 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className={`h-2 w-2 flex-shrink-0 rounded-full ${colors.header}`} aria-hidden="true" />
-                <h3 className="truncate text-sm font-bold text-slate-800 dark:text-white">{note.title}</h3>
-              </div>
-              <div className="mt-1 flex items-center gap-1.5 text-[9px] text-slate-400 dark:text-slate-500">
-                {note.note_type === 'voice' && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 font-bold text-cyan-700 dark:border-cyan-500/25 dark:bg-cyan-500/10 dark:text-cyan-300">
-                    <Mic className="h-2.5 w-2.5" /> صوتی
-                  </span>
-                )}
-                <span>{new Date(note.created_at).toLocaleDateString('fa-IR')}</span>
-                {note.status === 'archived' && (
-                  <span className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">بایگانی</span>
-                )}
-              </div>
-            </div>
-
-            <div className="order-1 flex flex-wrap items-center justify-end gap-1 border-b border-slate-100 pb-2 dark:border-slate-800">
+            <div className="flex flex-wrap items-center justify-end gap-1 border-b border-slate-100 pb-2 dark:border-slate-800">
               <div className="relative" ref={shareMenuOpen ? shareMenuRef : undefined}>
                 <button
                   onClick={() => onSetShareMenuNoteId(v => v === note.id ? null : note.id)}
@@ -123,26 +103,41 @@ export function NoteCard({
                 </button>
               )}
               {canDelete && (
-                <button onClick={() => onHandleArchiveNote(note.id)} className="hidden h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-600 transition hover:bg-amber-100 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300 sm:flex" title="بایگانی" aria-label="بایگانی">
+                <button onClick={() => onHandleArchiveNote(note.id)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-600 transition hover:bg-amber-100 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300" title="بایگانی" aria-label="بایگانی">
                   <Archive className="h-3.5 w-3.5" />
                 </button>
               )}
               {canDelete && (
-                <button onClick={() => onSetDeleteConfirmId(note.id)} className="hidden h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 transition hover:bg-rose-100 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-300 sm:flex" title="حذف" aria-label="حذف">
+                <button onClick={() => onSetDeleteConfirmId(note.id)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 transition hover:bg-rose-100 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-300" title="حذف" aria-label="حذف">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
+            <div className="min-w-0">
+              <div className="flex items-start gap-1.5">
+                <span className={`h-2 w-2 flex-shrink-0 rounded-full ${colors.header}`} aria-hidden="true" />
+                <h3 className="min-w-0 whitespace-pre-wrap break-words text-sm font-bold leading-6 text-slate-800 dark:text-white">{note.title}</h3>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-400 dark:text-slate-500">
+                {note.note_type === 'voice' && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 font-bold text-cyan-700 dark:border-cyan-500/25 dark:bg-cyan-500/10 dark:text-cyan-300">
+                    <Mic className="h-2.5 w-2.5" /> صوتی
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" />{new Date(note.created_at).toLocaleDateString('fa-IR')}</span>
+                <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" />{new Date(note.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span>
+                {canEdit && note.status === 'active' && <button type="button" onClick={() => onHandleEditNote(note)} className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-1 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" title="تنظیم یادآوری و گیرندگان" aria-label="تنظیم یادآوری و گیرندگان"><Bell className="h-3 w-3" />یادآوری</button>}
+                {!!note.reminder_user_ids?.length && <span className="inline-flex items-center gap-1"><UsersRound className="h-3 w-3" />شما و {note.reminder_user_ids.length.toLocaleString('fa-IR')} نفر دیگر</span>}
+                {note.status === 'archived' && (
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">بایگانی</span>
+                )}
+              </div>
+            </div>
           </div>
 
-          <button
-            type="button"
-            className="min-h-0 flex-1 cursor-pointer text-right"
-            onClick={() => onSetExpandedNoteId(isExpanded ? null : note.id)}
-            title={isExpanded ? 'کلیک برای جمع‌کردن' : 'کلیک برای مشاهده کامل'}
-          >
-            <p className={`${isExpanded ? 'whitespace-pre-wrap' : 'mobile-line-clamp-3'} text-[11px] leading-5 text-slate-600 dark:text-slate-400`}>{note.content}</p>
-          </button>
+          <div className="min-w-0 flex-1">
+            <p className="whitespace-pre-wrap break-words text-[11px] leading-6 text-slate-600 dark:text-slate-400">{note.content}</p>
+          </div>
 
           {note.remind_at && (
             <p className="mt-2 flex items-center gap-1 text-[10px] leading-5 text-amber-700 dark:text-amber-300">
@@ -167,27 +162,7 @@ export function NoteCard({
             </button>
           )}
 
-          <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 dark:border-slate-800">
-            <span className="text-[9px] text-slate-400 dark:text-slate-500">{new Date(note.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span>
-            <div className="flex items-center gap-1.5">
-              {canEdit && note.status === 'active' && (
-                <button type="button" onClick={() => onHandleEditNote(note)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[9px] font-bold text-amber-700 dark:text-amber-300">
-                  <Bell className="h-3 w-3" /> یادآوری
-                </button>
-              )}
-              {note.content.length > 80 && (
-                <button onClick={() => onSetExpandedNoteId(isExpanded ? null : note.id)} className="rounded-lg px-2 py-1 text-[9px] font-bold text-violet-600 transition hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-500/10">
-                  {isExpanded ? 'جمع کردن' : 'مشاهده کامل'}
-                </button>
-              )}
-              {canDelete && (
-                <div className="flex items-center gap-1 sm:hidden">
-                  <button onClick={() => onHandleArchiveNote(note.id)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-600 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300" aria-label="بایگانی"><Archive className="h-3 w-3" /></button>
-                  <button onClick={() => onSetDeleteConfirmId(note.id)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-300" aria-label="حذف"><Trash2 className="h-3 w-3" /></button>
-                </div>
-              )}
-            </div>
-          </div>
+
         </>
       )}
     </article>

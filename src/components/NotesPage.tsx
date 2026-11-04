@@ -51,7 +51,6 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [assignNote, setAssignNote] = useState<Note | null>(null);
   const [assignSearch, setAssignSearch] = useState('');
-  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const { allUsers: orgUsers, loading: reminderUsersLoading, error: reminderUsersError } = useOrgUsers(userId, assignNote !== null || showCreateForm || editingNoteId !== null);
   const reminderUsers = orgUsers.filter(user => user.user_id !== userId);
   const [newNote, setNewNote] = useState({
@@ -591,7 +590,6 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {filteredNotes.map((note, index) => {
             const colors = NOTE_COLORS[index % NOTE_COLORS.length];
-            const isExpanded = expandedNoteId === note.id;
             return (
               <NoteCard
                 key={note.id}
@@ -600,14 +598,12 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
                 usersLoading={reminderUsersLoading}
                 usersError={reminderUsersError}
                 colors={colors}
-                isExpanded={isExpanded}
                 isEditing={editingNoteId === note.id}
                 editingNote={editingNote}
                 shareMenuOpen={shareMenuNoteId === note.id}
                 canEdit={canEdit}
                 canDelete={canDelete}
                 shareMenuRef={shareMenuRef}
-                onSetExpandedNoteId={setExpandedNoteId}
                 onSetEditingNote={setEditingNote}
                 onSetEditingNoteId={setEditingNoteId}
                 onHandleSaveEdit={handleSaveEdit}

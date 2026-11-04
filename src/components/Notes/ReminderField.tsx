@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { Bell, X } from 'lucide-react';
+import { Bell, UsersRound, X } from 'lucide-react';
 import { JalaliDatePicker } from '../Minutes/Form/JalaliDatePicker';
+import { ReminderDeliveryStatus } from './ReminderDeliveryStatus';
 import { quickNoteReminder, reminderDateTime } from './reminderTime';
 
 export interface ReminderUser { user_id: string; full_name: string | null; }
-export function ReminderField({ value, onChange, disabled = false, recipientIds = [], onRecipientsChange, users = [], usersLoading = false, usersError = false }: {
+export function ReminderField({ value, onChange, disabled = false, recipientIds = [], onRecipientsChange, users = [], usersLoading = false, usersError = false, noteId, ownerId }: {
   value: string | null;
+  noteId?: string;
+  ownerId?: string;
   onChange: (value: string | null) => void;
   disabled?: boolean;
   recipientIds?: string[];
@@ -50,7 +53,7 @@ export function ReminderField({ value, onChange, disabled = false, recipientIds 
             </label>
           </div>
           {onRecipientsChange && <div className="space-y-2 border-t border-amber-200/60 pt-2 dark:border-amber-500/20">
-            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200">گیرندگان دیگر یادآوری</label>
+            <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-slate-200"><UsersRound className="h-3.5 w-3.5" />گیرندگان دیگر یادآوری</label>
             <p className="text-[10px] leading-5 text-slate-500">خود شما همیشه دریافت‌کننده هستید. عنوان و متن یادداشت برای افراد انتخاب‌شده نیز ارسال می‌شود.</p>
             <div className="flex flex-wrap gap-1.5">{recipientIds.map(id => <span key={id} className="inline-flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-[10px] text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
               {users.find(user => user.user_id === id)?.full_name || 'کاربر انتخاب‌شده'}
@@ -63,6 +66,7 @@ export function ReminderField({ value, onChange, disabled = false, recipientIds 
             </select>
             {usersError && <p role="alert" className="text-[10px] text-rose-600">دریافت فهرست کاربران ناموفق بود؛ فرم را دوباره باز کنید.</p>}
           </div>}
+          <ReminderDeliveryStatus noteId={noteId} ownerId={ownerId} users={users} />
           <p className="text-[10px] leading-5 text-slate-500">ارسال پیامک مطابق تنظیمات گروه کاربری و سرویس پیامک انجام می‌شود؛ دریافت در بله نیاز به اتصال حساب بله دارد.</p>
           <p className="text-[10px] leading-5 text-slate-500">براساس ساعت دستگاه شما ({Intl.DateTimeFormat().resolvedOptions().timeZone})؛ یادآوری در اعلان‌های سایت ثبت می‌شود.</p>
         </div>

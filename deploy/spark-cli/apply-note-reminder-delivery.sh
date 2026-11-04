@@ -10,17 +10,44 @@ worker_url="${3:-}"
 script_dir="$(cd -- "$(dirname -- "$0")" && pwd -P)"
 migration="$script_dir/../../supabase/migrations/20261104070037_note_reminder_recipients_and_delivery.sql"
 payload_migration="$script_dir/../../supabase/migrations/20261104070501_keep_note_reminder_bale_payloads_small.sql"
+diagnostics_migration="$script_dir/../../supabase/migrations/20261104073655_note_reminder_delivery_diagnostics.sql"
 if [[ "$mode" == --check ]]; then
  docker exec -i "$container" psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 <<'SQL'
 select exists(select from supabase_migrations.schema_migrations where version='20261104070037') as migration_applied,
  exists(select from supabase_migrations.schema_migrations where version='20261104070501') as compact_payload_migration_applied,
  to_regclass('private.note_reminder_deliveries') is not null as delivery_queue_present,
- to_regprocedure('private.run_note_reminder_tick()') is not null as scheduler_present;
+ to_regprocedure('private.run_note_reminder_tick()') is not null as scheduler_present,
+ to_regprocedure('public.get_note_reminder_delivery_status(uuid)') is not null as delivery_diagnostics_present;
+select to_regclass('private.note_reminder_worker_config') is not null as configured_schema \gset
+\if :configured_schema
+ select worker_url as application_worker_url,last_tick_at,last_error from private.note_reminder_worker_config where singleton;
+ select channel,status,last_error,count(*) as deliveries from private.note_reminder_deliveries group by channel,status,last_error order by channel,status;
+\endif
 SQL
  exit 0
 fi
 [[ "$worker_url" =~ ^https://[^/?#@[:space:]]+/functions/v1/note-reminder-worker$ ]] || { echo 'An HTTPS Application worker URL is required.' >&2; exit 2; }
-[[ -r "$migration" && -r "$payload_migration" ]] || { echo 'Migration file missing; update the checkout.' >&2; exit 1; }
+# A successful unauthenticated probe must be this worker's own 401 response.
+# A generic JWT gateway 401, 404 route, or 5xx must not be accepted as ready.
+python3 - "$worker_url" <<'PYPROBE'
+import json,sys
+from urllib.request import Request,urlopen
+from urllib.error import HTTPError
+try:
+ response=urlopen(Request(sys.argv[1],data=b'{}',headers={'Content-Type':'application/json'},method='POST'),timeout=15)
+ code,payload=response.status,response.read()
+except HTTPError as error:
+ code,payload=error.code,error.read()
+except Exception:
+ sys.exit('Note reminder worker is unreachable. Deploy/check the Application worker before configuring delivery.')
+try:
+ valid=code==401 and json.loads(payload).get('error')=='UNAUTHORIZED'
+except Exception:
+ valid=False
+if not valid:
+ sys.exit('Note reminder worker is missing, blocked by the gateway, or unhealthy (HTTP %s). Deploy the worker first.' % code)
+PYPROBE
+[[ -r "$migration" && -r "$payload_migration" && -r "$diagnostics_migration" ]] || { echo 'Migration file missing; update the checkout.' >&2; exit 1; }
 {
  cat <<'SQL'
 begin;
@@ -47,6 +74,15 @@ SQL
  cat "$payload_migration"
  cat <<'SQL'
 insert into supabase_migrations.schema_migrations(version,name) values('20261104070501','keep_note_reminder_bale_payloads_small');
+\endif
+select exists(select from supabase_migrations.schema_migrations where version='20261104073655') as diagnostics \gset
+\if :diagnostics
+ \echo 'Note reminder delivery diagnostics already applied.'
+\else
+SQL
+ cat "$diagnostics_migration"
+ cat <<'SQL'
+insert into supabase_migrations.schema_migrations(version,name) values('20261104073655','note_reminder_delivery_diagnostics');
 \endif
 select private.configure_note_reminder_worker(:'worker_url');
 notify pgrst,'reload schema';

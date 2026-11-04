@@ -15,8 +15,16 @@ bash deploy/spark-cli/apply-note-reminder-delivery.sh --check supabase-db
 bash deploy/spark-cli/apply-note-reminder-delivery.sh --apply supabase-db https://YOUR-APPLICATION/functions/v1/note-reminder-worker
 ```
 
-The apply command records both new migrations in history and sets the worker URL in one transaction. It is safe to run again after an upgrade. It never prints the worker token. `pg_cron`, `pg_net`, `pgcrypto`, the existing notes/notifications schema, and the base reminder migration are prerequisites.
+The apply command records the new migrations in history and sets the worker URL in one transaction. It is safe to run again after an upgrade. It never prints the worker token. `pg_cron`, `pg_net`, `pgcrypto`, the existing notes/notifications schema, and the base reminder migration are prerequisites.
 
 The `spark-note-reminders` job runs once a minute. Inspect `private.note_reminder_worker_config` for `last_tick_at` and `last_error`, without exposing `worker_token`. Inspect `private.note_reminder_deliveries` for per-recipient/channel outcomes; existing SMS provider logs remain in `sms_dispatch_logs`.
 
 Do not test by sending another user's private note to a real external account. Use transport mocks or an isolated database for integration tests.
+
+## Delivery diagnostics
+
+Open the bell button beside the note date/time to see each selected user's SMS and Bale status. Missing phone numbers, disabled SMS group rules and unlinked Bale accounts are shown separately. Older reminders that only created an in-app notification are identified explicitly; choose a new future time to send them through the new channels.
+
+The deployment script probes the Application worker before accepting its URL. A worker 404, generic JWT-gateway 401, or 5xx fails setup. The database scheduler records the asynchronous HTTP response on its next tick instead of clearing errors merely because pg_net accepted the request.
+
+For diagnosis on the primary server, run `bash deploy/spark-cli/apply-note-reminder-delivery.sh --check supabase-db`. The output contains the configured worker URL, scheduler timestamp, last error, channel status counts and diagnostic-function availability; it does not print tokens, phone numbers or note contents.
