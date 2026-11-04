@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Activity, Search, RefreshCw, Shield, Download, Loader as Loader2, X, ChevronLeft } from 'lucide-react';
 import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
+import { usePermissions } from '../../context/PermissionsContext';
 import { supabase } from '../../lib/supabase';
-import { type CenterEvent, type EventCursor, type EventPage, severityLabels, resultLabels, isAttentionEvent, changedFields, exportEvents, eventTitle, isEventCenterSchemaMissing, eventCenterErrorMessage } from './eventCenterModel';
+import { type CenterEvent, type EventCursor, type EventPage, type EventCenterSummary, parseEventCenterSummary, severityLabels, resultLabels, isAttentionEvent, changedFields, exportEvents, eventTitle, isEventCenterSchemaMissing, eventCenterErrorMessage } from './eventCenterModel';
 
 import { categoryTitle, eventSourceTitle, eventResultTitle, fieldTitle, formatEventValue, metadataRows, eventSummary } from './eventCenterPresentation';
 import { eventClientContext } from './eventClientContext';
@@ -14,7 +15,14 @@ const stamp = (value: string) => new Date(value).toLocaleString('fa-IR', { timeZ
 const dateValue = (daysAgo: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() - daysAgo * 86400000));
 
 export function GroupEventsPanel() {
+  const { isAdmin } = usePermissions();
   const [events, setEvents] = useState<CenterEvent[]>([]);
+  const [summary, setSummary] = useState<EventCenterSummary | null>(null);
+  const [summaryError, setSummaryError] = useState('');
+  const [showPurge, setShowPurge] = useState(false);
+  const [purgeConfirmation, setPurgeConfirmation] = useState('');
+  const [purging, setPurging] = useState(false);
+  const [purgeError, setPurgeError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<CenterEvent | null>(null);
@@ -31,11 +39,26 @@ export function GroupEventsPanel() {
   const sequence = useRef(0);
   const schemaMissing = useRef(false);
   const dialog = useRef<HTMLDialogElement>(null);
+  const purgeDialog = useRef<HTMLDialogElement>(null);
   const filtersKey = JSON.stringify([query, source, severity, result, from, to]);
   const activeFilters = useRef(filtersKey);
   activeFilters.current = filtersKey;
 
   useEffect(() => { const timer = setTimeout(() => setQuery(search.trim()), 350); return () => clearTimeout(timer); }, [search]);
+
+  const loadSummary = useCallback(async () => {
+    try {
+      const { data, error: statsError } = await supabase.rpc('get_event_center_summary_v1' as never);
+      if (statsError) throw statsError;
+      const parsed = parseEventCenterSummary(data);
+      if (!parsed) throw new Error('INVALID_EVENT_CENTER_SUMMARY');
+      setSummary(parsed);
+      setSummaryError('');
+    } catch {
+      setSummary(null);
+      setSummaryError('دریافت آمار کل تاریخچه ناموفق بود؛ نسخه دیتابیس مرکز رخدادها را بررسی کنید.');
+    }
+  }, []);
 
   const load = useCallback(async (before: EventCursor | null = null, quiet = false) => {
     const request = ++sequence.current;
@@ -68,8 +91,13 @@ export function GroupEventsPanel() {
   }, [filtersKey, query, source, severity, result, from, to]);
 
   useEffect(() => { void load(); return () => { sequence.current++; }; }, [load]);
+  useEffect(() => { void loadSummary(); }, [loadSummary]);
+  useEffect(() => {
+    if (showPurge && !purgeDialog.current?.open) purgeDialog.current?.showModal();
+    else if (!showPurge && purgeDialog.current?.open) purgeDialog.current?.close();
+  }, [showPurge]);
   // Keep the investigation stable while an event is open or older pages are loaded.
-  useLiveData(LIVE_DATA.audit, async () => { if (!schemaMissing.current && !selected && !loading && events.length <= 50) await load(null, true); });
+  useLiveData(LIVE_DATA.audit, async () => { if (!schemaMissing.current && !selected && !loading && events.length <= 50) await Promise.all([load(null, true), loadSummary()]); });
   useEffect(() => {
     if (selected) dialog.current?.showModal();
     else dialog.current?.close();
@@ -77,28 +105,63 @@ export function GroupEventsPanel() {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (!schemaMissing.current && document.visibilityState === 'visible' && !selected && !loading && events.length <= 50) void load(null, true);
+      if (!schemaMissing.current && document.visibilityState === 'visible' && !selected && !loading && events.length <= 50) void Promise.all([load(null, true), loadSummary()]);
     }, 30000);
     return () => clearInterval(timer);
-  }, [selected, loading, events.length, load]);
+  }, [selected, loading, events.length, load, loadSummary]);
 
+  const refresh = () => { void Promise.all([load(), loadSummary()]); };
+  const clearHistory = async () => {
+    if (!isAdmin || purging || purgeConfirmation !== 'DELETE ALL EVENTS') return;
+    if (!window.confirm('تمام رخدادهای مرکز از منابع اصلی حذف می‌شوند و قابل بازگشت نیستند. ادامه می‌دهید؟')) return;
+    setPurging(true);
+    setPurgeError('');
+    try {
+      const { error: purgeRpcError } = await supabase.rpc('purge_event_center_history_v1' as never, { p_confirmation: purgeConfirmation } as never);
+      if (purgeRpcError) throw purgeRpcError;
+      setShowPurge(false);
+      setPurgeConfirmation('');
+      setEvents([]);
+      setCursor(null);
+      setHasMore(false);
+      await Promise.all([load(), loadSummary()]);
+    } catch (cause) {
+      const code = (cause as { code?: string })?.code;
+      setPurgeError(code === '42501' ? 'فقط مدیر سامانه با نشست دارای دسترسی کامل می‌تواند تاریخچه را حذف کند.' : 'حذف تاریخچه ناموفق بود؛ داده‌ها را دوباره بررسی کنید.');
+    } finally {
+      setPurging(false);
+    }
+  };
   const investigate = (value: string) => { setSearch(value); setQuery(value); setSource(''); setSeverity(''); setResult(''); setSelected(null); };
   const download = () => {
     const url = URL.createObjectURL(new Blob([exportEvents(events)], { type: 'application/json;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `spark-events-${from}-${to}.json`; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const attention = events.filter(isAttentionEvent).length;
+  const displayCount = (value: number | undefined) => value === undefined ? '—' : value.toLocaleString('fa-IR');
   return <section dir="rtl" className="space-y-5 text-gray-800 dark:text-gray-100">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div><h3 className="flex items-center gap-2 text-xl font-bold"><Shield className="h-6 w-6 text-blue-500" />مرکز بررسی رخدادها</h3>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">ردیابی فعالیت کاربران، تغییر دسترسی‌ها و تلاش‌های ردشده</p></div>
-      <div className="flex gap-2"><button type="button" className={button} onClick={download} disabled={!events.length || loading || !!error}><Download size={16} />خروجی موارد نمایش‌داده‌شده</button>
-        <button type="button" className={button} onClick={() => void load()} disabled={loading}><RefreshCw size={16} className={loading ? 'animate-spin' : ''} />تازه‌سازی</button></div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={button} onClick={download} disabled={!events.length || loading || !!error}><Download size={16} />خروجی موارد نمایش‌داده‌شده</button>
+        <button type="button" className={button} onClick={refresh} disabled={loading}><RefreshCw size={16} className={loading ? 'animate-spin' : ''} />تازه‌سازی</button>
+        {isAdmin && <button type="button" className="inline-flex items-center gap-2 rounded-xl border border-red-300 px-3 py-2 text-sm text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30" onClick={() => { setPurgeError(''); setPurgeConfirmation(''); setShowPurge(true); }}>حذف کل تاریخچه رخدادها</button>}
+      </div>
     </div>
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-      {[[events.length, 'رخداد بارگذاری‌شده'], [events.filter(e => ['auth.login', 'auth.mfa_code_login'].includes(e.event_type)).length, 'رخداد ورود در این فهرست'], [attention, 'نیازمند توجه در این فهرست'], [events.filter(e => e.result === 'denied').length, 'دسترسی ردشده در این فهرست'], [new Set(events.map(e => e.actor_user_id).filter(Boolean)).size, 'کاربر در این فهرست']].map(([value, label]) =>
-        <div key={label} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"><div className="text-2xl font-bold">{value}</div><div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{label}</div></div>)}
+    <div>
+      <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">آمار تمام تاریخچه موجود در منابع مرکز رخدادها؛ مستقل از بازه، جستجو، فیلترها و تعداد ردیف‌های بارگذاری‌شده</p>
+      {summaryError && <p role="alert" className="mb-2 text-xs text-amber-700 dark:text-amber-300">{summaryError}</p>}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {([
+          [summary?.total_events, 'کل رخدادها'],
+          [summary?.login_events, 'کل رخدادهای ورود'],
+          [summary?.attention_events, 'کل موارد نیازمند توجه'],
+          [summary?.denied_events, 'کل دسترسی‌های ردشده'],
+          [summary?.unique_actors, 'کل کاربران دارای رخداد'],
+        ] as [number | undefined, string][]).map(([value, label]) =>
+          <div key={label} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"><div className="text-2xl font-bold">{displayCount(value)}</div><div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{label}</div></div>)}
+      </div>
     </div>
     <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
       <label className="mb-4 block text-sm"><span className="mb-2 flex items-center gap-2"><Search size={15} />جستجو در تمام رخدادهای بازه</span>
@@ -156,6 +219,21 @@ export function GroupEventsPanel() {
           <details><summary className="cursor-pointer text-sm font-medium">دادهٔ فنی اصلی (برای عیب‌یابی)</summary><pre dir="ltr" className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-gray-50 p-4 text-xs dark:bg-gray-800">{JSON.stringify(selected, null, 2)}</pre></details>
           <p className="text-xs text-gray-500 dark:text-gray-400">فقط رخدادهای موجود در منابع ثبت نمایش داده می‌شوند؛ اطلاعات ثبت‌نشده بازسازی نمی‌شود. نمایش این مرکز مجوز حذف شواهد نمی‌دهد.</p>
         </div></>}
+    </dialog>
+    <dialog ref={purgeDialog} onCancel={event => { if (purging) event.preventDefault(); else setShowPurge(false); }} onClose={() => { if (!purging) setShowPurge(false); }}
+      className="m-auto w-[min(520px,94vw)] rounded-2xl bg-white p-5 text-gray-800 shadow-2xl backdrop:bg-black/60 dark:bg-slate-900 dark:text-gray-100" dir="rtl" aria-labelledby="purge-events-title">
+      <h4 id="purge-events-title" className="text-lg font-bold text-red-700 dark:text-red-300">حذف غیرقابل‌بازگشت کل تاریخچه رخدادها</h4>
+      <p className="mt-3 text-sm leading-7">تمام رخدادهای ثبت‌شدهٔ برنامه، رخدادهای امنیتی، رخدادهای احراز هویت نمایش‌داده‌شده در این مرکز و رکوردهای مشاهدهٔ نشست حذف می‌شوند؛ محدود به فیلتر فعلی نیست. رخدادهای جدید همچنان ثبت خواهند شد.</p>
+      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">این عملیات از منابع اصلی حذف می‌کند. پیش از آن از حفظ شواهد و سیاست نگهداری سازمان اطمینان بگیرید. رسید حذف محفوظ می‌ماند.</p>
+      <label className="mt-4 block text-xs font-semibold" htmlFor="purge-events-confirm">برای تأیید عبارت DELETE ALL EVENTS را دقیق وارد کنید:</label>
+      <input id="purge-events-confirm" dir="ltr" type="text" autoComplete="off" spellCheck={false} value={purgeConfirmation} onChange={event => setPurgeConfirmation(event.target.value)} disabled={purging}
+        className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-left font-mono text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
+      {purgeError && <p role="alert" className="mt-3 text-xs text-red-600">{purgeError}</p>}
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" className={button} disabled={purging} onClick={() => setShowPurge(false)}>انصراف</button>
+        <button type="button" onClick={() => void clearHistory()} disabled={purging || purgeConfirmation !== 'DELETE ALL EVENTS'}
+          className="rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{purging ? 'در حال حذف…' : 'حذف قطعی کل تاریخچه'}</button>
+      </div>
     </dialog>
   </section>;
 }
