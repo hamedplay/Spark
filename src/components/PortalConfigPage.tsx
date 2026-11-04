@@ -559,10 +559,10 @@ export function PortalConfigPage({ currentUserId }: Props) {
               <span className="text-gray-700 dark:text-gray-200 font-medium truncate">{breadcrumb}</span>
             </div>
           </div>
-          <button onClick={() => { loadConfigs(); if (activeSection === 'users_online') loadOnlineUsers(); }}
+          {activeSection !== 'group_events' && <button onClick={() => { loadConfigs(); if (activeSection === 'users_online') loadOnlineUsers(); }}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors flex-shrink-0">
             <RefreshCw className="w-4 h-4" />
-          </button>
+          </button>}
         </div>
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">
           <Suspense fallback={(
