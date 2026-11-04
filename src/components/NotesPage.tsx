@@ -24,7 +24,9 @@ const AssignNoteModal = lazy(() => import('./Notes/AssignNoteModal').then((m) =>
 
 export function NotesPage({ currentUserId: propUserId }: { currentUserId?: string | null }) {
   useLiveData(LIVE_DATA.notes, async () => { await fetchNotes(); });
-  const isMobile = window.innerWidth < 768;
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isMobile = isIOS || window.innerWidth < 768;
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('notes_create');
   const canEdit = hasPermission('notes_edit');
@@ -179,6 +181,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     recognition.continuous = !isMobile;
     recognition.interimResults = true;
     recognition.lang = 'fa-IR';
+    let sessionEnded = false;
 
     recognition.onstart = () => {
       if (isForm) {
@@ -222,32 +225,45 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     };
 
     recognition.onerror = (event: any) => {
+      if (isForm) setIsFormRecording(false);
+      else setIsRecording(false);
+
       if (event.error === 'not-allowed' || event.error === 'permission-denied') {
-        toast.error('لطفاً دسترسی میکروفون را فعال کنید');
-        if (isForm) setIsFormRecording(false);
-        else setIsRecording(false);
+        setHasRecordingPermission(false);
+        toast.error(isIOS
+          ? 'دسترسی تشخیص گفتار مجاز نیست. مجوز میکروفون Safari و فعال بودن Siri و Dictation را در تنظیمات آیفون بررسی کنید.'
+          : 'لطفاً دسترسی میکروفون را فعال کنید');
+      } else if (event.error === 'language-not-supported') {
+        toast.error('سرویس تشخیص گفتار این دستگاه از زبان فارسی پشتیبانی نمی‌کند.');
+      } else if (event.error === 'service-not-allowed') {
+        toast.error('سرویس تشخیص گفتار دستگاه در دسترس نیست. در آیفون فعال بودن Siri و Dictation را بررسی کنید.');
       } else if (event.error === 'network') {
         toast.error('برای تشخیص گفتار به اتصال اینترنت نیاز است');
-        if (isForm) setIsFormRecording(false);
-        else setIsRecording(false);
       } else if (event.error === 'audio-capture') {
         toast.error('میکروفون در دسترس نیست');
-        if (isForm) setIsFormRecording(false);
-        else setIsRecording(false);
+      } else if (event.error === 'no-speech') {
+        toast.error('گفتاری دریافت نشد. دوباره تلاش کنید.');
+      } else if (event.error !== 'aborted') {
+        toast.error('خطا در تشخیص گفتار؛ دوباره تلاش کنید');
       }
     };
 
     recognition.onend = () => {
+      if (sessionEnded) return;
+      sessionEnded = true;
       if (isForm) {
+        formRecognitionRef.current = null;
         setIsFormRecording(false);
         if (isMobile && formFinalTranscriptRef.current) {
           setNewNote(prev => ({ ...prev, content: formFinalTranscriptRef.current }));
         }
       } else {
+        recognitionRef.current = null;
         setIsRecording(false);
-        if (isMobile && finalTranscriptRef.current && userId) {
-          saveVoiceNote();
-        }
+        // Event handlers retain the render that started recognition. Read the
+        // final result from the ref, not that render's stale voiceTranscript.
+        const transcript = finalTranscriptRef.current.trim();
+        if (transcript && userId) saveVoiceNote(transcript);
       }
     };
 
@@ -260,8 +276,13 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     try {
       recognition.start();
     } catch {
-      if (isForm) setIsFormRecording(false);
-      else setIsRecording(false);
+      if (isForm) {
+        formRecognitionRef.current = null;
+        setIsFormRecording(false);
+      } else {
+        recognitionRef.current = null;
+        setIsRecording(false);
+      }
       toast.error('خطا در شروع ضبط صدا');
     }
   };
@@ -301,30 +322,30 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       return;
     }
 
-    if (!hasRecordingPermission) {
+    const recognition = isForm ? formRecognitionRef.current : recognitionRef.current;
+    if (recognition) {
+      try { recognition.stop(); } catch {}
+      return;
+    }
+    // Let WebKit request speech permission directly within the click handler,
+    // without opening and stopping a separate audio capture session first.
+    // Retain the existing microphone preflight for other devices.
+    if (!isIOS && !hasRecordingPermission) {
       const granted = await requestRecordingPermission();
       if (!granted) return;
     }
-
-    if (isForm ? isFormRecording : isRecording) {
-      if (isForm && formRecognitionRef.current) {
-        try { formRecognitionRef.current.stop(); } catch {}
-      } else if (!isForm && recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch {}
-        if (voiceTranscript.trim() && userId) saveVoiceNote();
-      }
-    } else {
-      startRecognitionSession(isForm);
-    }
+    startRecognitionSession(isForm);
   };
 
-  const saveVoiceNote = async () => {
+  const saveVoiceNote = async (transcript: string) => {
+    const content = transcript.trim();
+    if (!content || !userId) return;
     try {
       const { data, error } = await supabase
         .from('notes')
         .insert([{
-          title: voiceTranscript.split(' ').slice(0, 3).join(' ') + '...',
-          content: voiceTranscript,
+          title: content.split(' ').slice(0, 3).join(' ') + '...',
+          content,
           note_type: 'voice',
           user_id: userId,
           status: 'active'
