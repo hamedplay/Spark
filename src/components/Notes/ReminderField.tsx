@@ -1,3 +1,4 @@
+import { matchingReminderUsers } from './reminderRecipients';
 import { useState } from 'react';
 import { Bell, UsersRound, X } from 'lucide-react';
 import { JalaliDatePicker } from '../Minutes/Form/JalaliDatePicker';
@@ -19,6 +20,7 @@ export function ReminderField({ value, onChange, disabled = false, recipientIds 
 }) {
   const [search, setSearch] = useState('');
   const parts = reminderDateTime(value);
+  const matches = matchingReminderUsers(users, recipientIds, search);
   const update = (date: string, time: string) => {
     if (!date) { onChange(null); return; }
     const next = new Date(`${date}T${time || '09:00'}:00`);
@@ -60,10 +62,17 @@ export function ReminderField({ value, onChange, disabled = false, recipientIds 
               <button type="button" disabled={disabled} aria-label={`حذف گیرنده ${users.find(user => user.user_id === id)?.full_name || id}`} onClick={() => onRecipientsChange(recipientIds.filter(value => value !== id))}><X className="h-3 w-3" /></button>
             </span>)}</div>
             <input aria-label="جستجوی گیرنده یادآوری" value={search} disabled={disabled} onChange={event => setSearch(event.target.value)} placeholder="جستجوی نام کاربر..." className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-600 dark:bg-slate-700 dark:text-white" />
-            <select aria-label="افزودن گیرنده یادآوری" value="" disabled={disabled || usersLoading || recipientIds.length >= 20} onChange={event => { if (event.target.value) onRecipientsChange([...recipientIds, event.target.value]); }} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-600 dark:bg-slate-700 dark:text-white">
+            {search.trim() ? <div aria-label="نتایج جستجوی گیرنده" className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-600 dark:bg-slate-800">
+              {usersLoading ? <p role="status" className="p-2 text-xs text-slate-500">در حال دریافت کاربران...</p>
+                : matches.length ? matches.map(user => <button key={user.user_id} type="button" disabled={disabled || recipientIds.length >= 20}
+                  onClick={() => { onRecipientsChange([...recipientIds, user.user_id]); setSearch(''); }}
+                  className="block w-full rounded-md px-3 py-2 text-right text-xs text-slate-700 hover:bg-amber-50 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-700">{user.full_name || 'کاربر سازمان'} · افزودن</button>)
+                : <p role="status" className="p-2 text-xs text-slate-500">کاربری با این نام در فهرست قابل انتخاب پیدا نشد.</p>}
+            </div> : <select aria-label="افزودن گیرنده یادآوری" value="" disabled={disabled || usersLoading || recipientIds.length >= 20} onChange={event => { if (event.target.value) onRecipientsChange([...recipientIds, event.target.value]); }} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-600 dark:bg-slate-700 dark:text-white">
               <option value="">{usersLoading ? 'در حال دریافت کاربران...' : 'افزودن کاربر (حداکثر ۲۰ نفر)'}</option>
-              {users.filter(user => !recipientIds.includes(user.user_id) && (user.full_name || '').toLocaleLowerCase('fa-IR').includes(search.trim().toLocaleLowerCase('fa-IR'))).map(user => <option key={user.user_id} value={user.user_id}>{user.full_name || 'کاربر سازمان'}</option>)}
-            </select>
+              {matches.map(user => <option key={user.user_id} value={user.user_id}>{user.full_name || 'کاربر سازمان'}</option>)}
+            </select>}
+            {!usersLoading && !usersError && users.length === 0 && <p role="status" className="text-[10px] text-slate-500">کاربری برای انتخاب دریافت نشد؛ سازمان حساب و فهرست کاربران قابل انتخاب را بررسی کنید.</p>}
             {usersError && <p role="alert" className="text-[10px] text-rose-600">دریافت فهرست کاربران ناموفق بود؛ فرم را دوباره باز کنید.</p>}
           </div>}
           <ReminderDeliveryStatus noteId={noteId} ownerId={ownerId} users={users} />

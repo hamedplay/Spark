@@ -28,3 +28,17 @@ Open the bell button beside the note date/time to see each selected user's SMS a
 The deployment script probes the Application worker before accepting its URL. A worker 404, generic JWT-gateway 401, or 5xx fails setup. The database scheduler records the asynchronous HTTP response on its next tick instead of clearing errors merely because pg_net accepted the request.
 
 For diagnosis on the primary server, run `bash deploy/spark-cli/apply-note-reminder-delivery.sh --check supabase-db`. The output contains the configured worker URL, scheduler timestamp, last error, channel status counts and diagnostic-function availability; it does not print tokens, phone numbers or note contents.
+
+### Recipient search and production delivery diagnostics
+
+Recipient search now displays selectable matching users immediately beneath the search field, instead of silently filtering a closed native select. It normalizes Arabic/Persian kaf and yeh, diacritics and half-spaces, excludes selected recipients and shows explicit loading/empty states. Existing same-organization server eligibility and the twenty-recipient limit remain unchanged.
+
+Readiness failures now show the known server reason (missing configuration, scheduler, HTTP authorization/route or network/timeout). An unrecognized raw error is not echoed into the UI. A healthy copy with an empty delivery queue cannot establish why production delivery failed.
+
+Run from the updated checkout on the real database host and share the output:
+
+```sh
+docker exec -i supabase-db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < deploy/spark-cli/diagnose-note-reminders.sql
+```
+
+This file only reads schema availability, cron state, whitelisted worker configuration, the latest worker HTTP status, grouped delivery errors and overdue counts. It does not print worker tokens, note bodies, phone numbers or bot credentials, and does not retry deliveries. Missing optional objects are reported without referencing absent relations.
