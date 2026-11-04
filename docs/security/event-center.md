@@ -251,3 +251,73 @@ temporary evaluator/permission stubs isolate writer/projection mechanics and
 are rolled back with every fixture. The existing event-center DB suites also
 pass. Actual panel fixtures cover desktop, 390px mobile, dark mode, raw UA,
 session provenance, dialog closure and absence of horizontal document overflow.
+
+## November 4: all-history metrics, protected purge, and trusted ingress IP
+
+New schema migration `20261104053139_event_center_global_totals_admin_clear_trusted_ip.sql` was
+applied to the connected **non-production** copy. The public read RPC
+`get_event_center_summary_v1()` aggregates all retained event-center source
+rows (application audit, security events, allowlisted Auth audit events, and
+first FULL-session observations), **without** the UI's seven-day default,
+search/filter window or 50-row pagination. It returns total events, Auth login
+events, attention (warning/error/critical or denied/failure/error), denied access,
+and distinct verified actor IDs. These match the center's original event
+classification; numbers can change after retention or new activity.
+
+The UI includes one global-summary set, a distinct loaded-row count in the
+table footer, and one labelled refresh button. The outer icon-only refresh is
+hidden **only** when the Events section is active; other configuration screens
+retain their existing button.
+
+`purge_event_center_history_v1(p_confirmation)` is callable only after both
+a verified FULL session and actual administrator role checks. The UI requires
+typing `DELETE ALL EVENTS` and accepting a second confirmation. When
+explicitly invoked, a single transaction deletes all event-center application
+and security audit rows, **only the allowlisted Auth audit actions exposed in
+this center**, and the private session observations. Other Auth audit actions
+and unrelated security/session tables are untouched. It records a private
+administrator deletion receipt with per-source deletion counts, independent
+of the event feed. The migration itself **does not delete any data**.
+The purge cannot be undone and is subject to organizational evidence-retention
+and backup obligations. Browser grants to raw audit stores are not expanded.
+
+The previous application audit writer used the first untrusted
+`X-Forwarded-For` value; the session observer could use that as a fallback.
+Both writers now accept the server-forwarded `X-Spark-Client-IP` **only**.
+If the trusted ingress did not supply it, the client address is recorded as
+unknown rather than misattributing a Docker gateway or spoofed header.
+Previous bad/missing IP values are not rewritten.
+
+The Nginx helper overwrites all three client-IP headers at the same-origin
+Supabase upstream; it supports one or more explicit `--trusted-proxy CIDR`
+options to recover the actual remote address through upstream load balancers.
+The values must come from the real ingress topology (ideally exact /32 or
+/128 addresses), not a guess and not a blanket trust of the Docker subnet.
+Nginx's real-IP module must be available, and the trusted upstream must
+correctly maintain `X-Forwarded-For`. Later normal Spark updater calls retain
+the previously configured tagged trusted list. A direct peer needs no
+`--trusted-proxy` option. The helper backups config, validates with
+`nginx -t`, reloads Nginx and rolls back on failure.
+
+For a self-hosted application after updating the checkout, first inspect
+the effective Nginx/outer-proxy path and then run, on the correct hosts:
+
+```sh
+sudo bash /opt/spark/deploy/spark-cli/apply-event-client-headers.sh --check
+# If an explicit upstream reverse proxy is verified, use its CIDR:
+sudo bash /opt/spark/deploy/spark-cli/apply-event-client-headers.sh --apply --trusted-proxy <VERIFIED_PROXY_IP>/32
+# Otherwise --apply without --trusted-proxy for direct clients:
+# sudo bash /opt/spark/deploy/spark-cli/apply-event-client-headers.sh --apply
+
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-global-db.sh --check supabase-db
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-global-db.sh --apply supabase-db
+sudo bash /opt/spark/deploy/spark-cli/apply-event-center-global-db.sh --check supabase-db
+```
+
+The separate deployment helper deliberately targets just this migration because
+historical migration files may not be present in the checkout. Publish the
+frontend through the normal release process. Only a **new authenticated request**
+through the actual production ingress can demonstrate the true source address
+received by PostgREST/Auth. Historical Auth audit entries and session-IP claims
+are not retroactively changed; a copy-database test is not a production
+verification.
