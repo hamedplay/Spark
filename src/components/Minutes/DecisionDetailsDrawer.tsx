@@ -1,5 +1,6 @@
 import { useLiveData, LIVE_DATA } from '../../shared/realtime/useLiveData';
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronDown, ChevronUp, Clock, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle2, RefreshCw, MessageSquare, Flag, User } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -102,28 +103,35 @@ export function DecisionDetailsDrawer({ decision, onClose }: DecisionDetailsDraw
     { id: 'followups', label: `پیگیری‌ها (${toPersianDigits(String(followups.length))})` },
   ];
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-end" dir="rtl">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-2xl h-full bg-white dark:bg-gray-900 shadow-2xl flex flex-col overflow-hidden">
+  // Render outside the scrollable page shell so viewport positioning is stable.
+  // Explicit right anchoring avoids RTL flex-end placing the drawer on the left.
+  return createPortal(
+    <div className="fixed inset-0 z-[10000]" dir="rtl">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="decision-details-title"
+        className="absolute inset-y-0 right-0 flex h-full min-h-0 w-full max-w-2xl flex-col overflow-hidden bg-white shadow-2xl dark:bg-gray-900"
+      >
         {/* Header */}
         <div
-          className="flex items-start gap-3 px-5 pb-4 border-b border-gray-100 dark:border-gray-700"
+          className="flex shrink-0 items-start gap-3 border-b border-gray-100 px-5 pb-4 dark:border-gray-700"
           style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
         >
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-bold text-gray-900 dark:text-white line-clamp-2">{decision.title}</h2>
+            <h2 id="decision-details-title" className="line-clamp-2 break-words text-base font-bold text-gray-900 dark:text-white">{decision.title}</h2>
             {decision.minute_title && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{decision.minute_title}</p>
             )}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors flex-shrink-0">
+          <button type="button" onClick={onClose} aria-label="بستن جزئیات مصوبه" className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 transition-colors flex-shrink-0">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 dark:border-gray-700 px-5 overflow-x-auto">
+        <div className="flex shrink-0 overflow-x-auto border-b border-gray-100 px-5 dark:border-gray-700">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -140,7 +148,7 @@ export function DecisionDetailsDrawer({ decision, onClose }: DecisionDetailsDraw
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain p-5">
           {tab === 'info' && <InfoTab decision={decision} />}
           {tab === 'history' && <HistoryTab history={history} loading={historyLoading} actorNames={actorNames} />}
           {tab === 'reports' && <ReportsTab reports={reports} loading={historyLoading} actorNames={actorNames} />}
@@ -148,7 +156,8 @@ export function DecisionDetailsDrawer({ decision, onClose }: DecisionDetailsDraw
           {tab === 'followups' && <FollowupsTab followups={followups} loading={historyLoading} actorNames={actorNames} />}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -183,14 +192,14 @@ function InfoTab({ decision }: { decision: DecisionRow & { minute_title?: string
         {fields.map(f => f.value ? (
           <div key={f.label} className="space-y-0.5">
             <dt className="text-xs text-gray-400 dark:text-gray-500">{f.label}</dt>
-            <dd className="text-sm text-gray-700 dark:text-gray-300">{f.value}</dd>
+            <dd className="break-words text-sm text-gray-700 dark:text-gray-300">{f.value}</dd>
           </div>
         ) : null)}
       </dl>
       {decision.latest_update && (
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3">
           <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">آخرین گزارش</p>
-          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{decision.latest_update}</p>
+          <p className="whitespace-pre-wrap break-words text-sm text-gray-700 dark:text-gray-300">{decision.latest_update}</p>
         </div>
       )}
     </div>
