@@ -1,7 +1,7 @@
 import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { formatJalaliTimestampDateOnly } from '../lib/minutesDate';
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Loader as Loader2, X } from 'lucide-react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, ChevronLeft, ChevronRight, ClipboardList, Loader as Loader2, SearchX, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { logAudit } from '../lib/audit';
 import { TaskWorkflowStep } from '../types';
@@ -17,14 +17,21 @@ import {
   TaskMetricCards,
   TaskViewTabs,
   TaskFilters,
+  DEFAULT_TASK_ADVANCED_FILTERS,
+  type TaskAdvancedFilters,
+  type TaskMetricKey,
 } from './Tasks/TasksWorkspaceChrome';
 import {
   filterTasks,
   getTaskCounters,
+  sortTasks,
+  type TaskSort,
   type TaskStatusFilter,
   type TaskTab,
   type TaskViewMode,
 } from './Tasks/taskPageSelectors';
+import { loadAllTaskPages } from './Tasks/taskData';
+import { readTaskView, saveTaskView } from './Tasks/taskViewPreferences';
 import { ActionListView, ActionKanbanBoard } from './Tasks/ActionWorkspaceViews';
 import type { ActionCreatePayload, ManagementProjectOption } from './Tasks/ActionCreateDrawer';
 import type { ActionEditPayload } from './Tasks/ActionEditDrawer';
@@ -74,7 +81,20 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>('all');
   const [taskTab, setTaskTab] = useState<TaskTab>('assigned_to_me');
-  const [viewMode, setViewMode] = useState<TaskViewMode>('cards');
+  const [viewMode, setViewMode] = useState<TaskViewMode>(() => readTaskView(propUserId ?? null).mode);
+  const [taskSort, setTaskSort] = useState<TaskSort>(() => readTaskView(propUserId ?? null).sort);
+  const [advancedFilters, setAdvancedFilters] = useState<TaskAdvancedFilters>({ ...DEFAULT_TASK_ADVANCED_FILTERS });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const taskRequestRef = useRef(0);
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    const interval = window.setInterval(() => setClock(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
   const [personalProjectFilter, setPersonalProjectFilter] = useState('all');
   const [focusTaskId, setFocusTaskId] = useState<string | null>(() => new URL(window.location.href).searchParams.get('task'));
   const [dashboardTaskView, setDashboardTaskView] = useState<DashboardTaskView | null>(() => {
@@ -84,6 +104,10 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<ActionTask | null>(null);
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
+  useEffect(() => {
+    const view = readTaskView(userId);
+    setViewMode(view.mode); setTaskSort(view.sort);
+  }, [userId]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [managementProjects, setManagementProjects] = useState<ManagementProjectOption[]>([]);
   const [personalProjects, setPersonalProjects] = useState<PersonalTaskProject[]>([]);
@@ -120,16 +144,22 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   };
 
   const fetchTasks = async () => {
+    const request = ++taskRequestRef.current;
+    setRefreshing(true);
     try {
-      const { data, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      const nextTasks = (data || []) as ActionTask[];
+      const nextTasks = await loadAllTaskPages((from, to) => supabase.from('tasks').select('*', { count: from === 0 ? 'exact' : undefined })
+        .order('created_at', { ascending: false }).order('id').range(from, to));
+      if (request !== taskRequestRef.current) return;
       setTasks(nextTasks);
+      setLoadError(false);
+      setLastUpdated(new Date());
       setDetailTask(current => current ? nextTasks.find(task => task.id === current.id) || null : null);
     } catch {
-      toast.error('خطا در دریافت اقدامات');
+      if (request !== taskRequestRef.current) return;
+      setLoadError(true);
+      toast.error('خطا در دریافت اقدامات؛ دوباره تلاش کنید');
     } finally {
-      setLoading(false);
+      if (request === taskRequestRef.current) { setLoading(false); setRefreshing(false); }
     }
   };
 
@@ -182,7 +212,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     if (!focusTaskId && !dashboardTaskView) return;
     setTaskTab('all');
     setSearchTerm('');
-    setStatusFilter('all');
+    setStatusFilter(dashboardTaskView === 'completed' ? 'completed' : 'all');
     setPersonalProjectFilter('all');
     const url = new URL(window.location.href);
     url.searchParams.delete('task');
@@ -548,7 +578,8 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   };
 
   const handleExportToExcel = async () => {
-    const exportData = tasks.map(task => ({
+    if (!filteredTasks.length) return;
+    const exportData = filteredTasks.map(task => ({
       'عنوان': task.title,
       'توضیحات': task.description,
       'وضعیت': task.status === 'pending' ? 'در انتظار' : task.status === 'in_progress' ? 'در حال انجام' : 'تکمیل شده',
@@ -573,7 +604,7 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     setDashboardTaskView(null);
   };
 
-  const dashboardTodayKey = tehranDayKey(new Date());
+  const dashboardTodayKey = tehranDayKey(clock);
   const ordinaryFilteredTasks = useMemo(() => filterTasks({
     tasks,
     searchTerm,
@@ -581,26 +612,58 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
     taskTab,
     personalProjectFilter,
     userId,
-  }), [tasks, searchTerm, statusFilter, taskTab, personalProjectFilter, userId]);
+    priorityFilter: advancedFilters.priority,
+    dueFilter: advancedFilters.due,
+    assigneeFilter: advancedFilters.assignee,
+    managementProjectFilter: advancedFilters.managementProject,
+    now: clock,
+  }), [tasks, searchTerm, statusFilter, taskTab, personalProjectFilter, userId, advancedFilters, clock]);
 
   const filteredTasks = useMemo(() => {
-    if (focusTaskId) return tasks.filter(task => task.id === focusTaskId);
-    if (!dashboardTaskView) return ordinaryFilteredTasks;
-
-    return tasks.filter(task => {
+    let result = ordinaryFilteredTasks;
+    if (focusTaskId) result = tasks.filter(task => task.id === focusTaskId);
+    else if (dashboardTaskView) result = ordinaryFilteredTasks.filter(task => {
       const dueKey = task.due_date ? tehranDayKey(new Date(task.due_date)) : null;
       switch (dashboardTaskView) {
         case 'all': return !task.archived;
-        case 'today': return !task.archived && dueKey !== null && dueKey === dashboardTodayKey;
+        case 'today': return !task.archived && task.status !== 'completed' && dueKey !== null && dueKey === dashboardTodayKey;
         case 'in_progress': return !task.archived && task.status === 'in_progress';
         case 'completed': return task.status === 'completed';
         case 'overdue': return !task.archived && task.status !== 'completed' && dueKey !== null && dashboardTodayKey !== null && dueKey < dashboardTodayKey;
         case 'urgent': return !task.archived && task.priority === 'high' && task.status !== 'completed';
       }
     });
-  }, [focusTaskId, dashboardTaskView, tasks, ordinaryFilteredTasks, dashboardTodayKey]);
+    return sortTasks(result, taskSort);
+  }, [focusTaskId, dashboardTaskView, tasks, ordinaryFilteredTasks, dashboardTodayKey, taskSort]);
 
-  const counters = getTaskCounters(tasks, userId);
+  const counters = useMemo(() => getTaskCounters(tasks, userId, clock), [tasks, userId, clock]);
+  const activeFilterCount = Number(Boolean(searchTerm.trim())) + Number(statusFilter !== 'all')
+    + Number(personalProjectFilter !== 'all') + Object.values(advancedFilters).filter(value => value !== 'all').length;
+  const pageCount = Math.max(1, Math.ceil(filteredTasks.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const visibleTasks = viewMode === 'kanban' ? filteredTasks : filteredTasks.slice((safePage - 1) * pageSize, safePage * pageSize);
+  useEffect(() => { setPage(1); }, [searchTerm, statusFilter, taskTab, personalProjectFilter, advancedFilters, taskSort, pageSize, viewMode, focusTaskId, dashboardTaskView]);
+  const assigneeOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    tasks.forEach(task => {
+      if (task.current_assignee_id) options.set(task.current_assignee_id, users.find(user => user.user_id === task.current_assignee_id)?.full_name || task.assignee || 'کاربر');
+    });
+    return [...options].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'fa'));
+  }, [tasks, users]);
+
+  const resetFilters = () => {
+    clearExternalFilter(); setSearchTerm(''); setStatusFilter('all'); setTaskTab('all');
+    setPersonalProjectFilter('all'); setAdvancedFilters({ ...DEFAULT_TASK_ADVANCED_FILTERS }); setPage(1);
+  };
+  const selectMetric = (key: TaskMetricKey) => {
+    resetFilters();
+    if (key === 'assignedToMe') setTaskTab('assigned_to_me');
+    if (key === 'open' || key === 'assignedToMe') setStatusFilter('open');
+    if (key === 'today') setAdvancedFilters({ ...DEFAULT_TASK_ADVANCED_FILTERS, due: 'today' });
+    if (key === 'overdue') setAdvancedFilters({ ...DEFAULT_TASK_ADVANCED_FILTERS, due: 'overdue' });
+    if (key === 'inProgress') setStatusFilter('in_progress');
+    if (key === 'completed') setStatusFilter('completed');
+  };
 
   const handleStatusFromWorkspace = (taskId: string, status: ActionTask['status']) => {
     const task = tasks.find(item => item.id === taskId);
@@ -627,24 +690,21 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
   }
 
   return (
-    <div className="space-y-5" dir="rtl">
+    <div className="space-y-4 rounded-3xl bg-slate-50/70 p-2 dark:bg-slate-950/30 sm:p-4" dir="rtl">
       <TasksWorkspaceHeader
         canCreate={canCreate}
         onOpenPersonalProjects={() => setShowPersonalProjects(true)}
         onExport={() => { void handleExportToExcel(); }}
         onCreate={openCreateDrawer}
+        onRefresh={() => { void fetchTasks(); }}
+        refreshing={refreshing}
+        lastUpdated={lastUpdated}
+        exportDisabled={!filteredTasks.length || loadError}
       />
 
-      <TaskMetricCards
-        assignedToMe={counters.assignedToMe}
-        inProgress={counters.inProgress}
-        overdue={counters.overdue}
-        completed={counters.completed}
-        onAssignedToMe={() => { clearExternalFilter(); setTaskTab('assigned_to_me'); setStatusFilter('all'); }}
-        onInProgress={() => { clearExternalFilter(); setTaskTab('all'); setStatusFilter('in_progress'); }}
-        onOverdue={() => { setFocusTaskId(null); setDashboardTaskView('overdue'); setTaskTab('all'); setStatusFilter('all'); }}
-        onCompleted={() => { setFocusTaskId(null); setDashboardTaskView('completed'); setTaskTab('all'); setStatusFilter('all'); }}
-      />
+      <p className="px-1 text-[10px] font-medium text-slate-400">نمای کلی همه اقدامات قابل دسترس شما</p>
+      <TaskMetricCards counters={counters} onSelect={selectMetric} />
+      {loadError && <div role="alert" className="flex flex-wrap items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/20 dark:text-rose-300"><AlertCircle className="h-4 w-4" />بروزرسانی اقدامات ناموفق بود؛ آمار ممکن است قدیمی باشد.<button type="button" disabled={refreshing} onClick={() => { void fetchTasks(); }} className="mr-auto rounded-lg border border-rose-200 px-3 py-1.5 font-bold">تلاش دوباره</button></div>}
 
       {(focusTaskId || dashboardTaskView) && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50/50 px-4 py-3 text-sm text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/20 dark:text-violet-300">
@@ -655,12 +715,13 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
         </div>
       )}
 
+      <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-4">
       <TaskViewTabs
         taskTab={taskTab}
         setTaskTab={tab => { clearExternalFilter(); setTaskTab(tab); }}
         createdByMeCount={counters.createdByMe}
         viewMode={viewMode}
-        setViewMode={setViewMode}
+        setViewMode={mode => { setViewMode(mode); saveTaskView(userId, { mode }); }}
       />
 
       <TaskFilters
@@ -671,19 +732,35 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
         personalProjectFilter={personalProjectFilter}
         setPersonalProjectFilter={value => { clearExternalFilter(); setPersonalProjectFilter(value); }}
         personalProjects={personalProjects}
+        advanced={advancedFilters}
+        onAdvancedChange={patch => { clearExternalFilter(); setAdvancedFilters(current => ({ ...current, ...patch })); }}
+        managementProjects={managementProjects}
+        assignees={assigneeOptions}
+        sort={taskSort}
+        onSortChange={sort => { setTaskSort(sort); saveTaskView(userId, { sort }); }}
+        onReset={resetFilters}
+        activeCount={activeFilterCount}
       />
+      </section>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-slate-500 dark:text-slate-400">
+        <span><strong className="text-slate-800 dark:text-slate-200">{filteredTasks.length.toLocaleString('fa-IR')}</strong> نتیجه از {counters.total.toLocaleString('fa-IR')} اقدام قابل دسترس</span>
+        <span>{lastUpdated ? `آخرین بروزرسانی ${lastUpdated.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+      </div>
 
       {filteredTasks.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 py-16 text-center text-sm text-gray-400">
-          اقدامی با فیلترهای انتخاب‌شده یافت نشد.
+        <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-16 text-center dark:border-slate-700 dark:bg-slate-900">
+          <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 text-slate-400 dark:bg-slate-800">{tasks.length ? <SearchX className="h-6 w-6" /> : <ClipboardList className="h-6 w-6" />}</span>
+          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">{loadError ? 'دریافت اقدامات ناموفق بود' : tasks.length ? 'نتیجه‌ای در این نما پیدا نشد' : 'هنوز اقدامی ثبت نشده است'}</h3>
+          <p className="mt-2 text-xs text-slate-400">{tasks.length ? 'محدوده یا فیلترها را تغییر دهید تا اقدامات دیگر را ببینید.' : 'با ثبت اولین اقدام، پیگیری کارها را از همین‌جا شروع کنید.'}</p>
+          <div className="mt-4 flex gap-2">{tasks.length > 0 && <button type="button" onClick={resetFilters} className="rounded-xl border border-slate-200 px-4 py-2 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">نمایش همه اقدامات</button>}{canCreate && !loadError && <button type="button" onClick={openCreateDrawer} className="rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white">اقدام جدید</button>}</div>
         </div>
       ) : viewMode === 'list' ? (
-        <ActionListView tasks={filteredTasks} onOpen={setDetailTask} onStatus={handleStatusFromWorkspace} />
+        <ActionListView tasks={visibleTasks} onOpen={setDetailTask} onStatus={handleStatusFromWorkspace} />
       ) : viewMode === 'kanban' ? (
-        <ActionKanbanBoard tasks={filteredTasks} onOpen={setDetailTask} onStatus={handleStatusFromWorkspace} onCreate={openCreateDrawer} />
+        <ActionKanbanBoard tasks={filteredTasks} onOpen={setDetailTask} onStatus={handleStatusFromWorkspace} onCreate={canCreate ? openCreateDrawer : undefined} />
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          {filteredTasks.map(task => (
+          {visibleTasks.map(task => (
             <TaskCard
               key={task.id}
               task={task}
@@ -711,6 +788,13 @@ export function TasksPage({ prefillDescription, prefillSourceMessageId, onPrefil
               onEditTask={openTaskForEdit}
             />
           ))}
+        </div>
+      )}
+
+      {filteredTasks.length > 0 && viewMode !== 'kanban' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+          <label className="flex items-center gap-2">تعداد در صفحه<select aria-label="تعداد اقدامات در صفحه" value={pageSize} onChange={event => setPageSize(Number(event.target.value))} className="rounded-lg border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700">{[12, 24, 48].map(size => <option key={size} value={size}>{size.toLocaleString('fa-IR')}</option>)}</select></label>
+          <div className="flex items-center gap-3"><button type="button" disabled={safePage === 1} onClick={() => setPage(safePage - 1)} aria-label="صفحه قبل" className="rounded-lg border border-slate-200 p-1.5 disabled:opacity-30 dark:border-slate-700"><ChevronRight className="h-4 w-4" /></button><span>صفحه {safePage.toLocaleString('fa-IR')} از {pageCount.toLocaleString('fa-IR')}</span><button type="button" disabled={safePage === pageCount} onClick={() => setPage(safePage + 1)} aria-label="صفحه بعد" className="rounded-lg border border-slate-200 p-1.5 disabled:opacity-30 dark:border-slate-700"><ChevronLeft className="h-4 w-4" /></button></div>
         </div>
       )}
 

@@ -6,9 +6,12 @@ import { type OrgUserProfile } from '../../lib/useOrgUsers';
 import { toJalali } from './utils';
 import { JalaliDateInput } from './JalaliDateInput';
 import { UserSelector } from './UserSelector';
+import { isTaskOverdue } from './taskPageSelectors';
 
 export type ActionTask = Task & {
   start_date?: string | null;
+  personal_project_id?: string | null;
+  project_id?: string | null;
   progress_percent?: number | null;
   estimated_minutes?: number | null;
   tags?: string[] | null;
@@ -68,7 +71,7 @@ function TaskCard({
 
   return (
     <div key={task.id} id={`task-${task.id}`}
-      className={`bg-white dark:bg-gray-800 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 p-5 hover:shadow-lg transition-all ${task.archived ? 'opacity-70' : ''}`}>
+      className={`bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 p-4 sm:p-5 hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md transition-all ${task.archived ? 'opacity-70' : ''}`}>
       {isEditing ? (
         <div className="space-y-3">
           <input type="text" value={editingTask?.title || ''}
@@ -155,6 +158,8 @@ function TaskCard({
           </div>
 
           <div className="flex flex-wrap gap-1.5 mb-3">
+            {isTaskOverdue(task) && <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-600 dark:bg-rose-500/10 dark:text-rose-300"><Clock3 className="h-3 w-3" />عقب‌افتاده</span>}
+            {task.archived && <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">بایگانی</span>}
             <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${priorityBadge[task.priority]}`}>
               {task.priority === 'high' ? 'اولویت بالا' : task.priority === 'medium' ? 'متوسط' : 'پایین'}
             </span>
