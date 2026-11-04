@@ -35,7 +35,8 @@ test('header check is read-only; apply overwrites spoofable headers and is idemp
   const updated = readFileSync(file, 'utf8');
   assert.ok(updated.includes('proxy_set_header X-Spark-Client-IP $remote_addr;'));
   assert.ok(updated.includes('proxy_set_header X-Forwarded-For $remote_addr;'));
-  assert.equal(updated.match(/X-Spark-Client-IP/g).length, 1);
+  assert.equal(updated.match(/X-Spark-Client-IP /g).length, 1);
+  assert.ok(updated.includes('proxy_set_header X-Spark-Client-IP-Source nginx-v2;'));
   assert.ok(updated.includes('ssl_certificate /existing/cert;'));
   assert.ok(updated.includes('proxy_set_header Host $host;'));
   assert.ok(updated.includes('proxy_pass http://127.0.0.1:7880;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;'));

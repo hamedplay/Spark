@@ -1,3 +1,4 @@
+import { recordLoginConnection } from "../_shared/sessionConnection.ts";
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import {
   corsResponse,
@@ -189,6 +190,8 @@ async function signInRegisteredUser(
     await revokeLocalSession(accessToken);
     return { ok: false, error: "SESSION_SECURITY_STATE_FAILED" };
   }
+
+  await recordLoginConnection(supabase, req, getSessionIdFromAccessToken(accessToken)!, expectedUserId);
 
   return { ok: true, session: signInData.session, user: signInData.user };
 }

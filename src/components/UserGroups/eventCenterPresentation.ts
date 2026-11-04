@@ -2,6 +2,7 @@ import type { CenterEvent } from './eventCenterModel';
 
 const eventTitles: Record<string, string> = {
   login: 'ورود به سامانه', logout: 'خروج از سامانه',
+  'session.login_connection': 'اتصال هنگام ورود (پیش از تکمیل دسترسی)',
   'session.first_full_access': 'تأیید دسترسی کامل نشست (اولین مشاهده)',
   'auth.login': 'ورود کاربر (احراز هویت)', 'auth.logout': 'خروج کاربر (احراز هویت)',
   'auth.user_signedup': 'ثبت‌نام حساب کاربری', 'auth.user_deleted': 'حذف حساب کاربری',
@@ -62,6 +63,7 @@ const fields: Record<string, string> = {
   attempt_count: 'تعداد تلاش‌های ثبت‌شده', last_seen_at: 'زمان آخرین تلاش', resource: 'مسیر درخواست',
   table: 'موجودیت ثبت‌شده', actor_context: 'نوع عامل', auth_action: 'عملیات احراز هویت',
   auth_provider: 'ارائه‌دهندهٔ احراز هویت', verification_scope: 'دامنهٔ تأیید',
+  reported_ip_address: 'آدرس قدیمی یا سرویس (تأییدنشده)', ip_status: 'اعتبار انتساب IP', client_hints: 'مشخصات تکمیلی نشست (آخرین گزارش، نه زمان رخداد)',
   ip_source: 'منبع IP', session_context: 'اطلاعات اولیهٔ نشست مرتبط', session_device: 'دستگاه ثبت‌شدهٔ نشست',
   is_admin: 'دسترسی مدیر سامانه', is_security_admin: 'دسترسی مدیر امنیت', is_active: 'فعال‌بودن حساب',
   account_status: 'وضعیت حساب', can_broadcast: 'مجوز ارسال همگانی', is_hidden: 'پنهان‌بودن کاربر',
@@ -71,7 +73,8 @@ const fields: Record<string, string> = {
 };
 const values: Record<string, Record<string, string>> = {
   source: { notify_user: 'مطلع جلسه', database_trigger: 'ثبت خودکار دیتابیس', edge_authorization: 'کنترل دسترسی سرور', auth_service: 'سرویس احراز هویت', session_access: 'تأیید نشست در سرور' },
-  ip_source: { proxy_header: 'هدر IP پراکسی', forwarded_header: 'هدر فورواردشده (نیازمند بررسی پراکسی)', auth_service: 'سرویس احراز هویت' },
+  ip_status: { unverified: 'برای انتساب به کاربر تأیید نشده' },
+  ip_source: { trusted_ingress: 'اتصال ثبت‌شده در ورودی سرور', proxy_header: 'هدر IP پراکسی', forwarded_header: 'هدر فورواردشده (نیازمند بررسی پراکسی)', auth_service: 'سرویس احراز هویت' },
   recovery_route: { unified: 'بازیابی یکپارچهٔ حساب' },
   mfa_method: { totp: 'رمز یک‌بارمصرف نرم‌افزاری', sms: 'پیامک', none: 'بدون روش دومرحله‌ای' },
   mode: { dry_run: 'بررسی آزمایشی (بدون تغییر داده)', execute: 'اجرای تغییرات' },

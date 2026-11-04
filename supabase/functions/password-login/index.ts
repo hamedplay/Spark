@@ -1,3 +1,4 @@
+import { connectionHeaders } from "../_shared/sessionConnection.ts";
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import postgres from "npm:postgres@3.4.7";
@@ -408,6 +409,10 @@ Deno.serve(async (req: Request) => {
         return json({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
       }
     }
+
+    try {
+      await db`select public.record_session_connection_service_v1(${sessionId}::uuid,${userId}::uuid,${JSON.stringify(connectionHeaders(req))}::jsonb)`;
+    } catch { console.error('[session-context] persistence failed'); }
 
     return json(
       {

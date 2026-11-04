@@ -1,3 +1,4 @@
+import { connectionHeaders } from "../_shared/sessionConnection.ts";
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 
@@ -49,7 +50,7 @@ Deno.serve(async (req: Request) => {
   const sessionId = payload.session_id;
   const userClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
     auth: { autoRefreshToken: false, persistSession: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
+    global: { headers: { ...connectionHeaders(req), Authorization: `Bearer ${token}` } },
   });
   const { data: accessState, error: accessError } = await userClient.rpc("get_my_auth_access_state_v3");
   if (accessError || !accessState || accessState.access_level !== "FULL") {
@@ -69,6 +70,9 @@ Deno.serve(async (req: Request) => {
 
     // ── MODE: heartbeat ─────────────────────────────────────────────────────
     if (body.mode === "heartbeat") {
+      // Best-effort network evidence is bound again to the verified caller by the RPC.
+      // It must never extend session lifetime or affect access decisions.
+
       const { data: settings, error: settingsError } = await admin
         .from("auth_security_settings")
         .select("session_idle_timeout_minutes,session_management_enabled,session_heartbeat_interval_seconds")
@@ -101,6 +105,11 @@ Deno.serve(async (req: Request) => {
         p_idle_timeout_minutes: idleMinutes,
       });
       if (error || !data?.ok) return json({ ok: false, error: data?.error ?? "HEARTBEAT_FAILED" }, 401);
+      try {
+        const hints = (body as { client_hints?: unknown }).client_hints;
+        const { error: contextError } = await userClient.rpc("record_my_session_connection_v1", { p_client_hints: hints ?? {} });
+        if (contextError) console.error('[session-context] persistence failed');
+      } catch { console.error('[session-context] persistence failed'); }
       return json({
         ok: true,
         session_management: true,

@@ -50,7 +50,7 @@ def patch(match):
             if network not in effective_trusted:
                 effective_trusted.append(network)
     body = tagged_realip.sub('', body)
-    body = re.sub(r'(?mi)^[ \t]*(?:# SPARK_EVENT_CLIENT_IP|proxy_set_header\s+(?:X-Spark-Client-IP|X-Real-IP|X-Forwarded-For)\s+[^;]+;)[ \t]*\n', '', body)
+    body = re.sub(r'(?mi)^[ \t]*(?:# SPARK_EVENT_CLIENT_IP|proxy_set_header\s+(?:X-Spark-Client-IP(?:-Source)?|X-Real-IP|X-Forwarded-For)\s+[^;]+;)[ \t]*\n', '', body)
 
     def headers(upstream_match):
         indent = upstream_match.group(1)
@@ -62,6 +62,7 @@ def patch(match):
         lines.extend([
             '# SPARK_EVENT_CLIENT_IP',
             'proxy_set_header X-Spark-Client-IP $remote_addr;',
+            'proxy_set_header X-Spark-Client-IP-Source nginx-v2;',
             'proxy_set_header X-Real-IP $remote_addr;',
             'proxy_set_header X-Forwarded-For $remote_addr;',
         ])

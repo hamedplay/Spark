@@ -1,3 +1,4 @@
+import { collectClientHints } from '../services/clientHints';
 import { useEffect } from 'react';
 import { supabase } from '../../../lib/supabase';
 import { readSessionHeartbeatError, sessionHeartbeatRetrySeconds } from './sessionHeartbeatErrors';
@@ -42,7 +43,7 @@ export function useSessionHeartbeat(enabled: boolean): void {
       try {
         const { data, error } = await supabase.functions.invoke('session-management', {
           method: 'POST',
-          body: { mode: 'heartbeat' },
+          body: { mode: 'heartbeat', client_hints: await collectClientHints() },
         });
 
         if (cancelled) return;

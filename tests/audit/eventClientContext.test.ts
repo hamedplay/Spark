@@ -42,7 +42,7 @@ test('event and initial session context remain separate without replacing missin
   const before = JSON.stringify(event);
   const result = eventClientContext(event);
   assert.equal(result.current.ip, null); assert.equal(result.current.userAgent, null);
-  assert.equal(result.session?.ip, '2001:db8::7'); assert.equal(result.session?.platform, 'اپل');
+  assert.equal(result.session?.ip, null); assert.equal(result.session?.reportedIp, '2001:db8::7'); assert.equal(result.session?.platform, 'اپل');
   assert.equal(JSON.stringify(event), before);
   const registry = eventClientContext({ source: 'security', ip_address: null, metadata: { session_device: { user_agent: chrome } } });
   assert.equal(registry.session?.ip, null); assert.match(registry.session!.provenance, /هنگام ثبت نشست/);

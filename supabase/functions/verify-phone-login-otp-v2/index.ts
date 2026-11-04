@@ -1,3 +1,4 @@
+import { recordLoginConnection } from "../_shared/sessionConnection.ts";
 import "jsr:@supabase/functions-js@2.111.0/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 import {
@@ -702,6 +703,8 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "LOGIN_UNAVAILABLE" }, 503, allowedOrigin);
     }
   }
+
+  await recordLoginConnection(admin, req, jwtClaims.sessionId, claim.userId);
 
   await writeAudit(admin);
 

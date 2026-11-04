@@ -5,7 +5,7 @@ const text = (value: unknown) => typeof value === 'string' && value.trim() ? val
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 /** Descriptive UA parsing, never a hardware fingerprint or proof of identity. */
-export function describeUserAgent(value: unknown) {
+export function describeUserAgent(value: unknown, hints: Record<string, unknown> = {}) {
   const ua = text(value)?.slice(0, 512) ?? null;
   let browser = missing;
   let os = missing;
@@ -50,11 +50,26 @@ export function describeUserAgent(value: unknown) {
   } else if (/Linux|X11/.test(ua)) {
     platform = 'رایانه'; device = 'رایانه'; os = 'لینوکس';
   }
+  const version = text(hints.platformVersion);
+  if (hints.platform === 'Windows' && version && /^\d+(?:\.\d+)*$/.test(version)) {
+    const major = Number(version.split('.')[0]);
+    if (major >= 13) { os = 'ویندوز ۱۱'; notes.splice(0); }
+    else if (major >= 1) { os = 'ویندوز ۱۰'; notes.splice(0); }
+  }
+  if (hints.platform === 'Android' && version && /^[\d.]+$/.test(version)) { os = `اندروید ${version}`; notes.splice(0); }
+  if (/Macintosh/.test(ua) && Number(hints.maxTouchPoints) > 1) {
+    device = 'تبلت (آیپد)'; os = 'iPadOS (نسخهٔ دقیق اعلام نشده)'; notes.splice(0);
+  }
+  const model = text(hints.model);
+  if (model && platform === 'اندروید') device += ` · ${model.slice(0,100)}`;
+  const brands: Record<string,string> = { 'Microsoft Edge':'مایکروسافت اج','Google Chrome':'گوگل کروم','Opera':'اپرا','Chromium':'کرومیوم' };
+  const brand = text(hints.browser);
+  if (brand && Object.hasOwn(brands,brand) && text(hints.browserVersion)) browser = `${brands[brand]} ${text(hints.browserVersion)!.slice(0,100)}`;
   return { userAgent: ua, browser, os, device, platform, notes };
 }
 
 const ipSources: Record<string, string> = {
-  proxy_header: 'هدر IP پراکسی', forwarded_header: 'هدر فورواردشده (نیازمند بررسی پراکسی)',
+  trusted_ingress: 'اتصال ثبت‌شده در ورودی سرور', proxy_header: 'هدر قدیمی پراکسی (تأییدنشده)', forwarded_header: 'هدر فورواردشده (نیازمند بررسی پراکسی)',
   auth_service: 'سرویس احراز هویت', stored_event: 'رکورد اصلی رخداد',
 };
 export const ipSourceTitle = (source: unknown) => Object.prototype.hasOwnProperty.call(ipSources, String(source)) ? ipSources[String(source)] : missing;
@@ -66,10 +81,10 @@ export function eventClientContext(event: Pick<CenterEvent, 'source' | 'ip_addre
   const current = describeUserAgent(metadata.user_agent);
   const related = describeUserAgent(session.user_agent ?? registry.user_agent);
   return {
-    current: { ...current, ip: text(event.ip_address), ipSource: ipSourceTitle(metadata.ip_source ?? (event.ip_address ? 'stored_event' : null)),
+    current: { ...current, reportedIp: text(metadata.reported_ip_address) ?? (metadata.ip_source !== 'trusted_ingress' ? text(event.ip_address) : null), ip: metadata.ip_source === 'trusted_ingress' ? text(event.ip_address) : null, ipSource: ipSourceTitle(metadata.ip_source ?? (event.ip_address ? 'stored_event' : null)),
       provenance: current.userAgent ? event.source === 'application' ? 'مشخصات ارسالی مرورگر در گزارش فعالیت' : 'مشخصات درخواست ثبت‌شده' : missing },
     session: Object.keys(session).length || related.userAgent ? {
-      ...related, ip: text(session.ip_address), ipSource: ipSourceTitle(session.ip_source), observedAt: text(session.observed_at),
+      ...related, reportedIp: text(session.reported_ip_address) ?? (session.ip_source !== 'trusted_ingress' ? text(session.ip_address) : null), ip: session.ip_source === 'trusted_ingress' ? text(session.ip_address) : null, ipSource: ipSourceTitle(session.ip_source), observedAt: text(session.observed_at),
       provenance: Object.keys(session).length ? 'اولین درخواست نشست پس از تأیید دسترسی کامل' : 'مشخصات دستگاه هنگام ثبت نشست',
     } : null,
   };
