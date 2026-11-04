@@ -5,6 +5,8 @@ export interface Note {
   drawing_data?: string | null;
   note_type: 'text' | 'voice';
   created_at: string;
+  remind_at?: string | null;
+  reminder_sent_at?: string | null;
   user_id: string;
   status: 'active' | 'archived';
   file_url?: string;

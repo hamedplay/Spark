@@ -15,6 +15,7 @@ import { BrandedShareCard } from './Notes/BrandedShareCard';
 import { RecordingIndicator } from './Notes/RecordingIndicator';
 import { NotesToolbar } from './Notes/NotesToolbar';
 import { NoteCard } from './Notes/NoteCard';
+import { validateNoteReminder } from './Notes/reminderTime';
 
 const ShareImageModal = lazy(() => import('./Notes/ShareImageModal').then((m) => ({ default: m.ShareImageModal })));
 const CreateNoteForm = lazy(() => import('./Notes/CreateNoteForm').then((m) => ({ default: m.CreateNoteForm })));
@@ -33,6 +34,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   const canDelete = hasPermission('notes_delete');
   const [notes, setNotes] = useState<Note[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [newReminderAt, setNewReminderAt] = useState<string | null>(null);
   const [isFormRecording, setIsFormRecording] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
@@ -373,12 +375,14 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     }
 
     try {
+      validateNoteReminder(newReminderAt);
       const { data, error } = await supabase
         .from('notes')
         .insert([{
           title: newNote.title,
           content: newNote.content,
           note_type: 'text',
+          remind_at: newReminderAt,
           user_id: userId,
           status: 'active'
         }])
@@ -389,11 +393,12 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
 
       setNotes(prev => [data, ...prev]);
       setNewNote({ title: '', content: '' });
+      setNewReminderAt(null);
       setShowCreateForm(false);
       toast.success('یادداشت با موفقیت ایجاد شد');
     } catch (error: any) {
       console.error('Error creating note:', error);
-      toast.error('خطا در ایجاد یادداشت');
+      toast.error(error?.message || 'خطا در ایجاد یادداشت');
     }
   };
 
@@ -406,11 +411,14 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
     if (!editingNote) return;
 
     try {
+      const original = notes.find(note => note.id === editingNote.id);
+      validateNoteReminder(editingNote.remind_at ?? null, original?.remind_at ?? null);
       const { error } = await supabase
         .from('notes')
         .update({
           title: editingNote.title,
-          content: editingNote.content
+          content: editingNote.content,
+          remind_at: editingNote.remind_at ?? null
         })
         .eq('id', editingNote.id);
 
@@ -420,9 +428,9 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       setEditingNoteId(null);
       setEditingNote(null);
       fetchNotes();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating note:', error);
-      toast.error('خطا در به‌روزرسانی یادداشت');
+      toast.error(error?.message || 'خطا در به‌روزرسانی یادداشت');
     }
   };
 
@@ -555,6 +563,8 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
             newNote={newNote}
             setNewNote={setNewNote}
             onSubmit={handleCreateNote}
+            reminderAt={newReminderAt}
+            onReminderChange={setNewReminderAt}
             isFormRecording={isFormRecording}
             onToggleRecording={() => toggleRecording(true)}
             />

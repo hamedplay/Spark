@@ -1,9 +1,12 @@
 import { Save, Mic, FileText } from 'lucide-react';
+import { ReminderField } from './ReminderField';
 
-export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording, onToggleRecording }: {
+export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording, onToggleRecording, reminderAt, onReminderChange }: {
   newNote: { title: string; content: string };
   setNewNote: React.Dispatch<React.SetStateAction<{ title: string; content: string }>>;
   onSubmit: (e: React.FormEvent) => void;
+  reminderAt: string | null;
+  onReminderChange: (value: string | null) => void;
   isFormRecording: boolean;
   onToggleRecording: () => void;
 }) {
@@ -56,6 +59,7 @@ export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording,
             required
           />
         </div>
+        <ReminderField value={reminderAt} onChange={onReminderChange} />
         <div className="flex justify-end">
           <button
             type="submit"

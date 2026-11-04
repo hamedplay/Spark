@@ -1,5 +1,6 @@
-import { Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
+import { Bell, Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
 import type { Note } from './types';
+import { ReminderField } from './ReminderField';
 import { getFileIcon, formatFileSize } from './utils';
 
 interface NoteCardProps {
@@ -52,6 +53,8 @@ export function NoteCard({
             rows={4}
             className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-700 outline-none transition focus:border-violet-300 focus:ring-2 focus:ring-violet-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
+          <ReminderField value={editingNote?.remind_at ?? null} disabled={note.status === 'archived'}
+            onChange={value => onSetEditingNote(prev => prev ? { ...prev, remind_at: value } : null)} />
           <div className="grid grid-cols-2 gap-2">
             <button onClick={onHandleSaveEdit} className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-l from-violet-600 to-indigo-600 text-xs font-bold text-white transition hover:from-violet-500 hover:to-indigo-500">
               <Save className="h-3.5 w-3.5" /> ذخیره
@@ -135,6 +138,14 @@ export function NoteCard({
             <p className={`${isExpanded ? 'whitespace-pre-wrap' : 'mobile-line-clamp-3'} text-[11px] leading-5 text-slate-600 dark:text-slate-400`}>{note.content}</p>
           </button>
 
+          {note.remind_at && (
+            <p className="mt-2 flex items-center gap-1 text-[10px] leading-5 text-amber-700 dark:text-amber-300">
+              <Bell className="h-3 w-3 flex-shrink-0" />
+              {note.reminder_sent_at ? 'یادآوری ارسال شد: ' : 'یادآوری: '}
+              {new Date(note.remind_at).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' })}
+            </p>
+          )}
+
           {note.file_url && (
             <button
               type="button"
@@ -153,6 +164,11 @@ export function NoteCard({
           <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 dark:border-slate-800">
             <span className="text-[9px] text-slate-400 dark:text-slate-500">{new Date(note.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span>
             <div className="flex items-center gap-1.5">
+              {canEdit && note.status === 'active' && (
+                <button type="button" onClick={() => onHandleEditNote(note)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[9px] font-bold text-amber-700 dark:text-amber-300">
+                  <Bell className="h-3 w-3" /> یادآوری
+                </button>
+              )}
               {note.content.length > 80 && (
                 <button onClick={() => onSetExpandedNoteId(isExpanded ? null : note.id)} className="rounded-lg px-2 py-1 text-[9px] font-bold text-violet-600 transition hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-500/10">
                   {isExpanded ? 'جمع کردن' : 'مشاهده کامل'}
