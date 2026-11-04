@@ -33,7 +33,9 @@ export function TutorialPage({ onAskSpark }: TutorialPageProps) {
         section.title.includes(query) ||
         section.overview.includes(query) ||
         section.icons.some(item => item.name.includes(query) || item.desc.includes(query)) ||
-        section.steps.some(step => step.title.includes(query) || step.items.some(item => item.includes(query)))
+        section.steps.some(step => step.title.includes(query) || step.items.some(item => item.includes(query))) ||
+        section.tips.some(tip => tip.includes(query)) ||
+        section.sparkQuestions.some(question => question.includes(query))
       )
     : SECTIONS;
 

@@ -1,3 +1,4 @@
+import { ManagementDashboardSection } from './ManagementDashboardSection';
 import { MeetingsSection } from './MeetingsSection';
 import { CalendarSection } from './CalendarSection';
 import { MinutesSection } from './MinutesSection';
@@ -10,9 +11,12 @@ import { ReportsSection } from './ReportsSection';
 import { VideoSection } from './VideoSection';
 import { SparkSection } from './SparkSection';
 import { ProfileSection } from './ProfileSection';
+import { UserSettingsSection } from './UserSettingsSection';
+import { PortalConfigSection } from './PortalConfigSection';
 import type { GuideSection } from './types';
 
 export const SECTIONS: GuideSection[] = [
+  ManagementDashboardSection,
   MeetingsSection,
   CalendarSection,
   MinutesSection,
@@ -25,4 +29,6 @@ export const SECTIONS: GuideSection[] = [
   VideoSection,
   SparkSection,
   ProfileSection,
+  UserSettingsSection,
+  PortalConfigSection,
 ];
