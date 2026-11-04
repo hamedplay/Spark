@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changedFields, exportEvents, isAttentionEvent, isEventCenterSchemaMissing, eventCenterErrorMessage, type CenterEvent } from '../../src/components/UserGroups/eventCenterModel';
+import { changedFields, exportEvents, isAttentionEvent, isEventCenterSchemaMissing, eventCenterErrorMessage, parseEventCenterSummary, type CenterEvent } from '../../src/components/UserGroups/eventCenterModel';
 
 test('attention includes denied/failure independently of severity', () => {
   assert.equal(isAttentionEvent({ severity: 'info', result: 'denied' }), true);
@@ -28,4 +28,13 @@ test('missing RPC has explicit guidance and is distinct from authorization/netwo
   assert.match(eventCenterErrorMessage({ code: 'PGRST202' }), /کش API/);
   assert.match(eventCenterErrorMessage({ code: '42501' }), /مجوز/);
   assert.equal(isEventCenterSchemaMissing(null), false);
+});
+
+test('full-history totals are validated independently of loaded events', () => {
+  assert.deepEqual(parseEventCenterSummary({ total_events: 15000, login_events: 12000, attention_events: 4, denied_events: 3, unique_actors: 22 }), {
+    total_events: 15000, login_events: 12000, attention_events: 4, denied_events: 3, unique_actors: 22,
+  });
+  assert.equal(parseEventCenterSummary({ total_events: 1 }), null);
+  assert.equal(parseEventCenterSummary({ total_events: -1, login_events: 0, attention_events: 0, denied_events: 0, unique_actors: 0 }), null);
+  assert.equal(parseEventCenterSummary(null), null);
 });
