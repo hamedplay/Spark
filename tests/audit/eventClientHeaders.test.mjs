@@ -43,6 +43,19 @@ test('header check is read-only; apply overwrites spoofable headers and is idemp
   assert.equal(spawnSync('python3', [patcher, '--apply', file]).status, 0);
   assert.equal(readFileSync(file, 'utf8'), updated);
 }));
+test('explicit trusted proxy CIDR passes and is preserved on subsequent normal updates', () => fixture(({ file }) => {
+  assert.equal(spawnSync('python3', [patcher, '--apply', file, '--trusted-proxy', 'bad-cidr']).status, 1);
+  assert.equal(readFileSync(file, 'utf8'), config);
+  assert.equal(spawnSync('python3', [patcher, '--apply', file, '--trusted-proxy', '172.18.0.7/32']).status, 0);
+  const updated = readFileSync(file, 'utf8');
+  assert.ok(updated.includes('set_real_ip_from 172.18.0.7/32;'));
+  assert.ok(updated.includes('real_ip_recursive on;'));
+  assert.ok(updated.includes('real_ip_header X-Forwarded-For;'));
+  assert.ok(updated.includes('proxy_set_header X-Spark-Client-IP $remote_addr;'));
+  assert.equal(spawnSync('python3', [patcher, '--check', file, '--trusted-proxy', '172.18.0.7/32']).status, 0);
+  assert.equal(spawnSync('python3', [patcher, '--apply', file]).status, 0);
+  assert.equal(readFileSync(file, 'utf8'), updated);
+}));
 test('unsupported inline Supabase locations fail without a partial write', () => fixture(({ file }) => {
   const unsupported = `${config}\nserver {\n    location / { proxy_pass http://127.0.0.1:8000; }\n}\n`;
   writeFileSync(file, unsupported);
