@@ -1,10 +1,13 @@
 import { Bell, Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
 import type { Note } from './types';
-import { ReminderField } from './ReminderField';
+import { ReminderField, type ReminderUser } from './ReminderField';
 import { getFileIcon, formatFileSize } from './utils';
 
 interface NoteCardProps {
   note: Note;
+  reminderUsers?: ReminderUser[];
+  usersLoading?: boolean;
+  usersError?: boolean;
   colors: { bg: string; border: string; header: string };
   isExpanded: boolean;
   isEditing: boolean;
@@ -29,7 +32,7 @@ interface NoteCardProps {
 }
 
 export function NoteCard({
-  note, colors, isExpanded, isEditing, editingNote, shareMenuOpen, canEdit, canDelete,
+  note, reminderUsers, usersLoading, usersError, colors, isExpanded, isEditing, editingNote, shareMenuOpen, canEdit, canDelete,
   shareMenuRef, onSetExpandedNoteId, onSetEditingNote, onSetEditingNoteId, onHandleSaveEdit,
   onHandleEditNote, onHandleArchiveNote, onSetDeleteConfirmId, onSetAssignNote, onSetAssignSearch,
   onSetShareMenuNoteId, onHandleShareImage, onHandleShareText, onHandleFileClick,
@@ -54,7 +57,10 @@ export function NoteCard({
             className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-700 outline-none transition focus:border-violet-300 focus:ring-2 focus:ring-violet-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
           <ReminderField value={editingNote?.remind_at ?? null} disabled={note.status === 'archived'}
-            onChange={value => onSetEditingNote(prev => prev ? { ...prev, remind_at: value } : null)} />
+            recipientIds={editingNote?.reminder_user_ids ?? []}
+            onRecipientsChange={ids => onSetEditingNote(prev => prev ? { ...prev, reminder_user_ids: ids } : null)}
+            users={reminderUsers} usersLoading={usersLoading} usersError={usersError}
+            onChange={value => onSetEditingNote(prev => prev ? { ...prev, remind_at: value, reminder_user_ids: value ? prev.reminder_user_ids : [] } : null)} />
           <div className="grid grid-cols-2 gap-2">
             <button onClick={onHandleSaveEdit} className="flex h-9 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-l from-violet-600 to-indigo-600 text-xs font-bold text-white transition hover:from-violet-500 hover:to-indigo-500">
               <Save className="h-3.5 w-3.5" /> ذخیره
@@ -66,8 +72,8 @@ export function NoteCard({
         </div>
       ) : (
         <>
-          <div className="mb-2 flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
+          <div className="mb-2 flex flex-col gap-2">
+            <div className="order-2 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className={`h-2 w-2 flex-shrink-0 rounded-full ${colors.header}`} aria-hidden="true" />
                 <h3 className="truncate text-sm font-bold text-slate-800 dark:text-white">{note.title}</h3>
@@ -85,7 +91,7 @@ export function NoteCard({
               </div>
             </div>
 
-            <div className="flex flex-shrink-0 items-center gap-1">
+            <div className="order-1 flex flex-wrap items-center justify-end gap-1 border-b border-slate-100 pb-2 dark:border-slate-800">
               <div className="relative" ref={shareMenuOpen ? shareMenuRef : undefined}>
                 <button
                   onClick={() => onSetShareMenuNoteId(v => v === note.id ? null : note.id)}
@@ -141,7 +147,7 @@ export function NoteCard({
           {note.remind_at && (
             <p className="mt-2 flex items-center gap-1 text-[10px] leading-5 text-amber-700 dark:text-amber-300">
               <Bell className="h-3 w-3 flex-shrink-0" />
-              {note.reminder_sent_at ? 'یادآوری ارسال شد: ' : 'یادآوری: '}
+              {note.reminder_sent_at ? 'اعلان یادآوری ثبت شد: ' : 'یادآوری: '}
               {new Date(note.remind_at).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' })}
             </p>
           )}

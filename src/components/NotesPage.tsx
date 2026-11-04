@@ -34,6 +34,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   const canDelete = hasPermission('notes_delete');
   const [notes, setNotes] = useState<Note[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [newReminderUsers, setNewReminderUsers] = useState<string[]>([]);
   const [newReminderAt, setNewReminderAt] = useState<string | null>(null);
   const [isFormRecording, setIsFormRecording] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,7 +52,8 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   const [assignNote, setAssignNote] = useState<Note | null>(null);
   const [assignSearch, setAssignSearch] = useState('');
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
-  const { allUsers: orgUsers } = useOrgUsers(userId, assignNote !== null);
+  const { allUsers: orgUsers, loading: reminderUsersLoading, error: reminderUsersError } = useOrgUsers(userId, assignNote !== null || showCreateForm || editingNoteId !== null);
+  const reminderUsers = orgUsers.filter(user => user.user_id !== userId);
   const [newNote, setNewNote] = useState({
     title: '',
     content: ''
@@ -383,6 +385,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
           content: newNote.content,
           note_type: 'text',
           remind_at: newReminderAt,
+          reminder_user_ids: newReminderAt ? newReminderUsers : [],
           user_id: userId,
           status: 'active'
         }])
@@ -394,6 +397,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
       setNotes(prev => [data, ...prev]);
       setNewNote({ title: '', content: '' });
       setNewReminderAt(null);
+      setNewReminderUsers([]);
       setShowCreateForm(false);
       toast.success('یادداشت با موفقیت ایجاد شد');
     } catch (error: any) {
@@ -418,7 +422,8 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
         .update({
           title: editingNote.title,
           content: editingNote.content,
-          remind_at: editingNote.remind_at ?? null
+          remind_at: editingNote.remind_at ?? null,
+          reminder_user_ids: editingNote.remind_at ? editingNote.reminder_user_ids ?? [] : []
         })
         .eq('id', editingNote.id);
 
@@ -564,7 +569,12 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
             setNewNote={setNewNote}
             onSubmit={handleCreateNote}
             reminderAt={newReminderAt}
-            onReminderChange={setNewReminderAt}
+            onReminderChange={value => { setNewReminderAt(value); if (!value) setNewReminderUsers([]); }}
+            reminderUserIds={newReminderUsers}
+            onReminderUsersChange={setNewReminderUsers}
+            reminderUsers={reminderUsers}
+            usersLoading={reminderUsersLoading}
+            usersError={reminderUsersError}
             isFormRecording={isFormRecording}
             onToggleRecording={() => toggleRecording(true)}
             />
@@ -586,6 +596,9 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
               <NoteCard
                 key={note.id}
                 note={note}
+                reminderUsers={reminderUsers}
+                usersLoading={reminderUsersLoading}
+                usersError={reminderUsersError}
                 colors={colors}
                 isExpanded={isExpanded}
                 isEditing={editingNoteId === note.id}

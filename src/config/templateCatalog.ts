@@ -168,6 +168,7 @@ export const TEMPLATE_PLACEHOLDERS: TemplatePlaceholder[] = [
   { key: 'event_title',      label: 'عنوان رویداد',           example: 'جشن سالگرد' },
   { key: 'event_date',       label: 'تاریخ رویداد',           example: '۱۴۰۳/۰۵/۱۰' },
   { key: 'sender_name',      label: 'نام فرستنده',            example: 'سارا رضایی' },
+  { key: 'note_content', label: 'متن یادداشت', example: 'متن یادآوری شما' },
   { key: 'note_title',       label: 'عنوان یادداشت',          example: 'یادداشت جلسه' },
   { key: 'message_preview',  label: 'پیش‌نمایش پیام',         example: 'سلام، آیا گزارش آماده شده؟' },
   { key: 'alert_message',   label: 'متن هشدار',              example: 'خرابی موقت در سرویس ایمیل' },
@@ -583,6 +584,11 @@ export const TEMPLATE_EVENTS: TemplateEventDefinition[] = [
     optionalPlaceholders: [],
   },
   // Note events
+  {
+    key: 'reminder', category: 'note', label: 'یادآوری یادداشت',
+    supportedChannels: ['notification', 'sms'], audiences: ['all'],
+    requiredPlaceholders: ['note_title', 'note_content'], optionalPlaceholders: [],
+  },
   {
     key: 'share',
     category: 'note',

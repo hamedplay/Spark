@@ -1,11 +1,16 @@
 import { Save, Mic, FileText } from 'lucide-react';
-import { ReminderField } from './ReminderField';
+import { ReminderField, type ReminderUser } from './ReminderField';
 
-export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording, onToggleRecording, reminderAt, onReminderChange }: {
+export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording, onToggleRecording, reminderAt, onReminderChange, reminderUserIds, onReminderUsersChange, reminderUsers, usersLoading, usersError }: {
   newNote: { title: string; content: string };
   setNewNote: React.Dispatch<React.SetStateAction<{ title: string; content: string }>>;
   onSubmit: (e: React.FormEvent) => void;
   reminderAt: string | null;
+  reminderUserIds?: string[];
+  onReminderUsersChange?: (ids: string[]) => void;
+  reminderUsers?: ReminderUser[];
+  usersLoading?: boolean;
+  usersError?: boolean;
   onReminderChange: (value: string | null) => void;
   isFormRecording: boolean;
   onToggleRecording: () => void;
@@ -59,7 +64,7 @@ export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording,
             required
           />
         </div>
-        <ReminderField value={reminderAt} onChange={onReminderChange} />
+        <ReminderField value={reminderAt} onChange={onReminderChange} recipientIds={reminderUserIds} onRecipientsChange={onReminderUsersChange} users={reminderUsers} usersLoading={usersLoading} usersError={usersError} />
         <div className="flex justify-end">
           <button
             type="submit"

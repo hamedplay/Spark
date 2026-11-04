@@ -47,3 +47,6 @@ verify_jwt = false
 # The Push worker authenticates its dedicated Vault token before any queue read.
 [functions.pwa-push-worker]
 verify_jwt = false
+
+[functions.note-reminder-worker]
+verify_jwt = false # Dedicated database-generated worker token is verified before any work.
