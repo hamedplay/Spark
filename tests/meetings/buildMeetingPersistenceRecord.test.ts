@@ -31,6 +31,7 @@ function createInput(
     participantUserIds: ['participant-1'],
 
     externalParticipants: ['external@example.com'],
+    externalInformees: [],
 
     repeatEnabled: false,
     repeatType: 'weekly',
@@ -78,6 +79,7 @@ test('builds the legacy manual-request record', () => {
     participant_user_ids: ['participant-1'],
 
     external_participants: ['external@example.com'],
+    external_informees: [],
 
     repeat_type: 'none',
     repeat_interval: null,
@@ -203,4 +205,12 @@ test('maps enabled weekly and monthly repeat fields with legacy nullability', ()
   assert.equal(monthlyResult.meeting_manager, 'manager-1');
   assert.equal(monthlyResult.calendar_id, 'calendar-1');
   assert.equal(monthlyResult.send_sms, false);
+});
+
+test('stores external informees separately from participants and clears removed informees', () => {
+  const result = buildMeetingPersistenceRecord(createInput({ externalInformees: ['مطلع بیرونی'] }));
+  assert.deepEqual(result.external_informees, ['مطلع بیرونی']);
+  assert.deepEqual(result.external_participants, ['external@example.com']);
+  assert.deepEqual(result.notify_users, ['owner-1', 'notify-1']);
+  assert.deepEqual(buildMeetingPersistenceRecord(createInput({ externalInformees: [] })).external_informees, []);
 });

@@ -4,6 +4,7 @@ export interface MeetingPeoplePrefill {
   participantUserIds: string[] | null;
   notifyUserIds: string[] | null;
   externalParticipants: string[] | null;
+  externalInformees: string[] | null;
 }
 
 export async function fetchMeetingPeoplePrefill(
@@ -11,7 +12,7 @@ export async function fetchMeetingPeoplePrefill(
 ): Promise<MeetingPeoplePrefill | null> {
   const { data, error } = await supabase
     .from('meetings')
-    .select('participant_user_ids, notify_users, external_participants')
+    .select('participant_user_ids, notify_users, external_participants, external_informees')
     .eq('id', meetingId)
     .maybeSingle();
   if (error) throw error;
@@ -24,5 +25,6 @@ export async function fetchMeetingPeoplePrefill(
     participantUserIds: data.participant_user_ids ?? null,
     notifyUserIds: data.notify_users ?? null,
     externalParticipants: data.external_participants ?? null,
+    externalInformees: data.external_informees ?? null,
   };
 }

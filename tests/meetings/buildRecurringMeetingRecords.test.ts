@@ -70,6 +70,7 @@ function createBaseRecord(
     notify_users: ['user-2'],
     participant_user_ids: ['user-3'],
     external_participants: ['bob@example.com'],
+    external_informees: ['مطلع بیرونی'],
     repeat_type: 'weekly',
     repeat_interval: 1,
     repeat_end_date: null,
@@ -268,4 +269,14 @@ test('uses the Jalali repeat end date through its local end of day', () => {
   const expectedRequestDates = expectedDates.map((d) => d.toISOString());
   const actualRequestDates = result.map((r) => r.request_date);
   assert.deepEqual(actualRequestDates, expectedRequestDates);
+});
+
+test('preserves external informees on every repeated occurrence', () => {
+  const input = createInput();
+  const records = buildRecurringMeetingRecords(input);
+  assert.ok(records.length > 0);
+  for (const record of records) {
+    assert.deepEqual(record.external_informees, ['مطلع بیرونی']);
+    assert.deepEqual(record.external_participants, ['bob@example.com']);
+  }
 });

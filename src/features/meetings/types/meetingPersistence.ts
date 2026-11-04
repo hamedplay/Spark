@@ -29,6 +29,7 @@ export interface MeetingPersistenceRecord {
   notify_users: string[];
   participant_user_ids: string[];
   external_participants: string[];
+  external_informees: string[];
 
   repeat_type: MeetingPersistenceRepeatType;
   repeat_interval: number | null;

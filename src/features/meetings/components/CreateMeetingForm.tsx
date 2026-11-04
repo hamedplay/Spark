@@ -40,6 +40,7 @@ import { insertMeetingParticipantSnapshots } from '../repositories/meetingPartic
 import { MeetingFormAuthFallback } from './CreateMeetingForm/MeetingFormAuthFallback';
 import { RepresentativeContactField } from './CreateMeetingForm/RepresentativeContactField';
 import { ExternalParticipantsField } from './CreateMeetingForm/ExternalParticipantsField';
+import { ExternalInformeesSection } from '../../../components/CalendarMeetingForm/ExternalInformeesSection';
 import { AgendaEditor } from './CreateMeetingForm/AgendaEditor';
 import { RecurrenceFields } from './CreateMeetingForm/RecurrenceFields';
 import { MeetingCoreFields } from './CreateMeetingForm/MeetingCoreFields';
@@ -125,6 +126,21 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
   const [newExternalCompany, setNewExternalCompany] = useState('');
   const [newExternalPosition, setNewExternalPosition] = useState('');
   const [showAddExternal, setShowAddExternal] = useState(false);
+
+  const [selectedExternalInformees, setSelectedExternalInformees] = useState<string[]>([]);
+  const [externalInformeeSearch, setExternalInformeeSearch] = useState('');
+  const [showExternalInformeeDropdown, setShowExternalInformeeDropdown] = useState(false);
+  const externalInformeeSearchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const closeDropdown = (event: MouseEvent) => {
+      if (externalInformeeSearchRef.current && !externalInformeeSearchRef.current.contains(event.target as Node)) {
+        setShowExternalInformeeDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', closeDropdown);
+    return () => document.removeEventListener('mousedown', closeDropdown);
+  }, []);
 
   // Repeat
   const seriesOperationRef = useRef(crypto.randomUUID());
@@ -273,12 +289,12 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
       if (prefillData.participantUserIds && prefillData.participantUserIds.length > 0) {
         setSelectedParticipants(resolvePrefillUsersByIds(prefillData.participantUserIds));
       }
-      // Load participants, notify users and external participants from existing meeting record (when scheduling from pending)
-      if (prefillData.meetingId && (!prefillData.participantUserIds || prefillData.participantUserIds.length === 0)) {
+      // Load all recipient roles even when participant IDs were supplied by the caller.
+      if (prefillData.meetingId) {
         (async () => {
           try {
             const peoplePrefill = await fetchMeetingPeoplePrefill(prefillData.meetingId);
-            if (peoplePrefill?.participantUserIds?.length) {
+            if (!prefillData.participantUserIds?.length && peoplePrefill?.participantUserIds?.length) {
               setSelectedParticipants(resolvePrefillUsersByIds(peoplePrefill.participantUserIds));
             }
             if (peoplePrefill?.notifyUserIds?.length) {
@@ -287,6 +303,7 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
             if (peoplePrefill?.externalParticipants?.length) {
               setSelectedExternal(peoplePrefill.externalParticipants);
             }
+            setSelectedExternalInformees(peoplePrefill?.externalInformees ?? []);
           } catch {
             return;
           }
@@ -371,6 +388,7 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
 
         externalParticipants:
           selectedExternal,
+        externalInformees: selectedExternalInformees,
 
         repeatEnabled,
         repeatType,
@@ -447,6 +465,7 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
     setPhone(''); setNotes(''); setPriority('medium'); setStatusType('requested'); setSaveContact(false);
     setRepFromContacts(false);
     setSelectedParticipants([]); setSelectedNotifyUsers([]); setSelectedExternal([]);
+    setSelectedExternalInformees([]); setExternalInformeeSearch(''); setShowExternalInformeeDropdown(false);
     setRepeatEnabled(false); setRepeatType('weekly'); setRepeatInterval(1); setRepeatEndDate('');
     setRepeatWeekday(0); setRepeatMonthlyMode('specific'); setRepeatMonthlyWeekday(0);
     setReminderMinutes(15); setMeetingManager('');
@@ -594,6 +613,26 @@ export function CreateMeetingForm({ currentUserId: providedCurrentUserId = null,
         onAddFormOpenChange={setShowAddExternal}
         onAddContact={addQuickExternal}
       />
+
+      <div className="mt-5">
+        <ExternalInformeesSection
+          searchRef={externalInformeeSearchRef}
+          selected={selectedExternalInformees}
+          setSelected={setSelectedExternalInformees}
+          search={externalInformeeSearch}
+          setSearch={setExternalInformeeSearch}
+          showDropdown={showExternalInformeeDropdown}
+          setShowDropdown={setShowExternalInformeeDropdown}
+          options={contacts
+            .map(contact => ({
+              id: contact.id,
+              name: contact.name,
+              sub: [contact.position, contact.company, contact.phone].filter(Boolean).join(' · '),
+            }))
+            .filter(contact => !selectedExternalInformees.includes(contact.name)
+              && `${contact.name} ${contact.sub}`.toLowerCase().includes(externalInformeeSearch.toLowerCase()))}
+        />
+      </div>
 
       {/* Meeting Manager */}
       <MeetingManagerField

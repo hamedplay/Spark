@@ -25,6 +25,7 @@ export interface BuildMeetingPersistenceRecordInput {
   notifyUserIds: string[];
   participantUserIds: string[];
   externalParticipants: string[];
+  externalInformees: string[];
 
   repeatEnabled: boolean;
   repeatType: EnabledRepeatType;
@@ -86,6 +87,7 @@ export function buildMeetingPersistenceRecord(
     participant_user_ids: input.participantUserIds,
 
     external_participants: input.externalParticipants,
+    external_informees: input.externalInformees,
 
     repeat_type:
       input.repeatEnabled
