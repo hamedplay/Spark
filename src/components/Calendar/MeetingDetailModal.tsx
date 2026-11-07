@@ -180,7 +180,7 @@ export function MeetingDetailModal({
   useEffect(() => {
     supabase
       .from('meeting_agenda_items')
-      .select('id, title, presenter, duration_minutes, description, sort_order')
+      .select('id, title, presenter, duration_minutes, description, sort_order, source_decision_id')
       .eq('meeting_id', m.id)
       .order('sort_order')
       .then(({ data }) => { if (data) setAgendaItems(data as AgendaItem[]); });
