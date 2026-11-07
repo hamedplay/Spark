@@ -1,3 +1,5 @@
+import { NotePrivacyField } from './NotePrivacyField';
+import { NoteMessageDetails } from './NoteMessageDetails';
 import { Bell, BellPlus, BellRing, CalendarDays, Clock3, UsersRound, Mic, Share2, Send, Archive, Trash2, Save, X, FileText, Image as ImageIcon, Download, CreditCard as Edit2 } from 'lucide-react';
 import { quickNoteReminder } from './reminderTime';
 import type { Note } from './types';
@@ -55,6 +57,8 @@ export function NoteCard({
             rows={4}
             className="w-full resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-700 outline-none transition focus:border-violet-300 focus:ring-2 focus:ring-violet-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
+          <NotePrivacyField value={editingNote?.sms_include_content ?? true}
+            onChange={value => onSetEditingNote(prev => prev ? { ...prev, sms_include_content: value } : null)} />
           <ReminderField noteId={note.id} ownerId={note.user_id} value={editingNote?.remind_at ?? null} disabled={note.status === 'archived'}
             recipientIds={editingNote?.reminder_user_ids ?? []}
             onRecipientsChange={ids => onSetEditingNote(prev => prev ? { ...prev, reminder_user_ids: ids } : null)}
@@ -150,9 +154,11 @@ export function NoteCard({
             <p className="mt-2 flex items-center gap-1 text-[10px] leading-5 text-amber-700 dark:text-amber-300">
               <Bell className="h-3 w-3 flex-shrink-0" />
               {note.reminder_sent_at ? 'اعلان یادآوری ثبت شد: ' : 'یادآوری: '}
-              {new Date(note.remind_at).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' })}
+              {new Date(note.remind_at).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Tehran' })}
             </p>
           )}
+
+          <NoteMessageDetails noteId={note.id} revision={`${note.remind_at}:${note.reminder_user_ids?.join()}:${note.sms_include_content}`} />
 
           {note.file_url && (
             <button

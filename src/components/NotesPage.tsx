@@ -6,7 +6,6 @@ import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { usePermissions } from '../context/PermissionsContext';
 import { useOrgUsers } from '../lib/useOrgUsers';
-import { insertNotification } from '../lib/notifications';
 
 import { NOTE_COLORS } from './Notes/constants';
 import type { Note } from './Notes/types';
@@ -34,6 +33,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
   const canDelete = hasPermission('notes_delete');
   const [notes, setNotes] = useState<Note[]>([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [newSmsIncludeContent, setNewSmsIncludeContent] = useState(true);
   const [newReminderUsers, setNewReminderUsers] = useState<string[]>([]);
   const [newReminderAt, setNewReminderAt] = useState<string | null>(null);
   const [isFormRecording, setIsFormRecording] = useState(false);
@@ -383,6 +383,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
           title: newNote.title,
           content: newNote.content,
           note_type: 'text',
+          sms_include_content: newSmsIncludeContent,
           remind_at: newReminderAt,
           reminder_user_ids: newReminderAt ? newReminderUsers : [],
           user_id: userId,
@@ -395,6 +396,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
 
       setNotes(prev => [data, ...prev]);
       setNewNote({ title: '', content: '' });
+      setNewSmsIncludeContent(true);
       setNewReminderAt(null);
       setNewReminderUsers([]);
       setShowCreateForm(false);
@@ -421,6 +423,7 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
         .update({
           title: editingNote.title,
           content: editingNote.content,
+          sms_include_content: editingNote.sms_include_content ?? true,
           remind_at: editingNote.remind_at ?? null,
           reminder_user_ids: editingNote.remind_at ? editingNote.reminder_user_ids ?? [] : []
         })
@@ -470,32 +473,14 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
 
   const handleSendToUser = async (note: Note, toUserId: string, toName: string) => {
     try {
-      const { error: insertError } = await supabase.rpc('share_note_to_user', {
-        p_title: note.title,
-        p_content: note.content,
-        p_note_type: note.note_type,
+      const { error: insertError } = await supabase.rpc('share_note_v2', {
+        p_note_id: note.id,
         p_recipient_id: toUserId,
-        p_sender_id: userId,
       });
       if (insertError) throw insertError;
 
-      const senderProfile = orgUsers.find(u => u.user_id === userId);
-      const senderName = senderProfile?.full_name || senderProfile?.email || 'کاربر';
-      const recipientProfile = orgUsers.find(u => u.user_id === toUserId);
-      const recipientFullName = recipientProfile?.full_name || '';
-      await insertNotification({
-        userId: toUserId,
-        category: 'note',
-        eventType: 'share',
-        fallbackTitle: 'یادداشت جدید دریافت شد',
-        fallbackMessage: `«${senderName}» یادداشت «${note.title}» را برای شما ارسال کرد`,
-        placeholders: { sender_name: senderName, note_title: note.title, full_name: recipientFullName, recipient_greeting: recipientFullName ? `${recipientFullName} گرامی` : 'همکار گرامی' },
-        senderId: userId,
-        senderName,
-      });
-
       setAssignNote(null);
-      toast.success(`یادداشت برای ${toName} ارسال شد`);
+      toast.success(`یادداشت برای ${toName} ثبت شد؛ پیامک و بله در صف ارسال قرار گرفت`);
     } catch (err: any) {
       toast.error('خطا در ارسال یادداشت: ' + (err?.message || ''));
     }
@@ -567,6 +552,8 @@ export function NotesPage({ currentUserId: propUserId }: { currentUserId?: strin
             newNote={newNote}
             setNewNote={setNewNote}
             onSubmit={handleCreateNote}
+            smsIncludeContent={newSmsIncludeContent}
+            onSmsIncludeContentChange={setNewSmsIncludeContent}
             reminderAt={newReminderAt}
             onReminderChange={value => { setNewReminderAt(value); if (!value) setNewReminderUsers([]); }}
             reminderUserIds={newReminderUsers}

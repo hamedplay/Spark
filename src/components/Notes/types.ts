@@ -1,5 +1,10 @@
 export interface Note {
   id: string;
+  creator_id?: string | null;
+  creator_name?: string | null;
+  reminder_creator_id?: string | null;
+  reminder_creator_name?: string | null;
+  sms_include_content?: boolean;
   title: string;
   content: string;
   drawing_data?: string | null;

@@ -1,3 +1,4 @@
+import { NoteMessageDetails } from '../../../components/Notes/NoteMessageDetails';
 import { NotificationSwipeRow } from './NotificationSwipeRow';
 import {
   Bell,
@@ -200,6 +201,7 @@ export function NotificationPanelContent({
                     <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-line">
                       {n.message}
                     </p>
+                    {n.type === 'note' && n.metadata && <NoteMessageDetails snapshot={n.metadata} />}
                   </div>
                 </div>
                 </NotificationSwipeRow>

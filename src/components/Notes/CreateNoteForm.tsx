@@ -1,7 +1,10 @@
 import { Save, Mic, FileText } from 'lucide-react';
+import { NotePrivacyField } from './NotePrivacyField';
 import { ReminderField, type ReminderUser } from './ReminderField';
 
-export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording, onToggleRecording, reminderAt, onReminderChange, reminderUserIds, onReminderUsersChange, reminderUsers, usersLoading, usersError }: {
+export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording, onToggleRecording, reminderAt, onReminderChange, reminderUserIds, onReminderUsersChange, reminderUsers, usersLoading, usersError, smsIncludeContent = true, onSmsIncludeContentChange }: {
+  smsIncludeContent?: boolean;
+  onSmsIncludeContentChange?: (value: boolean) => void;
   newNote: { title: string; content: string };
   setNewNote: React.Dispatch<React.SetStateAction<{ title: string; content: string }>>;
   onSubmit: (e: React.FormEvent) => void;
@@ -64,6 +67,7 @@ export function CreateNoteForm({ newNote, setNewNote, onSubmit, isFormRecording,
             required
           />
         </div>
+        {onSmsIncludeContentChange && <NotePrivacyField value={smsIncludeContent} onChange={onSmsIncludeContentChange} />}
         <ReminderField value={reminderAt} onChange={onReminderChange} recipientIds={reminderUserIds} onRecipientsChange={onReminderUsersChange} users={reminderUsers} usersLoading={usersLoading} usersError={usersError} />
         <div className="flex justify-end">
           <button

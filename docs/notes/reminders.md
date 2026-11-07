@@ -42,3 +42,20 @@ docker exec -i supabase-db psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < 
 ```
 
 This file only reads schema availability, cron state, whitelisted worker configuration, the latest worker HTTP status, grouped delivery errors and overdue counts. It does not print worker tokens, note bodies, phone numbers or bot credentials, and does not retry deliveries. Missing optional objects are reported without referencing absent relations.
+
+## Sender identity and standard messages
+
+Apply the new `20261107060240_note_sender_identity_and_message_privacy.sql` and `20261107061409_preserve_note_sender_snapshots_on_account_deletion.sql` migrations on the existing notes database, then deploy the matching frontend and `note-reminder-worker`. On a self-hosted installation:
+
+```sh
+bash deploy/spark-cli/apply-note-message-identity.sh --check supabase-db
+bash deploy/spark-cli/apply-note-message-identity.sh --apply supabase-db
+```
+
+Sharing now uses `share_note_v2(note_id, recipient_id)`: the database verifies ownership and organization eligibility, copies the note with the authenticated sender's identity, creates the in-app notification and queues SMS/Bale atomically. The old text-only share API fails with an explicit reload message because it cannot verify the source note's privacy policy. Updated clients do not create a second notification or send another SMS themselves.
+
+New notes retain a server-assigned creator/name snapshot. Scheduling captures the reminder creator separately, so a recipient scheduling a shared copy is identified correctly. Editing content or service delivery does not replace either identity. Old shared notes have no recoverable sender attribution; details explicitly show that it was not recorded instead of inventing one. Previously sent notifications/messages are not rewritten or resent.
+
+Both ordinary-note and reminder messages identify the sender and include the complete note text. Reminders include a Jalali date and 24-hour clock in Asia/Tehran. The note details and note notification details show the sender, recipient(s), registration date and reminder time. Recipient lists are shown only to the note owner; a reminder recipient can inspect only their own recipient identity.
+
+The privacy checkbox suppresses both title and body from SMS/Bale and sends a generic instruction to view the secure in-app notification instead. Sharing inherits this flag. The worker retrieves an authorized envelope immediately before each external request, rechecking current eligibility, lease, schedule and privacy. No envelope means no external send. SMS still follows existing group/provider/timing rules and retains the stable dispatch key. Multipart Bale delivery retains the full allowed text. Unknown provider outcomes retain the existing no-automatic-resend behavior. Restricting a queued multipart note emits at most one redacted message and skips the remaining parts. A request already in flight cannot be recalled.
