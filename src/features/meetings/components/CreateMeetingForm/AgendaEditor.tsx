@@ -202,7 +202,7 @@ export function AgendaEditor({
             </div>
           )}
           {pickerOpen && <AgendaDecisionPicker existingIds={items.map(item => (item as AgendaDraftItem & { source_decision_id?: string | null }).source_decision_id).filter((id): id is string => !!id)} onSelect={addDecisions} onClose={() => setPickerOpen(false)} />}
-          {detailId && <LinkedDecisionDialog decisionId={detailId} onClose={() => setDetailId(null)} />
+          {detailId && <LinkedDecisionDialog decisionId={detailId} onClose={() => setDetailId(null)} />}
         </div>
       )}
     </div>
