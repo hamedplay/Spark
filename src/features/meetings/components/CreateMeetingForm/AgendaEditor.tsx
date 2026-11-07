@@ -52,7 +52,7 @@ export function AgendaEditor({
 
   return (
     <div className="mt-5 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <input
           type="checkbox"
           id="agendaToggle"
@@ -63,6 +63,7 @@ export function AgendaEditor({
         <label htmlFor="agendaToggle" className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
           <ClipboardList className="w-4 h-4" /> دستور جلسه
         </label>
+        <button type="button" onClick={() => { onEnabledChange(true); setPickerOpen(true); }} className="ms-auto rounded-lg border border-blue-300 px-3 py-1.5 text-sm text-blue-700 dark:border-blue-700 dark:text-blue-300">افزودن از پیگیری مصوبات</button>
       </div>
 
       {enabled && (
@@ -198,7 +199,6 @@ export function AgendaEditor({
             >
               <Plus className="w-4 h-4" /> ایجاد دستور جلسه
             </button>
-            <button type="button" onClick={() => setPickerOpen(true)} className="w-full rounded-lg border border-blue-300 px-3 py-2 text-sm text-blue-700 dark:border-blue-700 dark:text-blue-300">افزودن از پیگیری مصوبات</button>
             </div>
           )}
           {pickerOpen && <AgendaDecisionPicker existingIds={items.map(item => (item as AgendaDraftItem & { source_decision_id?: string | null }).source_decision_id).filter((id): id is string => !!id)} onSelect={addDecisions} onClose={() => setPickerOpen(false)} />}

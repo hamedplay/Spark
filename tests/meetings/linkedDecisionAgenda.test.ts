@@ -10,7 +10,7 @@ const source: PickerDecision = {
   parent_decision_id: null, clause_order: null,
   title: 'بررسی اجرای پروژه سامانه خدمات الکترونیک',
   description: null, minute_title: 'شورای معاونت',
-  minute_date: '1405/08/13', minute_number: '۱۲۵', decision_number: '۳',
+  meeting_date: '1405/08/13', minute_number: '۱۲۵', decision_number: '۳',
   status: 'in_progress', progress_percent: 20, owner_name: 'کارشناس',
   primary_owner_user_id: null, responsible_unit_name_snapshot: null,
 };

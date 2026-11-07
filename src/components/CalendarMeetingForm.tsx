@@ -598,11 +598,8 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           ? `هر ${repeatInterval} هفته، ${weekdays[repeatWeekday]}`
           : `هر ${repeatInterval} ماه${repeatMonthlyMode === 'nth' ? `، ${repeatMonthlyNth === -1 ? 'آخرین' : repeatMonthlyNth} ${weekdays[repeatMonthlyNthWeekday]}` : ''}`;
         const linked = agendaEnabled ? agendaItems as LinkedAgendaItem[] : [];
-        const manualAgenda = linked.filter(item => !item.source_decision_id);
-        const hasLinked = linked.some(item => !!item.source_decision_id);
         const ids = await createMeetingSeries(seriesOperationRef.current, [{ ...record, request_jalaali_date: meetingDateStr }, ...repeatRecords],
-          manualAgenda.map(({ title, presenter, duration_minutes, description }) => ({ title, presenter, duration_minutes, description })),
-          pattern, hasLinked ? agendaItemsForSave(linked) : undefined);
+          linked, pattern);
         toast.success(`${ids.length} نوبت ثبت شد؛ اطلاع‌رسانی سری طبق تنظیمات در صف قرار گرفت`);
       } else {
         const { data: meeting, error: meetingError } = await supabase.from('meetings').insert([record]).select().single();

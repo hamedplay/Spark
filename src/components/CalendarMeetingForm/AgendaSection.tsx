@@ -53,11 +53,12 @@ export function AgendaSection(props: {
   };
   return (
     <div className="p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-600">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
         <input type="checkbox" id="calAgenda" checked={agendaEnabled} onChange={e => setAgendaEnabled(e.target.checked)} className="w-4 h-4 text-blue-600 rounded" />
         <label htmlFor="calAgenda" className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
           <ClipboardList className="w-4 h-4" />دستور جلسه
         </label>
+        <button type="button" onClick={() => { setAgendaEnabled(true); setPickerOpen(true); }} className="ms-auto rounded-lg border border-blue-300 px-3 py-1.5 text-sm text-blue-700 dark:border-blue-700 dark:text-blue-300">افزودن از پیگیری مصوبات</button>
       </div>
       {agendaEnabled && (
         <div className="space-y-2 mt-3">
@@ -162,7 +163,6 @@ export function AgendaSection(props: {
                 className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors">
                 <Plus className="w-4 h-4" />افزودن آیتم دستور جلسه
               </button>
-              <button type="button" onClick={() => setPickerOpen(true)} className="rounded-lg border border-blue-300 px-3 py-1.5 text-sm text-blue-700 dark:border-blue-700 dark:text-blue-300">افزودن از پیگیری مصوبات</button>
             </div>
           )}
         </div>

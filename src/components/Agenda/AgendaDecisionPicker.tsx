@@ -135,7 +135,7 @@ export function AgendaDecisionPicker({ existingIds, onSelect, onClose }: {
                 onChange={e => setSelected(previous => { const next = { ...previous }; if (e.target.checked) next[item.id] = item; else delete next[item.id]; return next; })} />
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="break-words text-sm font-semibold text-gray-800 dark:text-gray-100">{item.title}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{item.minute_number ? `صورت‌جلسه شماره ${item.minute_number}` : item.minute_title} · {gregorianToJalaliDate(item.minute_date) || item.minute_date || 'تاریخ نامشخص'} · {item.decision_number ? `مصوبه ${item.decision_number}` : 'بدون شماره رسمی'} {item.clause_order ? `· بند ${item.clause_order}` : ''}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{item.minute_number ? `صورت‌جلسه شماره ${item.minute_number}` : item.minute_title} · {gregorianToJalaliDate(item.meeting_date) || item.meeting_date || 'تاریخ نامشخص'} · {item.decision_number ? `مصوبه ${item.decision_number}` : 'بدون شماره رسمی'} {item.clause_order ? `· بند ${item.clause_order}` : ''}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">مسئول: {item.owner_name || '—'} · واحد: {item.responsible_unit_name_snapshot || '—'} · {statusName(item.status)}</p>
                 {duplicated && <p className="text-xs text-amber-700">این مصوبه قبلاً به همین جلسه اضافه شده است.</p>}
                 {!duplicated && <p className="line-clamp-2 text-xs text-blue-600 dark:text-blue-400">{linkedDecisionAgendaTitle(item)}</p>}
