@@ -43,9 +43,10 @@ describe('Phase 6 Final Closure — Bale ownership proof', () => {
     assert.match(edge, /BALE_LINK_PENDING/);
   });
 
-  it('bale-webhook reads bot token from Edge Secret, not DB', () => {
+  it('bale-webhook uses server-only bot credentials with active channel fallback', () => {
     assert.match(baleWebhook, /Deno\.env\.get\("BALE_BOT_TOKEN"\)/);
-    assert.doesNotMatch(baleWebhook, /social_channel_configs.*bot_token/i);
+    assert.match(baleWebhook, /config\?\.is_active === true/);
+    assert.doesNotMatch(baleWebhook, /(?:update|msg)\.(?:bot_token|token)/);
   });
 
   it('bale-webhook stores encrypted chat_id, never plaintext', () => {

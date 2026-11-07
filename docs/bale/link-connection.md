@@ -1,5 +1,11 @@
 # Bale profile connection
 
+## Confirmed missing runtime token (2026-11-07)
+
+Primary diagnostics confirmed a valid, active `sparkpoushbot` DB configuration, matching registered webhook, HTTP 200 reachability and nine `BALE_BOT_TOKEN not configured` exits, with zero consumed links. The webhook previously required an environment token even when the admin-panel configuration was valid. It now preserves the environment override and, when absent/blank, reads the active Bale channel token using the existing service-role client, consistently with other server-side Bale senders. Disabled, missing or unreadable fallback configuration never consumes a nonce. No credentials are read from incoming updates or returned to callers. Nonce verification, expiry, atomic consume and encrypted mapping remain in the service RPC.
+
+Deploy the updated `supabase/functions/bale-webhook/index.ts` to the existing Functions runtime through the App update, then generate a fresh connection link and open the bot again. No DB migration, token rotation, webhook registration or queue reset is needed. The diagnostic's `container_bale_token_present` may remain false after this fix because the configured DB token is now supported. Its 30-minute error counts include historical failures; compare success counts and nonce use after the new attempt. Automated tests simulate both credentials paths and RPC outcomes without contacting Bale; actual primary activation must be confirmed after rollout.
+
 ## A generated link opens the bot but activation remains pending
 
 Link creation is not proof of webhook delivery. Before changing tokens or registering a different webhook, run this read-only check on the Application host (after updating the checkout):

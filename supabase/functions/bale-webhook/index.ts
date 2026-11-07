@@ -25,14 +25,31 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const botToken = Deno.env.get("BALE_BOT_TOKEN") ?? "";
+    let botToken = (Deno.env.get("BALE_BOT_TOKEN") ?? "").trim();
 
     if (!supabaseUrl || !serviceKey) {
       console.error("[bale-webhook] Supabase service environment is incomplete");
       return ok();
     }
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    // Self-hosted installs may configure the bot through the admin panel only,
+    // as the other Bale senders do. Read credentials server-side, never from updates.
     if (!botToken) {
-      console.error("[bale-webhook] BALE_BOT_TOKEN not configured");
+      const { data: config, error: configError } = await supabase
+        .from("social_channel_configs")
+        .select("bot_token, is_active")
+        .eq("channel", "bale")
+        .maybeSingle();
+      if (configError) {
+        console.error("[bale-webhook] Bale channel configuration unavailable");
+        return ok();
+      }
+      if (config?.is_active === true) botToken = (config.bot_token ?? "").trim();
+    }
+    if (!botToken) {
+      console.error("[bale-webhook] BALE_BOT_TOKEN not configured and no active channel token available");
       return ok();
     }
 
@@ -40,10 +57,6 @@ Deno.serve(async (req: Request) => {
       await sendMessage(botToken, chatId, "سلام! برای دریافت اعلان‌های سامانه، از بخش پروفایل روی «اتصال به بله» کلیک کنید.");
       return ok();
     }
-
-    const supabase = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
 
     // Token lookup, expiry check, single-use consume, chat-id encryption,
     // mapping update and audit all happen in one database transaction.
