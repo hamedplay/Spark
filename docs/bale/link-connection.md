@@ -1,5 +1,18 @@
 # Bale profile connection
 
+## A generated link opens the bot but activation remains pending
+
+Link creation is not proof of webhook delivery. Before changing tokens or registering a different webhook, run this read-only check on the Application host (after updating the checkout):
+
+```sh
+python3 deploy/spark-cli/diagnose-bale-webhook.py
+```
+
+Optional container selectors: `--db-container supabase-db --edge-container supabase-edge-functions`.
+The diagnostic keeps DB/container credentials in memory, reads only bot identity and webhook status, sends an empty no-op webhook update to the configured Spark hostname, and reports recent aggregate nonce/log counts. It does not use a connection link, call getUpdates, send a bot message, register/delete a webhook, change DB rows or drop queued updates. It never prints tokens, chat IDs, nonces, raw upstream errors or raw container logs.
+
+Interpret together: an absent webhook URL means registration is missing; a 401/403 response means the public gateway rejected delivery; 404 indicates the route/function is unavailable; different bot usernames indicate configuration mismatch. A missing container `BALE_BOT_TOKEN` together with the matching webhook log marker confirms the handler exits before consuming the nonce. A container environment check alone cannot prove what a separately configured runtime loads. HTTP 200 for the empty probe only proves that empty requests reach a responder; it does not prove account linking. Nonce/log counts cover all users in the last 30 minutes and may not correspond to a single test. Check the current error timestamp as upstream errors may be historical. Primary-server evidence is required; the hosted copy does not receive production bot updates. Do not run `scripts/setup-webhook.sh` for diagnosis: it deletes the existing webhook and requests discarding pending updates.
+
 The profile calls `bale-link-generate`, which validates the user's FULL session and asks `create_bale_link_nonce_service` for a one-time token. The RPC HMACs the token using `bale_link_hmac_key_v1` in Vault. `bale-webhook` consumes it once and uses the separate `bale_chat_encryption_key_v1` to encrypt the chat mapping.
 
 The connected copy reproduced `BALE_LINK_HMAC_KEY_NOT_CONFIGURED`; both required Vault keys were absent while the Bale channel was active and its username valid. The Edge Function collapsed that configuration failure into a generic HTTP 500. The production screenshot shows the same failed endpoint; production Vault state must be checked on that server rather than inferred from the copy.
