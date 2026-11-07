@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Search, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { usePermissions } from '../../context/PermissionsContext';
 import { jalaliToGregorianDate, gregorianToJalaliDate } from '../../lib/minutesDate';
 import type { PickerDecision } from '../../lib/linkedAgendaDecisions';
 import { linkedDecisionAgendaTitle } from '../../lib/linkedAgendaDecisions';
@@ -20,6 +21,11 @@ export function AgendaDecisionPicker({ existingIds, onSelect, onClose }: {
   onSelect: (decisions: PickerDecision[]) => void;
   onClose: () => void;
 }) {
+  const { isAdmin } = usePermissions();
+  const [editingReferenceId, setEditingReferenceId] = useState<string | null>(null);
+  const [referenceFields, setReferenceFields] = useState({ minute: '', decision: '' });
+  const [referenceSaving, setReferenceSaving] = useState(false);
+  const [referenceError, setReferenceError] = useState('');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -33,6 +39,39 @@ export function AgendaDecisionPicker({ existingIds, onSelect, onClose }: {
   const normalizeDigits = (v: string) => v.replace(/[۰-۹٠-٩]/g, c =>
     String('۰۱۲۳۴۵۶۷۸۹'.indexOf(c) >= 0 ? '۰۱۲۳۴۵۶۷۸۹'.indexOf(c) : '٠١٢٣٤٥٦٧٨٩'.indexOf(c)));
 
+  const saveReferences = async (item: PickerDecision) => {
+    if (!isAdmin || referenceSaving || (!referenceFields.minute.trim() && !referenceFields.decision.trim())) return;
+    setReferenceSaving(true); setReferenceError('');
+    try {
+      const { data, error: saveError } = await (supabase as any).rpc('set_minutes_agenda_official_references_v1', {
+        p_decision_id: item.id,
+        p_minute_number: referenceFields.minute.trim() || null,
+        p_decision_number: referenceFields.decision.trim() || null,
+      });
+      if (saveError) throw saveError;
+      const minuteNumber = data.minute_number as string | null;
+      const decisionNumber = data.decision_number as string | null;
+      setResponse(prev => ({
+        ...prev,
+        items: prev.items.map(row => ({
+          ...row,
+          minute_number: row.minute_id === item.minute_id ? minuteNumber : row.minute_number,
+          decision_number: row.id === item.id ? decisionNumber : row.decision_number,
+        })),
+      }));
+      setSelected(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(id => {
+          if (next[id].minute_id === item.minute_id) next[id] = { ...next[id], minute_number: minuteNumber };
+          if (id === item.id) next[id] = { ...next[id], decision_number: decisionNumber };
+        });
+        return next;
+      });
+      setEditingReferenceId(null);
+    } catch {
+      setReferenceError('ثبت شماره رسمی ناموفق بود. مجوز مدیر، تکراری‌نبودن شماره مصوبه و اطلاعات ورودی را بررسی کنید.');
+    } finally { setReferenceSaving(false); }
+  };
   useEffect(() => { setOffset(0); }, [query, status, dateFrom, dateTo]);
   useEffect(() => {
     let cancelled = false;
@@ -91,8 +130,8 @@ export function AgendaDecisionPicker({ existingIds, onSelect, onClose }: {
           {!loading && !error && response.items.length === 0 && <p className="p-4 text-center text-sm text-gray-500">مصوبه‌ای مطابق فیلترها یافت نشد.</p>}
           {response.items.map(item => {
             const duplicated = existing.has(item.id);
-            return <label key={item.id} className={`flex gap-3 rounded-xl border p-3 dark:border-gray-700 ${duplicated ? 'opacity-60' : 'cursor-pointer hover:border-blue-300'}`}>
-              <input type="checkbox" className="mt-1 h-4 w-4" disabled={duplicated} checked={duplicated || Boolean(selected[item.id])}
+            return <div key={item.id} className={`flex gap-3 rounded-xl border p-3 dark:border-gray-700 ${duplicated ? 'opacity-60' : 'hover:border-blue-300'}`}>
+              <input type="checkbox" aria-label={`انتخاب مصوبه ${item.title}`} className="mt-1 h-4 w-4" disabled={duplicated} checked={duplicated || Boolean(selected[item.id])}
                 onChange={e => setSelected(previous => { const next = { ...previous }; if (e.target.checked) next[item.id] = item; else delete next[item.id]; return next; })} />
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="break-words text-sm font-semibold text-gray-800 dark:text-gray-100">{item.title}</p>
@@ -100,8 +139,22 @@ export function AgendaDecisionPicker({ existingIds, onSelect, onClose }: {
                 <p className="text-xs text-gray-500 dark:text-gray-400">مسئول: {item.owner_name || '—'} · واحد: {item.responsible_unit_name_snapshot || '—'} · {statusName(item.status)}</p>
                 {duplicated && <p className="text-xs text-amber-700">این مصوبه قبلاً به همین جلسه اضافه شده است.</p>}
                 {!duplicated && <p className="line-clamp-2 text-xs text-blue-600 dark:text-blue-400">{linkedDecisionAgendaTitle(item)}</p>}
+                {isAdmin && <button type="button" className="mt-2 text-xs text-indigo-600 hover:underline" onClick={() => {
+                  setEditingReferenceId(editingReferenceId===item.id ? null : item.id);
+                  setReferenceFields({minute:item.minute_number||'',decision:item.decision_number||''});
+                  setReferenceError('');
+                }}>ثبت یا اصلاح شماره رسمی صورت‌جلسه و مصوبه</button>}
+                {isAdmin && editingReferenceId===item.id && <div className="mt-2 space-y-2 rounded-lg border border-indigo-200 p-2 dark:border-indigo-800">
+                  <p className="text-xs text-amber-600">شماره‌ها باید از سند رسمی و تأییدشده وارد شوند؛ شماره‌گذاری خودکار انجام نمی‌شود.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <input aria-label="شماره رسمی صورت‌جلسه" value={referenceFields.minute} maxLength={80} placeholder="شماره رسمی صورت‌جلسه" onChange={e => setReferenceFields(prev=>({...prev,minute:e.target.value}))} className="min-w-0 flex-1 rounded-lg border p-2 text-xs dark:border-gray-700 dark:bg-gray-800" />
+                    <input aria-label="شماره رسمی مصوبه" value={referenceFields.decision} maxLength={80} placeholder="شماره رسمی مصوبه" onChange={e => setReferenceFields(prev=>({...prev,decision:e.target.value}))} className="min-w-0 flex-1 rounded-lg border p-2 text-xs dark:border-gray-700 dark:bg-gray-800" />
+                  </div>
+                  {referenceError && <p role="alert" className="text-xs text-red-600">{referenceError}</p>}
+                  <button type="button" disabled={referenceSaving || (!referenceFields.minute.trim()&&!referenceFields.decision.trim())} onClick={() => void saveReferences(item)} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-40">{referenceSaving?'در حال ذخیره…':'ثبت شماره‌های معتبر'}</button>
+                </div>}
               </div>
-            </label>;
+            </div>;
           })}
         </div>
         <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t p-3 dark:border-gray-700">
