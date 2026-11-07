@@ -10,6 +10,7 @@ import { meetingStartInstant } from '../../features/meetings/meetingStartInstant
 import { shareMeetingText, shareMeetingImage } from '../../features/meetings/sharing/nativeMeetingShare';
 import { normalizeMeetingDate, normalizeClockTime } from '../../lib/minutesDate';
 import { MeetingOwnerDelegateModal } from './MeetingOwnerDelegateModal';
+import { LinkedDecisionDialog } from '../Agenda/LinkedDecisionDialog';
 import { MeetingShareDialog } from '../../features/meetings/components/MeetingCard/MeetingShareDialog';
 import { InformeeAddParticipantModal } from '../../features/meetings/components/InformeeAddParticipantModal';
 import { ExternalInformeesManager } from '../../features/meetings/components/ExternalInformeesManager';
@@ -21,6 +22,7 @@ interface AgendaItem {
   duration_minutes: number | null;
   description: string | null;
   sort_order: number;
+  source_decision_id?: string | null;
 }
 
 interface Props {
@@ -79,6 +81,7 @@ export function MeetingDetailModal({
   const [participantStatuses, setParticipantStatuses] = useState<Record<string, 'pending' | 'accepted' | 'declined' | 'delegated'>>({});
 
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([]);
+  const [linkedDetailId, setLinkedDetailId] = useState<string | null>(null);
 
   useEffect(() => {
     setShowInformeeParticipantModal(false);
@@ -741,7 +744,8 @@ const getJalaliDate = (): string => {
                   <div key={item.id} className="flex items-start gap-2.5 p-2.5 bg-white dark:bg-gray-700 rounded-lg border border-gray-100 dark:border-gray-600">
                     <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{idx + 1}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                      <p className="break-words text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                       {item.source_decision_id && <button type="button" onClick={() => setLinkedDetailId(item.source_decision_id!)} className="mt-1 text-xs text-blue-600 hover:underline">مصوبه اصلی و تاریخچه پیگیری</button>}
                       <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         {item.presenter && (
                           <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
@@ -1110,6 +1114,7 @@ const getJalaliDate = (): string => {
         </div>
       </div>
 
+      {linkedDetailId && <LinkedDecisionDialog decisionId={linkedDetailId} onClose={() => setLinkedDetailId(null)} />}
       {showMinutesConfirm && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4"
