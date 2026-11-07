@@ -8,7 +8,7 @@ export type MeetingAgendaInput = Pick<
   | 'duration_minutes'
   | 'sort_order'
   | 'description'
->;
+> & { id?: string; source_decision_id?: string | null };
 
 export async function fetchMeetingAgendaItems(
   meetingId: string
@@ -20,6 +20,8 @@ export async function fetchMeetingAgendaItems(
     .order('sort_order');
   if (error) throw error;
   return (data ?? []).map((it) => ({
+    id: it.id,
+    source_decision_id: (it as { source_decision_id?: string | null }).source_decision_id ?? null,
     title: it.title,
     presenter: it.presenter,
     duration_minutes: it.duration_minutes,
@@ -38,6 +40,7 @@ export async function insertMeetingAgendaItems(
     .insert(
       items.map((item, index) => ({
         title: item.title,
+        source_decision_id: item.source_decision_id ?? null,
         presenter: item.presenter,
         duration_minutes: item.duration_minutes,
         description: item.description,
@@ -52,13 +55,13 @@ export async function replaceMeetingAgendaItems(
   meetingId: string,
   items: MeetingAgendaInput[]
 ): Promise<void> {
-  const { error: deleteError } = await supabase
-    .from('meeting_agenda_items')
-    .delete()
-    .eq('meeting_id', meetingId);
-  if (deleteError) throw deleteError;
-
-  if (items.length > 0) {
-    await insertMeetingAgendaItems(meetingId, items);
-  }
+  const { error } = await (supabase as any).rpc('sync_linked_meeting_agenda_v1', {
+    p_meeting_id: meetingId,
+    p_items: items.map(item => ({
+      id: item.id || crypto.randomUUID(), title: item.title, presenter: item.presenter,
+      duration_minutes: item.duration_minutes, description: item.description,
+      source_decision_id: item.source_decision_id ?? null,
+    })),
+  });
+  if (error) throw error;
 }

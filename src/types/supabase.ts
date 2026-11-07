@@ -3564,6 +3564,7 @@ export type Database = {
           sort_order: number;
           created_at: string;
           description: string | null;
+          source_decision_id: string | null;
         };
         Insert: {
           id?: string;
@@ -3574,6 +3575,7 @@ export type Database = {
           sort_order?: number;
           created_at?: string;
           description?: string | null;
+          source_decision_id?: string | null;
         };
         Update: {
           id?: string;
@@ -3584,6 +3586,7 @@ export type Database = {
           sort_order?: number;
           created_at?: string;
           description?: string | null;
+          source_decision_id?: string | null;
         };
         Relationships: [];
       };

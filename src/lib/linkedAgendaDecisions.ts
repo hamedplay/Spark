@@ -43,7 +43,8 @@ export function agendaItemsForSave(items: Array<{
   source_decision_id?: string | null;
 }>) {
   return items.map(item => ({
-    id: item.id || crypto.randomUUID(),
+    id: item.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id)
+      ? item.id : crypto.randomUUID(),
     title: item.title,
     presenter: item.presenter ?? null,
     duration_minutes: item.duration_minutes ?? null,

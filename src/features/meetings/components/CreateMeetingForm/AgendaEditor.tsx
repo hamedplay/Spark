@@ -1,6 +1,9 @@
 import { ReorderableAgendaList } from '../../../../components/Agenda/ReorderableAgendaList';
 import { reorderMeetingAgenda } from '../../../../components/Agenda/reorderAgenda';
 import { useState } from 'react';
+import { AgendaDecisionPicker } from '../../../../components/Agenda/AgendaDecisionPicker';
+import { LinkedDecisionDialog } from '../../../../components/Agenda/LinkedDecisionDialog';
+import { linkedDecisionAgendaTitle, type PickerDecision } from '../../../../lib/linkedAgendaDecisions';
 import { ClipboardList, Pencil, Trash2, Check, Plus, UserCheck, Clock } from 'lucide-react';
 import type { AgendaItem } from '../../../../types';
 
@@ -29,6 +32,23 @@ export function AgendaEditor({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: '', presenter: '', duration_minutes: '' });
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const addDecisions = (decisions: PickerDecision[]) => {
+    const seen = new Set(items.map(item => (item as AgendaDraftItem & { source_decision_id?: string | null }).source_decision_id).filter(Boolean));
+    const next = [...items];
+    for (const decision of decisions) {
+      if (seen.has(decision.id)) continue;
+      seen.add(decision.id);
+      next.push({
+        id: crypto.randomUUID(),
+        title: linkedDecisionAgendaTitle(decision), presenter: null,
+        duration_minutes: null, description: null, sort_order: next.length,
+        source_decision_id: decision.id,
+      } as AgendaDraftItem);
+    }
+    onItemsChange(next);
+  };
 
   return (
     <div className="mt-5 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-600">
@@ -56,7 +76,10 @@ export function AgendaEditor({
                     {idx + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-800 dark:text-white truncate">{item.title}</p>
+                    <p className="break-words font-medium text-gray-800 dark:text-white">{item.title}</p>
+                    {(item as AgendaDraftItem & { source_decision_id?: string | null }).source_decision_id && (
+                      <button type="button" className="mt-1 text-xs text-blue-600 hover:underline" onClick={() => setDetailId((item as AgendaDraftItem & { source_decision_id: string }).source_decision_id)}>مشاهده مصوبه اصلی</button>
+                    )}
                     <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex-wrap">
                       {item.presenter && <span className="flex items-center gap-1"><UserCheck className="w-3 h-3" />{item.presenter}</span>}
                       {item.duration_minutes != null && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{item.duration_minutes} دقیقه</span>}
@@ -137,6 +160,7 @@ export function AgendaEditor({
                   onClick={() => {
                     if (!form.title.trim()) { onValidationError?.('عنوان دستور جلسه را وارد کنید'); return; }
                     const newItem = {
+                      ...(editingIndex !== null ? items[editingIndex] : {}),
                       title: form.title.trim(),
                       presenter: form.presenter.trim() || null,
                       duration_minutes: form.duration_minutes ? parseInt(form.duration_minutes, 10) : null,
@@ -166,6 +190,7 @@ export function AgendaEditor({
               </div>
             </div>
           ) : (
+            <div className="space-y-2">
             <button
               type="button"
               onClick={() => { setShowForm(true); setEditingIndex(null); setForm({ title: '', presenter: '', duration_minutes: '' }); }}
@@ -173,7 +198,11 @@ export function AgendaEditor({
             >
               <Plus className="w-4 h-4" /> ایجاد دستور جلسه
             </button>
+            <button type="button" onClick={() => setPickerOpen(true)} className="w-full rounded-lg border border-blue-300 px-3 py-2 text-sm text-blue-700 dark:border-blue-700 dark:text-blue-300">افزودن از پیگیری مصوبات</button>
+            </div>
           )}
+          {pickerOpen && <AgendaDecisionPicker existingIds={items.map(item => (item as AgendaDraftItem & { source_decision_id?: string | null }).source_decision_id).filter((id): id is string => !!id)} onSelect={addDecisions} onClose={() => setPickerOpen(false)} />}
+          {detailId && <LinkedDecisionDialog decisionId={detailId} onClose={() => setDetailId(null)} />
         </div>
       )}
     </div>
