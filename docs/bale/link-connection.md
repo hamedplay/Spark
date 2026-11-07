@@ -27,3 +27,21 @@ The apply helper executes only `20261107161830_initialize_missing_bale_link_cryp
 - Nine focused endpoint/click-flow tests cover successful links, configuration failures, authorization, disabled channels, blocked popups, server errors and invalid destinations.
 - The production build passed against starting main `91fa949`; shell syntax and all Bale tests passed. While integrating concurrent upstream changes, build on `5026863`/`60c4982` was blocked by an existing adjacent-JSX error in `src/features/meetings/components/CreateMeetingForm/AgendaEditor.tsx:206`. That unrelated file was left unchanged. No lint was run.
 - The connected copy has the new migration and the link function deployed. Real browser-to-bot webhook completion on the primary deployment remains a rollout check.
+
+## Repair mixed Vault restore failures without resetting Vault
+
+If the two Bale keys report SQLSTATE 22000 while other Vault entries are a mix of readable and unreadable, first inspect the encrypted Bale mapping/factor counts. When both counts are zero, the new `20261107163952_repair_unreadable_bale_vault_keys_without_ciphertext.sql` migration can recover only the unreadable Bale entries. Healthy Bale keys are preserved. The original encrypted records retain their IDs, ciphertext, nonce and key metadata under `archived_unreadable_...` names; those archival rows intentionally remain unreadable until the original root key is recovered. Other Vault rows are not modified.
+
+Use a database-owner connection, after updating the checkout:
+
+```sh
+bash deploy/spark-cli/repair-bale-link-vault.sh --check supabase-db
+BALE_REPAIR_DB_USER=supabase_admin bash deploy/spark-cli/repair-bale-link-vault.sh --apply supabase-db
+bash deploy/spark-cli/repair-bale-link-vault.sh --check supabase-db
+```
+
+`postgres` remains the helper default; `BALE_REPAIR_DB_USER` selects the actual database owner when direct Vault metadata updates are restricted. The recovery does not grant permissions or weaken Vault ownership. If ciphertext appears between diagnosis and execution, table locks and the transactional guard stop the repair with `BALE_KEY_RESTORE_REQUIRED`. Errors roll back the archive and new keys together. Retry is safe. Do not run a Vault reset or rotate the root key to bypass this error. Previously issued broken link tokens should be replaced by clicking Connect again.
+
+The old initialization migration is unchanged. Run this recovery helper before retrying the original initializer on an affected primary. Diagnostics now report each Bale key as OK/MISSING/UNREADABLE without echoing decrypted values or stopping at the first invalid ciphertext.
+
+Validation: the hosted copy permits reading Vault and executing its APIs but restricts direct Vault metadata updates. The migration was applied there with healthy keys and verified not to rotate them; real link nonce generation still passed. Corrupt-row recovery, archival byte preservation, isolation from unrelated corrupt entries, retry and encrypted-data refusal were exercised in a temporary local PostgreSQL model using the exact repair SQL. The model tests metadata/control flow, not production Vault cryptography. The owner-only integration generator is `tests/database/baleVaultRecovery.mjs`; run it only on a disposable/copy database with Vault-owner access. No application or historical migration file was modified by this follow-up, and no lint was run.
