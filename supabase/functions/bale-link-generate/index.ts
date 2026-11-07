@@ -66,8 +66,14 @@ Deno.serve(async (req: Request) => {
     );
 
     if (nonceErr || !nonceData || nonceData.ok !== true || typeof nonceData.nonce !== "string") {
-      console.error("[bale-link-generate] nonce RPC error:", nonceErr?.message ?? "invalid response");
-      return json({ ok: false, error: "خطا در تولید لینک اتصال" }, 500);
+      const missingCrypto = /BALE_LINK_HMAC_KEY_NOT_CONFIGURED|BALE_CHAT_ENCRYPTION_KEY_NOT_CONFIGURED/.test(nonceErr?.message ?? "");
+      const missingRpc = nonceErr?.code === "PGRST202" || nonceErr?.code === "42883";
+      const errorCode = missingCrypto ? "BALE_LINK_CRYPTO_NOT_CONFIGURED"
+        : missingRpc ? "BALE_LINK_DATABASE_NOT_READY" : "BALE_LINK_GENERATION_FAILED";
+      console.error("[bale-link-generate] nonce RPC error:", errorCode);
+      return json({ ok: false, errorCode, error: missingCrypto || missingRpc
+        ? "سرویس اتصال بله روی سرور آماده نیست؛ با مدیر سامانه تماس بگیرید."
+        : "خطا در تولید لینک اتصال" }, missingCrypto || missingRpc ? 503 : 500);
     }
 
     const nonce = nonceData.nonce as string;

@@ -8,6 +8,7 @@ export function BaleConnectSection() {
   useLiveData([...LIVE_DATA.people, ...LIVE_DATA.social], async () => { setConnected(await checkConnection()); });
   const [connected, setConnected] = useState<boolean | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [connectUrl, setConnectUrl] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [authCodesEnabled, setAuthCodesEnabled] = useState(true);
   const [authCodesSaving, setAuthCodesSaving] = useState(false);
@@ -43,6 +44,8 @@ export function BaleConnectSection() {
       pollCountRef.current += 1;
       if (pollCountRef.current > 40) {
         stopPolling();
+        setConnecting(false);
+        toast.error('اتصال تأیید نشد؛ پس از زدن «شروع» در بله، دوباره تلاش کنید.');
         return;
       }
       const isConnected = await checkConnection();
@@ -57,6 +60,10 @@ export function BaleConnectSection() {
 
   const handleConnect = async () => {
     setConnecting(true);
+    setConnectUrl(null);
+    let popup: Window | null = null;
+    // Open during the click gesture; Safari can block window.open after a network await.
+    try { popup = window.open('about:blank', '_blank'); if (popup) popup.opener = null; } catch { /* Use the explicit link below. */ }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('احراز هویت لازم است');
@@ -72,9 +79,13 @@ export function BaleConnectSection() {
       );
       const data = await res.json();
       if (!data.ok || !data.url) throw new Error(data.error || 'خطا در تولید لینک');
-      window.open(data.url, '_blank', 'noopener,noreferrer');
+      const target = new URL(data.url);
+      if (target.origin !== 'https://ble.ir') throw new Error('لینک اتصال بله معتبر نیست');
+      setConnectUrl(target.href);
+      try { if (popup && !popup.closed) popup.location.replace(target.href); } catch { /* The manual link stays available. */ }
       startPolling();
     } catch (err: any) {
+      try { popup?.close(); } catch { /* Window may already be closed. */ }
       toast.error(err.message || 'خطا در اتصال به بله');
       setConnecting(false);
     }
@@ -197,6 +208,8 @@ export function BaleConnectSection() {
               ? <><RefreshCw className="h-4 w-4 animate-spin" /> در انتظار اتصال...</>
               : <><Link2 className="h-4 w-4" /> اتصال به بله</>}
           </button>
+          {connectUrl && <a href={connectUrl} target="_blank" rel="noopener noreferrer"
+            className="block text-xs leading-6 text-teal-700 underline dark:text-teal-300">اگر بله باز نشد، اینجا بزنید و سپس «شروع» را انتخاب کنید.</a>}
           <details className="text-[11px] text-gray-500 dark:text-gray-400">
             <summary className="flex cursor-pointer list-none items-center gap-1 py-1 text-teal-700 dark:text-teal-300">
               <Info className="h-3.5 w-3.5" /> راهنمای اتصال
