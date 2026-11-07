@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { gregorianToJalaliDate } from '../../lib/minutesDate';
 
 interface DecisionDetails {
   id: string; title: string; description: string | null;
@@ -58,7 +59,7 @@ export function LinkedDecisionDialog({ decisionId, agendaResultId, onClose }: {
           {error && <p className="rounded-lg bg-red-50 p-2 text-red-600" role="alert">{error}</p>}
           {decision && <>
             <p className="break-words font-bold">{decision.title}</p>
-            <p className="text-gray-500">{decision.minute_number ? `صورت‌جلسه شماره ${decision.minute_number}` : decision.minute_title} · {decision.minute_date} · {decision.decision_number ? `مصوبه ${decision.decision_number}` : 'شماره مصوبه ثبت نشده'} {decision.clause_order ? `· بند ${decision.clause_order}` : ''}</p>
+            <p className="text-gray-500">{decision.minute_number ? `صورت‌جلسه شماره ${decision.minute_number}` : decision.minute_title} · {gregorianToJalaliDate(decision.minute_date) || decision.minute_date} · {decision.decision_number ? `مصوبه ${decision.decision_number}` : 'شماره مصوبه ثبت نشده'} {decision.clause_order ? `· بند ${decision.clause_order}` : ''}</p>
             {decision.description && <p className="whitespace-pre-wrap break-words">{decision.description}</p>}
             <p>مسئول: {decision.owner_name || '—'} · وضعیت: {decision.status} · پیشرفت: {decision.progress_percent}٪</p>
             <h4 className="font-semibold">سوابق پیگیری ({decision.updates.length} مورد اخیر)</h4>

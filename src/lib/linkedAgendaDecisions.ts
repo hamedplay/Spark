@@ -1,4 +1,5 @@
 import type { AgendaItem } from '../types';
+import { gregorianToJalaliDate } from './minutesDate';
 
 export interface LinkedAgendaItem extends AgendaItem {
   source_decision_id?: string | null;
@@ -29,7 +30,7 @@ export function linkedDecisionAgendaTitle(decision: PickerDecision): string {
     ? `مصوبه شماره ${decision.decision_number}` : 'مصوبه';
   const minuteLabel = decision.minute_number
     ? `صورت‌جلسه شماره ${decision.minute_number}`
-    : `صورت‌جلسه «${decision.minute_title}» مورخ ${decision.minute_date}`;
+    : `صورت‌جلسه «${decision.minute_title}» مورخ ${gregorianToJalaliDate(decision.minute_date) || decision.minute_date}`;
   return `بررسی و پیگیری ${clause}${decisionLabel} از ${minuteLabel} با موضوع ${decision.title}`;
 }
 

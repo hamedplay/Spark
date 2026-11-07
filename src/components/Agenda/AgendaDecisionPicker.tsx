@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Search, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { jalaliToGregorianDate, gregorianToJalaliDate } from '../../lib/minutesDate';
 import type { PickerDecision } from '../../lib/linkedAgendaDecisions';
 import { linkedDecisionAgendaTitle } from '../../lib/linkedAgendaDecisions';
 
@@ -36,15 +37,21 @@ export function AgendaDecisionPicker({ existingIds, onSelect, onClose }: {
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(async () => {
+      const from = dateFrom.trim() ? jalaliToGregorianDate(dateFrom.trim()) : null;
+      const to = dateTo.trim() ? jalaliToGregorianDate(dateTo.trim()) : null;
+      if ((dateFrom.trim() && !from) || (dateTo.trim() && !to) || (from && to && from > to)) {
+        if (!cancelled) { setLoading(false); setError('بازه تاریخ شمسی نامعتبر است.'); setResponse({ items: [], total: 0 }); }
+        return;
+      }
       setLoading(true);
       setError('');
       try {
         const { data, error: requestError } = await (supabase as any).rpc('pick_meeting_agenda_decisions_v1', {
-          p_search: normalizeDigits(query.trim()) || null,
+          p_search: jalaliToGregorianDate(query.trim()) || normalizeDigits(query.trim()) || null,
           p_status: status || null,
           p_owner_user_id: null,
-          p_date_from: normalizeDigits(dateFrom.trim()) || null,
-          p_date_to: normalizeDigits(dateTo.trim()) || null,
+          p_date_from: from,
+          p_date_to: to,
           p_limit: PAGE_SIZE, p_offset: offset,
         });
         if (requestError) throw requestError;
@@ -89,7 +96,7 @@ export function AgendaDecisionPicker({ existingIds, onSelect, onClose }: {
                 onChange={e => setSelected(previous => { const next = { ...previous }; if (e.target.checked) next[item.id] = item; else delete next[item.id]; return next; })} />
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="break-words text-sm font-semibold text-gray-800 dark:text-gray-100">{item.title}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{item.minute_number ? `صورت‌جلسه شماره ${item.minute_number}` : item.minute_title} · {item.meeting_date || 'تاریخ نامشخص'} · {item.decision_number ? `مصوبه ${item.decision_number}` : 'بدون شماره رسمی'} {item.clause_order ? `· بند ${item.clause_order}` : ''}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{item.minute_number ? `صورت‌جلسه شماره ${item.minute_number}` : item.minute_title} · {gregorianToJalaliDate(item.minute_date) || item.minute_date || 'تاریخ نامشخص'} · {item.decision_number ? `مصوبه ${item.decision_number}` : 'بدون شماره رسمی'} {item.clause_order ? `· بند ${item.clause_order}` : ''}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">مسئول: {item.owner_name || '—'} · واحد: {item.responsible_unit_name_snapshot || '—'} · {statusName(item.status)}</p>
                 {duplicated && <p className="text-xs text-amber-700">این مصوبه قبلاً به همین جلسه اضافه شده است.</p>}
                 {!duplicated && <p className="line-clamp-2 text-xs text-blue-600 dark:text-blue-400">{linkedDecisionAgendaTitle(item)}</p>}
