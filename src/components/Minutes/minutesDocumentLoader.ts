@@ -79,7 +79,7 @@ export async function loadDocumentSnapshot(
       .order('created_at', { ascending: true }),
     supabase
       .from('minutes_agenda_results')
-      .select('id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes')
+      .select('id, source_decision_id, sort_order_snapshot, agenda_title_snapshot, agenda_description_snapshot, presenter_snapshot, allocated_minutes_snapshot, discussion_result, result_type, additional_notes')
       .eq('minute_id', minuteId)
       .order('sort_order_snapshot', { ascending: true }),
     supabase

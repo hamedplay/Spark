@@ -53,6 +53,7 @@ export interface ExternalParticipantRow {
 
 export interface AgendaResultRow {
   id: string;
+  source_decision_id?: string | null;
   sort_order_snapshot: number;
   agenda_title_snapshot: string;
   agenda_description_snapshot: string | null;

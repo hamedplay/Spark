@@ -1,8 +1,11 @@
 import type { AgendaResultRow } from './types';
+import { useState } from 'react';
+import { LinkedDecisionDialog } from '../../Agenda/LinkedDecisionDialog';
 import { EmptyState } from '../MinutesShared';
 import { AgendaResultBadge } from './Badges';
 
 export function TabAgenda({ items }: { items: AgendaResultRow[] }) {
+  const [linked, setLinked] = useState<{ id: string; resultId: string } | null>(null);
   if (items.length === 0) {
     return <EmptyState title="هنوز ثبت نشده" description="دستور جلسه‌ای ثبت نشده است." />;
   }
@@ -21,6 +24,7 @@ export function TabAgenda({ items }: { items: AgendaResultRow[] }) {
                 {item.presenter_snapshot && <span>ارائه‌دهنده: {item.presenter_snapshot}</span>}
                 {item.allocated_minutes_snapshot != null && <span>زمان: {item.allocated_minutes_snapshot} دقیقه</span>}
               </div>
+              {item.source_decision_id && <button type="button" className="mt-2 text-xs font-medium text-blue-600 hover:underline" onClick={() => setLinked({ id: item.source_decision_id!, resultId: item.id })}>مشاهده و ثبت نتیجه پیگیری مصوبه اصلی</button>}
               {item.discussion_result && (
                 <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
                   <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-0.5">نتیجه:</p>
@@ -32,6 +36,7 @@ export function TabAgenda({ items }: { items: AgendaResultRow[] }) {
           </div>
         </div>
       ))}
+      {linked && <LinkedDecisionDialog decisionId={linked.id} agendaResultId={linked.resultId} onClose={() => setLinked(null)} />}
     </div>
   );
 }
