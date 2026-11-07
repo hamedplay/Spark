@@ -113,7 +113,8 @@ Deno.serve(async (req: Request) => {
 
     const safePayload = JSON.stringify({
       title: "اسپارک",
-      body: "یک اعلان جدید در اسپارک دارید.",
+      body: typeof row.payload?.title === "string" && row.payload.title.trim()
+        ? row.payload.title.trim() : "یک اعلان جدید در اسپارک دارید.",
       actionUrl: typeof row.payload?.actionUrl === "string" ? row.payload.actionUrl : "/",
       notificationId: row.notification_id,
     });

@@ -39,3 +39,11 @@ test('deduplication storage stays bounded', async () => {
   for (let i = 0; i < 260; i++) await h.dispatch('push', { notificationId: String(i) });
   assert.equal(h.cache.size, 256);
 });
+
+
+test('service worker preserves the subject supplied by either Realtime or background Push', async () => {
+  const h=harness();
+  await h.dispatch('message',{notificationId:'subject-realtime',title:'اسپارک',body:'یادآوری یادداشت'});
+  await h.dispatch('push',{notificationId:'subject-push',title:'اسپارک',body:'زمان جلسه تغییر کرد'});
+  assert.equal(h.shown[0].body,'یادآوری یادداشت');assert.equal(h.shown[1].body,'زمان جلسه تغییر کرد');
+});

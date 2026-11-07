@@ -178,13 +178,14 @@ export async function disableBrowserNotifications(): Promise<void> {
 }
 export async function notifyBrowser(row: NotificationRow, userId: string): Promise<void> {
   if (!eligible(userId) || row.read || (row.user_id && row.user_id !== userId) || (row.id && delivered.has(row.id))) return;
+  const subject = typeof row.title === 'string' && row.title.trim() ? row.title.trim() : 'یک اعلان جدید در اسپارک دارید.';
   try {
     const worker = await registration();
     if (!eligible(userId)) return;
     if (!worker.active) throw new Error('Service worker is inactive');
     worker.active.postMessage({ type: 'SPARK_REALTIME_NOTIFICATION', payload: {
       notificationId: row.id || crypto.randomUUID(), title: 'اسپارک',
-      body: 'یک اعلان جدید در اسپارک دارید.', actionUrl: row.action_url || '/',
+      body: subject, actionUrl: row.action_url || '/',
     } });
     if (row.id) delivered.add(row.id);
     if (delivered.size > 256) delivered.delete(delivered.values().next().value!);
@@ -192,7 +193,7 @@ export async function notifyBrowser(row: NotificationRow, userId: string): Promi
     // Desktop fallback; mobile browsers require ServiceWorker.showNotification.
     if (!eligible(userId)) return;
     try {
-      const notification = new Notification('اسپارک', { body: 'یک اعلان جدید در اسپارک دارید.', tag: row.id, icon: '/icons/icon-192x192.png', silent: document.visibilityState === 'visible' });
+      const notification = new Notification('اسپارک', { body: subject, tag: row.id, icon: '/icons/icon-192x192.png', silent: document.visibilityState === 'visible' });
       notification.onclick = () => { window.focus(); notification.close(); const url = new URL(row.action_url || '/', window.location.origin); if (url.origin === window.location.origin) window.location.assign(url.href); };
       if (document.visibilityState === 'visible') playNotificationSound();
       if (row.id) delivered.add(row.id);

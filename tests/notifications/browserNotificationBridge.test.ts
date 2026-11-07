@@ -14,14 +14,14 @@ before(async () => {
 });
 after(async () => { await server.close(); });
 async function fixture(permission = 'default', ios = false) {
-  const storage = new Map<string,string>(); const workerMessages: any[] = [], rpc: any[] = [];
+  const storage = new Map<string,string>(); const workerMessages: any[] = [], rpc: any[] = [], nativeNotifications: any[] = [];
   let requests = 0, invokes = 0, unsubscribed = 0;
   const subscription = { endpoint: 'https://push.example.test/temporary', options: {}, toJSON: () => ({ keys: { p256dh: 'key', auth: 'auth' } }), unsubscribe: async () => { unsubscribed++; return true; } };
   const serviceWorker = Object.assign(new EventTarget(), { getRegistration: async () => registration, ready: Promise.resolve(undefined), register: async () => registration });
   const registration = { active: { postMessage: (value: any) => workerMessages.push(value) }, pushManager: { getSubscription: async () => subscription, subscribe: async () => subscription } };
   const window = Object.assign(new EventTarget(), { isSecureContext: true, location: { origin: 'https://spark.test' }, matchMedia: () => ({ matches: false }), atob: globalThis.atob });
   const document = { visibilityState: 'visible' };
-  class Notification { static permission = permission; static async requestPermission() { requests++; this.permission = 'granted'; return 'granted'; } }
+  class Notification { constructor(title: string, options: any) { nativeNotifications.push({ title, ...options }); } static permission = permission; static async requestPermission() { requests++; this.permission = 'granted'; return 'granted'; } }
   Object.defineProperty(globalThis,'window',{value:window,configurable:true});
   Object.defineProperty(globalThis,'document',{value:document,configurable:true});
   Object.defineProperty(globalThis,'Notification',{value:Notification,configurable:true});
@@ -29,7 +29,7 @@ async function fixture(permission = 'default', ios = false) {
   Object.defineProperty(globalThis,'localStorage',{value:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)},configurable:true});
   (globalThis as any).__pushClient = { functions: { async invoke() { invokes++; return { data: { publicKey: 'AQID' }, error: null }; } }, async rpc(name: string,args: any) { rpc.push({name,args}); return { data: name === 'get_my_pwa_push_config' ? {publicKey:'AQID'} : null, error: null }; } };
   const bridge = await server.ssrLoadModule(`/src/lib/pwaNotificationBridge.ts?test=${++counter}`);
-  return { bridge, window, Notification, workerMessages, rpc, storage, client:(globalThis as any).__pushClient, stats:()=>({requests,invokes,unsubscribed}) };
+  return { bridge, window, Notification, workerMessages, nativeNotifications, rpc, storage, client:(globalThis as any).__pushClient, stats:()=>({requests,invokes,unsubscribed}) };
 }
 test('desktop web registers without PWA installation; permission is requested only by explicit activation', async () => {
   const h = await fixture(); const stop = h.bridge.startPwaNotificationBridge('owner',true);
@@ -101,4 +101,20 @@ test('default-on user setting is separate from permission and an explicit opt-ou
   stop();const resumed=h.bridge.startPwaNotificationBridge('owner',true);await tick();
   assert.equal(h.bridge.isBrowserNotificationPreferenceEnabled('owner'),false);assert.equal(h.stats().invokes,0);
   resumed();await tick();
+});
+
+
+test('Realtime and native fallback display the notification subject without forwarding its private message', async () => {
+  const h=await fixture('granted');const stop=h.bridge.startPwaNotificationBridge('owner',true);await tick();
+  await h.bridge.notifyBrowser({id:'subject',user_id:'owner',title:'  زمان جلسه تغییر کرد  ',message:'متن خصوصی اعلان'},'owner');
+  assert.equal(h.workerMessages[0].payload.title,'اسپارک');
+  assert.equal(h.workerMessages[0].payload.body,'زمان جلسه تغییر کرد');
+  assert.ok(!JSON.stringify(h.workerMessages[0]).includes('متن خصوصی اعلان'));
+  await h.bridge.notifyBrowser({id:'untitled',title:'   '},'owner');
+  assert.equal(h.workerMessages[1].payload.body,'یک اعلان جدید در اسپارک دارید.');
+  navigator.serviceWorker.getRegistration=async()=>{throw Error('worker unavailable');};
+  await h.bridge.notifyBrowser({id:'native-subject',title:'یادآوری یادداشت',message:'متن محرمانه'},'owner');
+  assert.equal(h.nativeNotifications[0].body,'یادآوری یادداشت');
+  assert.ok(!JSON.stringify(h.nativeNotifications[0]).includes('متن محرمانه'));
+  stop();await tick();
 });

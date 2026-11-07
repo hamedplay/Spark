@@ -25,8 +25,10 @@
 - ServiceWorker messages and Web Push share one serialized, bounded persistent
   deduplication path keyed by notification ID. One visible window owns a short custom
   chime; when no window is visible the notification requests normal OS sound. This
-  avoids duplicate alerts across multiple tabs and the two delivery paths. OS text
-  stays generic, matching the existing push worker's privacy behavior.
+  avoids duplicate alerts across multiple tabs and the two delivery paths. The OS popup
+  keeps the Spark app heading and displays the notification subject in place of the
+  generic alert text. Full notification bodies are not forwarded to the OS popup.
+  Missing/blank subjects retain the generic fallback.
 - Existing service-worker registration checks imported scripts without cache reuse;
   the bounded notification deduplication cache survives worker updates. Notification
   clicks are constrained to this application's origin.
@@ -54,8 +56,8 @@
 
 ## Deployment and platform boundaries
 
-No schema change or migration is needed. Deploy the frontend and public service-worker
-files together. Background delivery uses the existing `pwa-push-config`,
+No schema change or migration is needed. Deploy the frontend and `pwa-push-worker`
+function together so both Realtime/native and background Push show the subject. Background delivery uses the existing `pwa-push-config`,
 `pwa-push-worker`, subscription RPCs and dispatch configuration; the connected test
 project is not the production database and physical device delivery was not tested.
 
@@ -64,3 +66,12 @@ requires a Home Screen web app. Foreground audio is unlocked by the activation c
 or a subsequent interaction after reopening; browsers can prohibit autoplay before
 interaction. Background sound and display remain subject to OS notification/Focus/
 silent-mode settings. A browser cannot force a custom sound while the app is closed.
+
+
+## Subject display validation
+
+17 focused tests passed for browser bridge behavior (including native fallback),
+ServiceWorker deduplication/display and the actual background worker handler. The
+subject is trimmed, invalid/blank titles fall back safely, and private message bodies
+are not sent as popup text. Build passed; lint was not run. No schema change is needed: the
+existing database outbox already includes the stored notification title.
