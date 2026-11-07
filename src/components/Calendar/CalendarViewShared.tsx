@@ -224,8 +224,8 @@ export function renderMeetingBlock(
 
   const renderStartSlot = startMin / 30;
   const renderEndSlot = endMin / 30;
-  const startSlot = minutesToSlotIndex(startMin);
-  const endSlot = minutesToSlotIndex(endMin);
+  const startSlot = renderStartSlot;
+  const endSlot = renderEndSlot;
   const height = Math.max((renderEndSlot - renderStartSlot) * slotHeight, slotHeight * 0.6);
   const color = getMeetingColor(meeting);
   const isBeingDragged = dragMoveMeeting?.id === meeting.id;

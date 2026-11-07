@@ -87,8 +87,9 @@ export function timeToMinutes(time: string | null): number {
   return h * 60 + m;
 }
 export function minutesToTime(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
+  const wholeMinutes = Math.round(minutes);
+  const h = Math.floor(wholeMinutes / 60);
+  const m = wholeMinutes % 60;
   return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 export function minutesToSlotIndex(minutes: number): number { return Math.round(minutes / 30); }

@@ -1,3 +1,4 @@
+import { persistCalendarTiming, meetingTimingPlaceholders } from './Calendar/persistCalendarTiming';
 import { notifyBrowser } from '../lib/pwaNotificationBridge';
 import { useLiveData } from '../shared/realtime/useLiveData';
 import { mobileZoomDayCount } from './Calendar/weekZoom';
@@ -486,6 +487,7 @@ export function CalendarPage({
     const senderName = currentUserId ? resolveName(currentUserId) : '';
     const recipientName = recipientId ? resolveName(recipientId) : '';
     return {
+      ...meetingTimingPlaceholders(m),
       meeting_subject: m.subject || '',
       meeting_date: meetingDateStr,
       meeting_time: meetingTimeStr,
@@ -989,19 +991,9 @@ export function CalendarPage({
     const { meeting, updates, ns, ne } = snap;
 
     try {
-      const { error } = await supabase
-        .from('meetings')
-        .update(updates)
-        .eq('id', meeting.id);
-
-      if (error) throw error;
-
-      const movedMtg = {
-        ...meeting,
-        ...updates,
-        start_time: minutesToTime(ns * 30),
-        end_time: minutesToTime(ne * 30),
-      };
+      const saved = await persistCalendarTiming(supabase, meeting.id, updates);
+      const movedMtg = { ...meeting, ...updates, ...saved };
+      setMeetings(previous => previous.map(row => row.id === meeting.id ? { ...row, ...saved } : row));
 
       setPendingMove(null);
       fetchMeetings();
@@ -1018,6 +1010,7 @@ export function CalendarPage({
           await insertNotificationFromTemplate({
             userId: currentUserId,
             category: 'meeting',
+            meetingId: meeting.id,
             eventType: 'change',
             fallbackTitle: 'جلسه جابجا شد',
             fallbackMessage: `جلسه «${meeting.subject}» جابجا شد`,
@@ -1035,10 +1028,11 @@ export function CalendarPage({
         ])).filter(id => id !== currentUserId);
 
         if (recipientIds.length > 0) {
-          await Promise.all(recipientIds.map(uid =>
+          const deliveryResults = await Promise.all(recipientIds.map(uid =>
             insertNotificationFromTemplate({
               userId: uid,
               category: 'meeting',
+              meetingId: meeting.id,
               eventType: 'change',
               audience: participantIds.includes(uid) ? 'participants' : 'observers',
               fallbackTitle: 'زمان جلسه تغییر کرد',
@@ -1048,6 +1042,7 @@ export function CalendarPage({
               actionUrl: 'calendar',
             })
           ));
+          if (deliveryResults.some(result => result?.ok === false)) throw new Error('MEETING_NOTIFICATION_FAILED');
         }
 
         toast.success('تغییرات جلسه ذخیره شد و اطلاع‌رسانی انجام شد');
@@ -1090,17 +1085,9 @@ export function CalendarPage({
     };
 
     try {
-      const { error } = await supabase
-        .from('meetings')
-        .update(updates)
-        .eq('id', meeting.id);
-
-      if (error) throw error;
-
-      const resizedMtg = {
-        ...meeting,
-        ...updates,
-      };
+      const saved = await persistCalendarTiming(supabase, meeting.id, updates);
+      const resizedMtg = { ...meeting, ...updates, ...saved };
+      setMeetings(previous => previous.map(row => row.id === meeting.id ? { ...row, ...saved } : row));
 
       setPendingResize(null);
       fetchMeetings();
@@ -1117,6 +1104,7 @@ export function CalendarPage({
           await insertNotificationFromTemplate({
             userId: currentUserId,
             category: 'meeting',
+            meetingId: meeting.id,
             eventType: 'change',
             fallbackTitle: 'مدت جلسه تغییر کرد',
             fallbackMessage: `جلسه «${meeting.subject}» مدت آن تغییر کرد`,
@@ -1134,10 +1122,11 @@ export function CalendarPage({
         ])).filter(id => id !== currentUserId);
 
         if (recipientIds.length > 0) {
-          await Promise.all(recipientIds.map(uid =>
+          const deliveryResults = await Promise.all(recipientIds.map(uid =>
             insertNotificationFromTemplate({
               userId: uid,
               category: 'meeting',
+              meetingId: meeting.id,
               eventType: 'change',
               audience: participantIds.includes(uid) ? 'participants' : 'observers',
               fallbackTitle: 'زمان جلسه تغییر کرد',
@@ -1147,6 +1136,7 @@ export function CalendarPage({
               actionUrl: 'calendar',
             })
           ));
+          if (deliveryResults.some(result => result?.ok === false)) throw new Error('MEETING_NOTIFICATION_FAILED');
         }
 
         toast.success('تغییرات جلسه ذخیره شد و اطلاع‌رسانی انجام شد');

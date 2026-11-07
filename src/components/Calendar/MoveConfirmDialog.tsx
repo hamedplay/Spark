@@ -50,6 +50,10 @@ export function MoveConfirmDialog({
         </div>
 
         <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+          <dl className="grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-3 text-xs dark:bg-gray-900/40">
+            <div><dt className="text-gray-500">زمان قبلی</dt><dd dir="ltr" className="mt-1 text-right">{pendingMove.oldDateIso}<br />{pendingMove.meeting.start_time} – {pendingMove.meeting.end_time}</dd></div>
+            <div><dt className="text-gray-500">زمان جدید پس از ثبت</dt><dd dir="ltr" className="mt-1 text-right font-bold text-teal-700 dark:text-teal-300">{pendingMove.newDateIso}<br />{pendingMove.updates.start_time} – {pendingMove.updates.end_time}</dd></div>
+          </dl>
           {importantChanges.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">تغییرات مهم</p>
