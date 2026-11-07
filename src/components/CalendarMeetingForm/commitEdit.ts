@@ -116,25 +116,15 @@ export async function commitCalendarMeetingEdit({
       if (roomUpdateError) throw roomUpdateError;
     }
 
-    const { error: agendaDeleteError } = await supabase
-      .from('meeting_agenda_items')
-      .delete()
-      .eq('meeting_id', prefillMeetingId);
-    if (agendaDeleteError) throw new Error('خطا در ذخیره دستور جلسه؛ لطفاً دوباره تلاش کنید');
-
-    if (agendaEnabled && agendaItems.length > 0) {
-      const { error: agendaInsertError } = await supabase.from('meeting_agenda_items').insert(
-        agendaItems.map((item, index) => ({
-          meeting_id: prefillMeetingId,
-          title: item.title,
-          presenter: item.presenter || null,
-          duration_minutes: item.duration_minutes || null,
-          description: ('description' in item ? String((item as Record<string, unknown>).description ?? '') : '') || null,
-          sort_order: index,
-        })),
-      );
-      if (agendaInsertError) throw new Error('خطا در ذخیره دستور جلسه؛ لطفاً دوباره تلاش کنید');
-    }
+    const { error: agendaSyncError } = await (supabase as any).rpc('sync_linked_meeting_agenda_v1', {
+      p_meeting_id: prefillMeetingId,
+      p_items: agendaEnabled ? agendaItems.map(item => ({
+        id: item.id, title: item.title, presenter: item.presenter,
+        duration_minutes: item.duration_minutes, description: item.description,
+        source_decision_id: (item as { source_decision_id?: string | null }).source_decision_id ?? null,
+      })) : [],
+    });
+    if (agendaSyncError) throw new Error('خطا در ذخیره دستور جلسه: ' + agendaSyncError.message);
 
     if (managedSeries) {
       await dispatchRecurringMeetingDelivery((identity as any).series_id);

@@ -76,6 +76,7 @@ export interface CalendarMeetingFormProps {
       presenter?: string | null;
       duration_minutes?: number | null;
       description?: string | null;
+      source_decision_id?: string | null;
     }>;
     repeatEnabled?: boolean;
     repeatType?: 'weekly' | 'monthly';

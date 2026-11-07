@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import { AgendaDecisionPicker } from '../Agenda/AgendaDecisionPicker';
+import { LinkedDecisionDialog } from '../Agenda/LinkedDecisionDialog';
+import { linkedDecisionAgendaTitle, type LinkedAgendaItem, type PickerDecision } from '../../lib/linkedAgendaDecisions';
 import { ReorderableAgendaList } from '../Agenda/ReorderableAgendaList';
 import { reorderMeetingAgenda } from '../Agenda/reorderAgenda';
 import { ClipboardList, UserCheck, Clock, Pencil, Trash2, Check, Plus } from 'lucide-react';
@@ -28,6 +32,25 @@ export function AgendaSection(props: {
     prefillMeetingId,
   } = props;
 
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const addDecisions = (decisions: PickerDecision[]) => {
+    setAgendaItems(previous => {
+      const linked = new Set(previous.map(item => (item as LinkedAgendaItem).source_decision_id).filter(Boolean));
+      const next = [...previous];
+      decisions.forEach(decision => {
+        if (linked.has(decision.id)) return;
+        linked.add(decision.id);
+        next.push({
+          id: crypto.randomUUID(), meeting_id: prefillMeetingId || '',
+          title: linkedDecisionAgendaTitle(decision),
+          presenter: null, duration_minutes: null, description: null,
+          sort_order: next.length, source_decision_id: decision.id,
+        } as LinkedAgendaItem);
+      });
+      return next;
+    });
+  };
   return (
     <div className="p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl border border-gray-200 dark:border-gray-600">
       <div className="flex items-center gap-2 mb-2">
@@ -44,7 +67,8 @@ export function AgendaSection(props: {
               {handle}
               <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{idx + 1}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                <p className="break-words text-sm font-medium text-gray-800 dark:text-gray-200">{item.title}</p>
+                {(item as LinkedAgendaItem).source_decision_id && <button type="button" className="mt-1 text-xs text-blue-600 hover:underline" onClick={() => setDetailId((item as LinkedAgendaItem).source_decision_id!)}>مشاهده مصوبه اصلی و سوابق</button>}
                 <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                   {item.presenter && (
                     <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
@@ -104,7 +128,8 @@ export function AgendaSection(props: {
                   onClick={() => {
                     if (!agendaForm.title.trim()) return;
                     const newItem: AgendaItem = {
-                      id: crypto.randomUUID(),
+                      ...(editingAgendaIdx !== null ? agendaItems[editingAgendaIdx] : {}),
+                      id: editingAgendaIdx !== null ? agendaItems[editingAgendaIdx].id : crypto.randomUUID(),
                       meeting_id: prefillMeetingId || '',
                       title: agendaForm.title.trim(),
                       presenter: agendaForm.presenter || null,
@@ -131,14 +156,19 @@ export function AgendaSection(props: {
               </div>
             </div>
           ) : (
-            <button type="button"
-              onClick={() => { setShowAgendaForm(true); setEditingAgendaIdx(null); setAgendaForm({ title: '', presenter: '', duration_minutes: '', description: '' }); }}
-              className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors">
-              <Plus className="w-4 h-4" />افزودن آیتم دستور جلسه
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button"
+                onClick={() => { setShowAgendaForm(true); setEditingAgendaIdx(null); setAgendaForm({ title: '', presenter: '', duration_minutes: '', description: '' }); }}
+                className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors">
+                <Plus className="w-4 h-4" />افزودن آیتم دستور جلسه
+              </button>
+              <button type="button" onClick={() => setPickerOpen(true)} className="rounded-lg border border-blue-300 px-3 py-1.5 text-sm text-blue-700 dark:border-blue-700 dark:text-blue-300">افزودن از پیگیری مصوبات</button>
+            </div>
           )}
         </div>
       )}
+      {pickerOpen && <AgendaDecisionPicker existingIds={agendaItems.map(item => (item as LinkedAgendaItem).source_decision_id).filter((id): id is string => !!id)} onSelect={addDecisions} onClose={() => setPickerOpen(false)} />}
+      {detailId && <LinkedDecisionDialog decisionId={detailId} onClose={() => setDetailId(null)} />}
     </div>
   );
 }

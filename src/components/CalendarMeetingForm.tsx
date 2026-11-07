@@ -1,5 +1,6 @@
 import { useLiveData, LIVE_DATA } from '../shared/realtime/useLiveData';
 import { createMeetingSeries } from '../features/meetings/services/createMeetingSeries';
+import { agendaItemsForSave, type LinkedAgendaItem } from '../lib/linkedAgendaDecisions';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
@@ -238,6 +239,7 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         presenter: item.presenter ?? null,
         duration_minutes: item.duration_minutes ?? null,
         description: item.description ?? null,
+        source_decision_id: item.source_decision_id ?? null,
         sort_order: idx,
         created_at: '',
       })) as unknown as AgendaItem[]);
@@ -595,8 +597,12 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
         const pattern = repeatType === 'weekly'
           ? `هر ${repeatInterval} هفته، ${weekdays[repeatWeekday]}`
           : `هر ${repeatInterval} ماه${repeatMonthlyMode === 'nth' ? `، ${repeatMonthlyNth === -1 ? 'آخرین' : repeatMonthlyNth} ${weekdays[repeatMonthlyNthWeekday]}` : ''}`;
+        const linked = agendaEnabled ? agendaItems as LinkedAgendaItem[] : [];
+        const manualAgenda = linked.filter(item => !item.source_decision_id);
+        const hasLinked = linked.some(item => !!item.source_decision_id);
         const ids = await createMeetingSeries(seriesOperationRef.current, [{ ...record, request_jalaali_date: meetingDateStr }, ...repeatRecords],
-          agendaEnabled ? agendaItems.map(({ title, presenter, duration_minutes, description }) => ({ title, presenter, duration_minutes, description })) : [], pattern);
+          manualAgenda.map(({ title, presenter, duration_minutes, description }) => ({ title, presenter, duration_minutes, description })),
+          pattern, hasLinked ? agendaItemsForSave(linked) : undefined);
         toast.success(`${ids.length} نوبت ثبت شد؛ اطلاع‌رسانی سری طبق تنظیمات در صف قرار گرفت`);
       } else {
         const { data: meeting, error: meetingError } = await supabase.from('meetings').insert([record]).select().single();
@@ -612,16 +618,9 @@ export function CalendarMeetingForm({ onSuccess, onCancel, prefillData, calendar
           },
           saveAgenda: async () => {
             if (!agendaEnabled || agendaItems.length === 0) return;
-            const { error } = await supabase.from('meeting_agenda_items').insert(
-              agendaItems.map((item, idx) => ({
-                meeting_id: meeting.id,
-                title: item.title,
-                presenter: item.presenter || null,
-                duration_minutes: item.duration_minutes || null,
-                description: ('description' in item ? String((item as Record<string, unknown>).description ?? '') : '') || null,
-                sort_order: idx,
-              })),
-            );
+            const { error } = await (supabase as any).rpc('sync_linked_meeting_agenda_v1', {
+              p_meeting_id: meeting.id, p_items: agendaItemsForSave(agendaItems as LinkedAgendaItem[]),
+            });
             if (error) throw new Error('خطا در ثبت دستور جلسه: ' + error.message);
           },
           rollback: async () => {
